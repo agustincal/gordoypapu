@@ -2,24 +2,21 @@
 // Songs + normalized APC Mini MIDI controls
 //
 // AUDIO:
-//   SONGS.Perdido.bass
-//   SONGS.Perdido.drums
-//   SONGS.Perdido.synth
-//   SONGS.Perdido.vocals
+//   STEMS.songs.Perdido.bass
+//   STEMS.songs.Perdido.drums
+//   STEMS.songs.Perdido.synth
+//   STEMS.songs.Perdido.vocals
 //
-//   SONGS.James.bass
-//   SONGS.James.drums
-//   SONGS.James.synth
-//   SONGS.James.vocals
+//   STEMS.songs.James.bass
+//   STEMS.songs.James.drums
+//   STEMS.songs.James.synth
+//   STEMS.songs.James.vocals
 //
 // MIDI:
-//   F1..F8    -> CC48..CC55, normalized 0..1
-//   FMASTER   -> CC56, normalized 0..1
-//   N11..N18  -> Note 56..63, trigger callbacks
-
-// ============================================================
-// AUDIO / STEMS
-// ============================================================
+//   STEMS.F1()..STEMS.F8() -> CC48..CC55, normalized 0..1
+//   STEMS.FMASTER()         -> CC56, normalized 0..1
+//   STEMS.onNote('N11', fn) .. STEMS.onNote('N18', fn)
+//                           -> Notes 56..63
 
 const REPO_RAW = 'https://raw.githubusercontent.com/agustincal/gordoypapu/main/'
 
@@ -29,7 +26,11 @@ function stem(song, name) {
   return audio
 }
 
-globalThis.SONGS = {
+// ============================================================
+// AUDIO / STEMS
+// ============================================================
+
+const songs = {
   Perdido: {
     bass: stem('perdido', 'bass'),
     drums: stem('perdido', 'drums'),
@@ -65,23 +66,6 @@ const FADERS = {
   FMASTER: 56
 }
 
-globalThis.FADERS = FADERS
-globalThis.MIDI_CC = ccValues
-
-midi.channel(0).onCC('*', ({ index, value }) => {
-  if (index >= 48 && index <= 56) {
-    ccValues[index] = value / 127
-  }
-})
-
-for (const [name, cc] of Object.entries(FADERS)) {
-  globalThis[name] = () => ccValues[cc]
-}
-
-// ============================================================
-// NOTES — ONE ROW ONLY FOR NOW
-// ============================================================
-
 const NOTES = {
   N11: 56,
   N12: 57,
@@ -93,7 +77,11 @@ const NOTES = {
   N18: 63
 }
 
-globalThis.NOTES = NOTES
+midi.channel(0).onCC('*', ({ index, value }) => {
+  if (index >= 48 && index <= 56) {
+    ccValues[index] = value / 127
+  }
+})
 
 const noteCallbacks = {}
 
@@ -107,16 +95,29 @@ for (const [name, note] of Object.entries(NOTES)) {
   })
 }
 
-globalThis.onNote = (name, callback) => {
-  if (!noteCallbacks[name]) {
-    throw new Error(`Unknown note control: ${name}`)
-  }
-  noteCallbacks[name].push(callback)
-}
-
-globalThis.MIDI = {
+const controls = {
   FADERS,
   NOTES,
   values: ccValues,
-  onNote: globalThis.onNote
+  F1: () => ccValues[48],
+  F2: () => ccValues[49],
+  F3: () => ccValues[50],
+  F4: () => ccValues[51],
+  F5: () => ccValues[52],
+  F6: () => ccValues[53],
+  F7: () => ccValues[54],
+  F8: () => ccValues[55],
+  FMASTER: () => ccValues[56],
+  onNote: (name, callback) => {
+    if (!noteCallbacks[name]) {
+      throw new Error(`Unknown note control: ${name}`)
+    }
+    noteCallbacks[name].push(callback)
+  }
+}
+
+// One stable public object for Hydra patches.
+window.STEMS = {
+  songs,
+  ...controls
 }
