@@ -1,7 +1,7 @@
 // Hydra Stems Base
-// Songs + stems + normalized APC Mini MIDI controls
+// Songs + normalized APC Mini MIDI controls
 //
-// Audio:
+// AUDIO:
 //   SONGS.Perdido.bass
 //   SONGS.Perdido.drums
 //   SONGS.Perdido.synth
@@ -17,6 +17,10 @@
 //   FMASTER   -> CC56, normalized 0..1
 //   N11..N18  -> Note 56..63, trigger callbacks
 
+// ============================================================
+// MIDI
+// ============================================================
+
 await loadScript('https://h.6120.eu/midi.js')
 await midi.start().show()
 
@@ -29,18 +33,16 @@ const REPO_RAW = 'https://raw.githubusercontent.com/agustincal/gordoypapu/main/'
 function stem(song, name) {
   const audio = new Audio(`${REPO_RAW}stems/${song.toLowerCase()}/${name}.mp3`)
   audio.preload = 'auto'
-  audio.load()
   return audio
 }
 
-const SONGS = {
+globalThis.SONGS = {
   Perdido: {
     bass: stem('perdido', 'bass'),
     drums: stem('perdido', 'drums'),
     synth: stem('perdido', 'synth'),
     vocals: stem('perdido', 'vocals')
   },
-
   James: {
     bass: stem('james', 'bass'),
     drums: stem('james', 'drums'),
@@ -49,15 +51,9 @@ const SONGS = {
   }
 }
 
-// Public audio collection.
-globalThis.SONGS = SONGS
-
 // ============================================================
-// MIDI / APC MINI
+// APC MINI — NORMALIZED CONTROLS
 // ============================================================
-
-const access = await navigator.requestMIDIAccess()
-const output = [...access.outputs.values()][0]
 
 const ccValues = Array(128).fill(0)
 
@@ -73,6 +69,26 @@ const FADERS = {
   FMASTER: 56
 }
 
+globalThis.FADERS = FADERS
+
+globalThis.MIDI_CC = ccValues
+
+// Read CC48–56 and normalize to 0..1.
+midi.channel(0).onCC('*', ({ index, value }) => {
+  if (index >= 48 && index <= 56) {
+    ccValues[index] = value / 127
+  }
+})
+
+// Public fader functions.
+for (const [name, cc] of Object.entries(FADERS)) {
+  globalThis[name] = () => ccValues[cc]
+}
+
+// ============================================================
+// NOTES — ONE ROW ONLY FOR NOW
+// ============================================================
+
 const NOTES = {
   N11: 56,
   N12: 57,
@@ -84,22 +100,13 @@ const NOTES = {
   N18: 63
 }
 
-// Read normalized fader values.
-midi.channel(0).onCC('*', ({ index, value }) => {
-  if (index >= 48 && index <= 56) {
-    ccValues[index] = value / 127
-  }
-})
+globalThis.NOTES = NOTES
 
-// Public fader functions: F1() ... F8(), FMASTER().
-for (const [name, cc] of Object.entries(FADERS)) {
-  globalThis[name] = () => ccValues[cc]
+const noteCallbacks = {}
+
+for (const name of Object.keys(NOTES)) {
+  noteCallbacks[name] = []
 }
-
-// Register trigger callbacks without exposing MIDI note numbers.
-const noteCallbacks = Object.fromEntries(
-  Object.keys(NOTES).map(name => [name, []])
-)
 
 for (const [name, note] of Object.entries(NOTES)) {
   midi.channel(0).onNote(note, event => {
@@ -107,22 +114,17 @@ for (const [name, note] of Object.entries(NOTES)) {
   })
 }
 
-function onNote(name, callback) {
+globalThis.onNote = (name, callback) => {
   if (!noteCallbacks[name]) {
     throw new Error(`Unknown note control: ${name}`)
   }
-
   noteCallbacks[name].push(callback)
 }
 
+// Public MIDI namespace.
 globalThis.MIDI = {
   FADERS,
   NOTES,
   values: ccValues,
-  onNote
+  onNote: globalThis.onNote
 }
-
-// Example:
-// onNote('N11', () => console.log('N11 trigger'))
-// F1()      -> 0..1
-// FMASTER() -> 0..1
