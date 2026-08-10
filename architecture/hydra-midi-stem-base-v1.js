@@ -32,8 +32,8 @@ for (let n = NOTE_START; n <= NOTE_END; n++)
   window.STEMS[`N8${n - 55}`] = () => activo[n]
 
 // STEM ENGINE v0.3 — COMPACTO
-window.ctx = window.ctx || new AudioContext()
-window.stems = window.stems || {}
+window.stemCtx = window.stemCtx || new AudioContext()
+  window.stems = window.stems || {}
 
 function stem(name) {
   if (window.stems[name]) {
@@ -45,12 +45,11 @@ function stem(name) {
   player.crossOrigin = 'anonymous'
   player.loop = true
 
-  const source = ctx.createMediaElementSource(player)
-  const analyser = ctx.createAnalyser()
-  analyser.fftSize = 1024
-  source.connect(analyser)
-  source.connect(ctx.destination)
-
+  const source = window.stemCtx.createMediaElementSource(player)
+const analyser = window.stemCtx.createAnalyser()
+source.connect(analyser)
+source.connect(window.stemCtx.destination)
+  
   const fft = new Uint8Array(analyser.frequencyBinCount)
   setInterval(() => analyser.getByteFrequencyData(fft), 1000 / 60)
 
