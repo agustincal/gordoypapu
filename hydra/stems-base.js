@@ -18,13 +18,6 @@
 //   N11..N18  -> Note 56..63, trigger callbacks
 
 // ============================================================
-// MIDI
-// ============================================================
-
-await loadScript('https://h.6120.eu/midi.js')
-await midi.start().show()
-
-// ============================================================
 // AUDIO / STEMS
 // ============================================================
 
@@ -52,8 +45,11 @@ globalThis.SONGS = {
 }
 
 // ============================================================
-// APC MINI — NORMALIZED CONTROLS
+// MIDI / APC MINI
 // ============================================================
+
+await loadScript('https://h.6120.eu/midi.js')
+await midi.start().show()
 
 const ccValues = Array(128).fill(0)
 
@@ -70,17 +66,14 @@ const FADERS = {
 }
 
 globalThis.FADERS = FADERS
-
 globalThis.MIDI_CC = ccValues
 
-// Read CC48–56 and normalize to 0..1.
 midi.channel(0).onCC('*', ({ index, value }) => {
   if (index >= 48 && index <= 56) {
     ccValues[index] = value / 127
   }
 })
 
-// Public fader functions.
 for (const [name, cc] of Object.entries(FADERS)) {
   globalThis[name] = () => ccValues[cc]
 }
@@ -121,7 +114,6 @@ globalThis.onNote = (name, callback) => {
   noteCallbacks[name].push(callback)
 }
 
-// Public MIDI namespace.
 globalThis.MIDI = {
   FADERS,
   NOTES,
