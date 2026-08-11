@@ -9,15 +9,36 @@ window.GP.midi = window.GP.midi || {}
 
 window.GP.midi.NOTE_START = 56
 window.GP.midi.NOTE_END = 63
-window.GP.midi.active = {}
+window.GP.midi.active = window.GP.midi.active || {}
 window.GP.midi.output = null
 window.GP.midi.ready = false
 window.GP.midi._ledInterval = null
-window.GP.midi._noteHandlers = {}
+window.GP.midi._noteHandlers = window.GP.midi._noteHandlers || {}
+window.GP.midi._handlersBound = window.GP.midi._handlersBound || false
 
 window.GP.midi.init = async function () {
-  if (window.GP.midi._ledInterval)
-    clearInterval(window.GP.midi._ledInterval)
+  // Si ejecutamos el script otra vez sin refrescar la página,
+  // no volver a registrar onNote(): eso crea handlers duplicados.
+  if (window.GP.midi.ready && window.GP.midi.output) {
+    for (let n = 56; n <= 63; n++) {
+      window.GP.midi.active[n] = false
+      window.GP.midi.output.send([0x90, n, 1])
+    }
+
+    if (window.GP.midi._ledInterval)
+      clearInterval(window.GP.midi._ledInterval)
+
+    window.GP.midi._ledInterval = setInterval(() => {
+      for (let n = 56; n <= 63; n++)
+        window.GP.midi.output.send([
+          0x90,
+          n,
+          window.GP.midi.active[n] ? 4 : 1
+        ])
+    }, 50)
+
+    return window.GP.midi
+  }
 
   await loadScript('https://h.6120.eu/midi.js')
   await midi.start().show()
@@ -39,17 +60,24 @@ window.GP.midi.init = async function () {
     output.send([0x90, n, 1])
   }
 
-  // Triggers
-  for (let n = 56; n <= 63; n++) {
-    midi.channel(0).onNote(n, () => {
-      window.GP.midi.active[n] = !window.GP.midi.active[n]
+  // Registrar triggers una sola vez por página
+  if (!window.GP.midi._handlersBound) {
+    for (let n = 56; n <= 63; n++) {
+      midi.channel(0).onNote(n, () => {
+        window.GP.midi.active[n] = !window.GP.midi.active[n]
 
-      if (window.GP.midi._noteHandlers[n])
-        window.GP.midi._noteHandlers[n](window.GP.midi.active[n])
-    })
+        if (window.GP.midi._noteHandlers[n])
+          window.GP.midi._noteHandlers[n](window.GP.midi.active[n])
+      })
+    }
+
+    window.GP.midi._handlersBound = true
   }
 
   // LEDs
+  if (window.GP.midi._ledInterval)
+    clearInterval(window.GP.midi._ledInterval)
+
   window.GP.midi._ledInterval = setInterval(() => {
     for (let n = 56; n <= 63; n++)
       output.send([0x90, n, window.GP.midi.active[n] ? 4 : 1])
