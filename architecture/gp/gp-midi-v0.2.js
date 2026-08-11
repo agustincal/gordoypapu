@@ -9,14 +9,15 @@ window.GP.midi = window.GP.midi || {}
 
 const midi = window.GP.midi
 
-midi.output = null
+// Preservar estado al volver a ejecutar el script
+midi.output = midi.output || null
 midi.active = midi.active || {}
 midi.handlers = midi.handlers || {}
 midi.activeButtons = midi.activeButtons || []
-midi.ready = false
-midi.visible = true
-midi._ledInterval = null
-midi._initialized = false
+midi.ready = midi.ready || false
+midi.visible = midi.visible !== undefined ? midi.visible : true
+midi._ledInterval = midi._ledInterval || null
+midi._initialized = midi._initialized || false
 midi._registeredNotes = midi._registeredNotes || {}
 
 midi.init = async function () {
@@ -30,14 +31,11 @@ midi.init = async function () {
 
   if (!midi.output) throw new Error('GP MIDI: no MIDI output found')
 
-  // Registrar cada nota una sola vez. Los callbacks quedan fuera
-  // del registro MIDI para permitir re-ejecutar el sketch sin fantasmas.
   for (let note = 0; note <= 63; note++) {
     if (midi._registeredNotes[note]) continue
 
     window.midi.channel(0).onNote(note, () => {
       if (!midi.activeButtons.includes(note)) return
-
       midi.active[note] = !midi.active[note]
       const handlers = midi.handlers[note] || []
       handlers.forEach(fn => fn(midi.active[note]))
@@ -60,7 +58,7 @@ midi.buttons = function (notes = []) {
   for (const note of midi.activeButtons) {
     midi.active[note] = false
     midi.handlers[note] = []
-    midi.output.send([0x90, note, 1])
+    midi.output.send([0x90, note, midi.visible ? 1 : 0])
   }
 
   midi._ledInterval = setInterval(() => {
