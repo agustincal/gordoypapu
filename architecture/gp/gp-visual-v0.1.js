@@ -22,7 +22,7 @@ visual.apply = function (buffer) {
   const source = src(buffer)
 
   if (visual.fade === 'black')
-    return source.blend(solid(0, 0, 0), () => visual.amount())
+    return source.mult(() => 1 - visual.amount())
 
   return source
 }
