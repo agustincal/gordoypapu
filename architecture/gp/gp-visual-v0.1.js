@@ -16,7 +16,11 @@ visual.amount = function () {
   return GP.midi.fader(56)
 }
 
-visual.apply = function (source) {
+// Pass a Hydra buffer (o0, o1, etc.).
+// GP.visual creates the Hydra source internally.
+visual.apply = function (buffer) {
+  const source = src(buffer)
+
   if (visual.fade === 'black')
     return source.blend(solid(0, 0, 0), () => visual.amount())
 
