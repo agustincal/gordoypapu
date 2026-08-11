@@ -1,7 +1,7 @@
 // ======================================================
 // GP MIDI v0.2
 // MIDI + APC Mini
-// Botones + faders declarados por sketch
+// Controles declarados por sketch
 // ======================================================
 
 window.GP = window.GP || {}
@@ -20,8 +20,11 @@ midi._initialized = false
 midi._registeredNotes = midi._registeredNotes || {}
 midi._registeredCC = midi._registeredCC || {}
 
-midi.FADER_CC = { F1: 48, F2: 49, F3: 50, F4: 51, F5: 52, F6: 53, F7: 54, F8: 55, FMASTER: 56 }
-midi.FADER_LED = { F1: 64, F2: 65, F3: 66, F4: 67, F5: 68, F6: 69, F7: 70, F8: 71 }
+// APC Mini faders: CC 48-55 = F1-F8, CC 56 = FMASTER
+// Buttons above F1-F8: notes 64-71
+midi.FADER_CC_START = 48
+midi.FADER_CC_END = 56
+midi.FADER_LED = { 48: 64, 49: 65, 50: 66, 51: 67, 52: 68, 53: 69, 54: 70, 55: 71 }
 
 midi.init = async function () {
   await loadScript('https://h.6120.eu/midi.js')
@@ -41,13 +44,12 @@ midi.init = async function () {
     midi._registeredNotes[note] = true
   }
 
-  for (const cc of Object.values(midi.FADER_CC)) {
+  for (let cc = midi.FADER_CC_START; cc <= midi.FADER_CC_END; cc++) {
     if (midi._registeredCC[cc]) continue
     window.midi.channel(0).onCC(cc, value => {
-      const name = Object.keys(midi.FADER_CC).find(k => midi.FADER_CC[k] === cc)
-      if (!midi.activeFaders.includes(name)) return
-      midi.faderValues[name] = value / 127
-      ;(midi.faderHandlers[name] || []).forEach(fn => fn(midi.faderValues[name]))
+      if (!midi.activeFaders.includes(cc)) return
+      midi.faderValues[cc] = value / 127
+      ;(midi.faderHandlers[cc] || []).forEach(fn => fn(midi.faderValues[cc]))
     })
     midi._registeredCC[cc] = true
   }
@@ -56,48 +58,41 @@ midi.init = async function () {
   return midi
 }
 
-midi.buttons = function (notes = []) {
-  if (!midi.output) throw new Error('GP MIDI: call init() first')
-  midi.reset()
-  midi.activeButtons = [...new Set(notes)]
-
-  for (const note of midi.activeButtons) {
-    midi.active[note] = false
-    midi.handlers[note] = []
-    midi.output.send([0x90, note, 1])
-  }
-
-  midi._startLedLoop()
-  return midi
-}
-
-midi.faders = function (names = []) {
+// Despierta los faders indicados por su CC exacto, tal como aparece en el monitor MIDI.
+midi.faders = function (ccs = []) {
   if (!midi.output) throw new Error('GP MIDI: call init() first')
 
   midi._stopLedLoop()
   midi._clearAllLeds()
-  midi.activeFaders = [...new Set(names)]
+  midi.activeFaders = [...new Set(ccs)]
 
-  for (const name of midi.activeFaders) {
-    if (!(name in midi.FADER_CC)) throw new Error(`GP MIDI: unknown fader ${name}`)
-    midi.faderValues[name] = 0
-    midi.faderHandlers[name] = []
-    midi.output.send([0x90, midi.FADER_LED[name], 1])
+  for (const cc of midi.activeFaders) {
+    if (cc < midi.FADER_CC_START || cc > midi.FADER_CC_END)
+      throw new Error(`GP MIDI: invalid fader CC ${cc}`)
+
+    midi.faderValues[cc] = 0
+    midi.faderHandlers[cc] = []
+
+    const led = midi.FADER_LED[cc]
+    if (led !== undefined) midi.output.send([0x90, led, 1])
   }
 
   midi._startLedLoop()
   return midi
 }
 
-midi.fader = function (name) {
-  if (!(name in midi.FADER_CC)) throw new Error(`GP MIDI: unknown fader ${name}`)
-  return midi.faderValues[name] ?? 0
+// Valor normalizado 0-1 del CC indicado.
+midi.fader = function (cc) {
+  if (cc < midi.FADER_CC_START || cc > midi.FADER_CC_END)
+    throw new Error(`GP MIDI: invalid fader CC ${cc}`)
+  return midi.faderValues[cc] ?? 0
 }
 
-midi.onFader = function (name, callback) {
-  if (!(name in midi.FADER_CC)) throw new Error(`GP MIDI: unknown fader ${name}`)
-  midi.faderHandlers[name] = midi.faderHandlers[name] || []
-  midi.faderHandlers[name].push(callback)
+midi.onFader = function (cc, callback) {
+  if (cc < midi.FADER_CC_START || cc > midi.FADER_CC_END)
+    throw new Error(`GP MIDI: invalid fader CC ${cc}`)
+  midi.faderHandlers[cc] = midi.faderHandlers[cc] || []
+  midi.faderHandlers[cc].push(callback)
   return midi
 }
 
@@ -107,8 +102,8 @@ midi._startLedLoop = function () {
     for (const note of midi.activeButtons)
       midi.output.send([0x90, note, midi.active[note] ? 4 : 1])
 
-    for (const name of midi.activeFaders) {
-      const led = midi.FADER_LED[name]
+    for (const cc of midi.activeFaders) {
+      const led = midi.FADER_LED[cc]
       if (led !== undefined) midi.output.send([0x90, led, 1])
     }
   }, 50)
