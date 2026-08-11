@@ -10,16 +10,17 @@ window.GP.midi = window.GP.midi || {}
 const midi = window.GP.midi
 
 midi.output = null
-midi.active = {}
-midi.handlers = {}
-midi.activeButtons = []
+midi.active = midi.active || {}
+midi.handlers = midi.handlers || {}
+midi.activeButtons = midi.activeButtons || []
 midi.ready = false
 midi.visible = true
 midi._ledInterval = null
 midi._initialized = false
+midi._registeredNotes = midi._registeredNotes || {}
 
 midi.init = async function () {
-  if (midi._initialized) return midi
+  if (midi._initialized && midi.output) return midi
 
   await loadScript('https://h.6120.eu/midi.js')
   await window.midi.start().show()
@@ -28,6 +29,22 @@ midi.init = async function () {
   midi.output = [...access.outputs.values()][0]
 
   if (!midi.output) throw new Error('GP MIDI: no MIDI output found')
+
+  // Registrar cada nota una sola vez. Los callbacks quedan fuera
+  // del registro MIDI para permitir re-ejecutar el sketch sin fantasmas.
+  for (let note = 0; note <= 63; note++) {
+    if (midi._registeredNotes[note]) continue
+
+    window.midi.channel(0).onNote(note, () => {
+      if (!midi.activeButtons.includes(note)) return
+
+      midi.active[note] = !midi.active[note]
+      const handlers = midi.handlers[note] || []
+      handlers.forEach(fn => fn(midi.active[note]))
+    })
+
+    midi._registeredNotes[note] = true
+  }
 
   midi._initialized = true
   midi.ready = true
@@ -38,18 +55,12 @@ midi.buttons = function (notes = []) {
   if (!midi.output) throw new Error('GP MIDI: call init() first')
 
   midi.reset()
-  midi.activeButtons = [...notes]
+  midi.activeButtons = [...new Set(notes)]
 
   for (const note of midi.activeButtons) {
     midi.active[note] = false
+    midi.handlers[note] = []
     midi.output.send([0x90, note, 1])
-
-    midi.handlers[note] = midi.handlers[note] || []
-
-    window.midi.channel(0).onNote(note, () => {
-      midi.active[note] = !midi.active[note]
-      for (const fn of midi.handlers[note]) fn(midi.active[note])
-    })
   }
 
   midi._ledInterval = setInterval(() => {
@@ -62,6 +73,9 @@ midi.buttons = function (notes = []) {
 }
 
 midi.on = function (note, callback) {
+  if (!midi.activeButtons.includes(note))
+    throw new Error(`GP MIDI: button ${note} is not active`)
+
   midi.handlers[note] = midi.handlers[note] || []
   midi.handlers[note].push(callback)
   return midi
