@@ -5,88 +5,83 @@
 // ======================================================
 
 window.GP = window.GP || {}
-GP.midi = GP.midi || {}
+window.GP.midi = window.GP.midi || {}
 
-GP.midi.output = null
-GP.midi.input = null
-GP.midi.active = {}
-GP.midi.NOTE_START = 56
-GP.midi.NOTE_END = 63
-GP.midi.ready = false
-GP.midi._ledInterval = null
-GP.midi._noteHandlers = {}
+window.GP.midi.NOTE_START = 56
+window.GP.midi.NOTE_END = 63
+window.GP.midi.active = {}
+window.GP.midi.output = null
+window.GP.midi.ready = false
+window.GP.midi._ledInterval = null
+window.GP.midi._noteHandlers = {}
 
-GP.midi.init = async function () {
-  if (GP.midi.ready) return GP.midi
+window.GP.midi.init = async function () {
+  if (window.GP.midi._ledInterval)
+    clearInterval(window.GP.midi._ledInterval)
 
   await loadScript('https://h.6120.eu/midi.js')
   await midi.start().show()
 
   const access = await navigator.requestMIDIAccess()
-  const outputs = [...access.outputs.values()]
-  const inputs = [...access.inputs.values()]
+  const output = [...access.outputs.values()][0]
 
-  GP.midi.output = outputs[0] || null
-  GP.midi.input = inputs[0] || null
+  if (!output) throw new Error('GP MIDI: no MIDI output found')
 
-  if (!GP.midi.output) throw new Error('GP MIDI: no MIDI output found')
+  window.GP.midi.output = output
 
-  for (let n = 0; n <= 63; n++) GP.midi.output.send([0x90, n, 0])
+  // Limpieza completa 0–63
+  for (let n = 0; n <= 63; n++)
+    output.send([0x90, n, 0])
 
-  for (let n = GP.midi.NOTE_START; n <= GP.midi.NOTE_END; n++) {
-    GP.midi.active[n] = false
-    GP.midi.output.send([0x90, n, 1])
+  // Fila 8: 56–63, verde fijo = listo
+  for (let n = 56; n <= 63; n++) {
+    window.GP.midi.active[n] = false
+    output.send([0x90, n, 1])
   }
 
-  if (GP.midi._ledInterval) clearInterval(GP.midi._ledInterval)
-
-  GP.midi._ledInterval = setInterval(() => {
-    for (let n = GP.midi.NOTE_START; n <= GP.midi.NOTE_END; n++) {
-      GP.midi.output.send([
-        0x90,
-        n,
-        GP.midi.active[n] ? 4 : 1
-      ])
-    }
-  }, 50)
-
-  for (let n = GP.midi.NOTE_START; n <= GP.midi.NOTE_END; n++) {
+  // Triggers
+  for (let n = 56; n <= 63; n++) {
     midi.channel(0).onNote(n, () => {
-      GP.midi.active[n] = !GP.midi.active[n]
+      window.GP.midi.active[n] = !window.GP.midi.active[n]
 
-      if (GP.midi._noteHandlers[n])
-        GP.midi._noteHandlers[n](GP.midi.active[n])
+      if (window.GP.midi._noteHandlers[n])
+        window.GP.midi._noteHandlers[n](window.GP.midi.active[n])
     })
   }
 
-  for (let n = GP.midi.NOTE_START; n <= GP.midi.NOTE_END; n++) {
-    GP.midi[`N8${n - 55}`] = () => GP.midi.active[n]
+  // LEDs
+  window.GP.midi._ledInterval = setInterval(() => {
+    for (let n = 56; n <= 63; n++)
+      output.send([0x90, n, window.GP.midi.active[n] ? 4 : 1])
+  }, 50)
+
+  // N81–N88
+  for (let n = 56; n <= 63; n++)
+    window.GP.midi[`N8${n - 55}`] = () => window.GP.midi.active[n]
+
+  window.GP.midi.ready = true
+  return window.GP.midi
+}
+
+window.GP.midi.on = function (note, callback) {
+  window.GP.midi._noteHandlers[note] = callback
+  return window.GP.midi
+}
+
+window.GP.midi.off = function (note) {
+  delete window.GP.midi._noteHandlers[note]
+  return window.GP.midi
+}
+
+window.GP.midi.clear = function () {
+  if (window.GP.midi._ledInterval) {
+    clearInterval(window.GP.midi._ledInterval)
+    window.GP.midi._ledInterval = null
   }
 
-  GP.midi.ready = true
-  return GP.midi
-}
-
-GP.midi.on = function (note, callback) {
-  GP.midi._noteHandlers[note] = callback
-  return GP.midi
-}
-
-GP.midi.off = function (note) {
-  delete GP.midi._noteHandlers[note]
-  return GP.midi
-}
-
-GP.midi.clear = function () {
-  if (GP.midi._ledInterval) {
-    clearInterval(GP.midi._ledInterval)
-    GP.midi._ledInterval = null
-  }
-
-  if (GP.midi.output) {
+  if (window.GP.midi.output)
     for (let n = 0; n <= 63; n++)
-      GP.midi.output.send([0x90, n, 0])
-  }
+      window.GP.midi.output.send([0x90, n, 0])
 
-  return GP.midi
+  return window.GP.midi
 }
