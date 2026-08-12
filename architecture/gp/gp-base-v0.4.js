@@ -4,7 +4,7 @@
 //
 // Single entry point for sketches.
 // MIDI API: F1..F8, FMASTER, N11..N88
-// Audio API: GP.audio.bass / drums / synth / vocals
+// Audio API: bass / drums / synth / vocals
 // ======================================================
 ;(function () {
   window.GP = window.GP || {}
@@ -57,6 +57,7 @@
 
     audioState.stems[name] = obj
     audio[name] = obj
+    window[name] = obj
     return obj
   }
 
@@ -104,16 +105,12 @@
   // ------------------------------------------------------
   // MIDI
   // ------------------------------------------------------
-  // Load the already-proven MIDI base v0.3b internally.
-  // GP.init() starts MIDI automatically when midi=true.
 
   const MIDI_URL = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-v0.3b.js'
 
   async function initMidi() {
-    if (!window.GP.midi || window.GP.midi.version !== '0.3b') {
-      await loadScript(MIDI_URL)
-    }
-
+    if (window.GP.midi && window.GP.midi.version === '0.3b') return window.GP.midi
+    await loadScript(MIDI_URL)
     await window.GP.midi.start()
     return window.GP.midi
   }
