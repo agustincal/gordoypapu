@@ -1,0 +1,132 @@
+// ======================================================
+// G&P — GP BASE v0.4
+// MIDI + STEM AUDIO
+//
+// Single entry point for sketches.
+// MIDI API: F1..F8, FMASTER, N11..N88
+// Audio API: GP.audio.bass / drums / synth / vocals
+// ======================================================
+;(function () {
+  window.GP = window.GP || {}
+
+  if (window.GP.baseVersion === '0.4') {
+    console.info('[GP] base v0.4 ya está cargada')
+    return
+  }
+
+  // ------------------------------------------------------
+  // AUDIO
+  // ------------------------------------------------------
+
+  const audio = {}
+  const audioState = {
+    song: null,
+    ctx: null,
+    stems: {},
+    started: false
+  }
+
+  function createStem(name, song) {
+    if (audioState.stems[name]) return audioState.stems[name]
+
+    const player = new Audio(
+      `https://agustincal.github.io/gordoypapu/stems/${song}/${name}.mp3`
+    )
+
+    player.crossOrigin = 'anonymous'
+    player.loop = true
+
+    const source = audioState.ctx.createMediaElementSource(player)
+    const analyser = audioState.ctx.createAnalyser()
+    analyser.fftSize = 1024
+
+    source.connect(analyser)
+    source.connect(audioState.ctx.destination)
+
+    const fft = new Uint8Array(analyser.frequencyBinCount)
+    setInterval(() => analyser.getByteFrequencyData(fft), 1000 / 60)
+
+    const obj = {
+      player,
+      analyser,
+      fft,
+      low() { return this.fft[8] / 255 },
+      mid() { return this.fft[40] / 255 },
+      high() { return this.fft[100] / 255 }
+    }
+
+    audioState.stems[name] = obj
+    audio[name] = obj
+    return obj
+  }
+
+  audio.init = function ({ song = 'vociferan' } = {}) {
+    if (audioState.ctx && audioState.song === song) return audio
+
+    if (audioState.ctx) {
+      Object.values(audioState.stems).forEach(stem => stem.player.pause())
+    }
+
+    audioState.song = song
+    audioState.ctx = new AudioContext()
+    audioState.stems = {}
+
+    for (const name of ['bass', 'drums', 'synth', 'vocals']) {
+      createStem(name, song)
+    }
+
+    return audio
+  }
+
+  audio.start = async function () {
+    if (!audioState.ctx) audio.init()
+
+    await audioState.ctx.resume()
+    await Promise.all(
+      Object.values(audioState.stems).map(stem => stem.player.play())
+    )
+
+    audioState.started = true
+    return audio
+  }
+
+  audio.stop = function () {
+    Object.values(audioState.stems).forEach(stem => stem.player.pause())
+    audioState.started = false
+    return audio
+  }
+
+  audio.pause = audio.stop
+
+  audio.stems = audioState.stems
+  audio.state = audioState
+
+  // ------------------------------------------------------
+  // MIDI
+  // ------------------------------------------------------
+  // Load the already-proven MIDI base v0.3b internally.
+  // The sketch still sees one GP entry point.
+
+  const MIDI_URL = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-v0.3b.js'
+
+  async function initMidi() {
+    if (window.GP.midi && window.GP.midi.version === '0.3b') return window.GP.midi
+    await loadScript(MIDI_URL)
+    return window.GP.midi
+  }
+
+  GP.init = async function ({ song = 'vociferan', midi = true } = {}) {
+    audio.init({ song })
+
+    if (midi) {
+      await initMidi()
+    }
+
+    return GP
+  }
+
+  GP.audio = audio
+  GP.baseVersion = '0.4'
+
+  console.info('[GP] base v0.4 cargada')
+})()
