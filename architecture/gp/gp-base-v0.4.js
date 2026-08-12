@@ -75,6 +75,7 @@
       createStem(name, song)
     }
 
+    audio.stems = audioState.stems
     return audio
   }
 
@@ -97,7 +98,6 @@
   }
 
   audio.pause = audio.stop
-
   audio.stems = audioState.stems
   audio.state = audioState
 
@@ -105,13 +105,16 @@
   // MIDI
   // ------------------------------------------------------
   // Load the already-proven MIDI base v0.3b internally.
-  // The sketch still sees one GP entry point.
+  // GP.init() starts MIDI automatically when midi=true.
 
   const MIDI_URL = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-v0.3b.js'
 
   async function initMidi() {
-    if (window.GP.midi && window.GP.midi.version === '0.3b') return window.GP.midi
-    await loadScript(MIDI_URL)
+    if (!window.GP.midi || window.GP.midi.version !== '0.3b') {
+      await loadScript(MIDI_URL)
+    }
+
+    await window.GP.midi.start()
     return window.GP.midi
   }
 
