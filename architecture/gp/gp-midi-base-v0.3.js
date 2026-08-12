@@ -1,14 +1,12 @@
 // ======================================================
 // G&P — MIDI BASE v0.3
 // APC Mini / Hydra
-// Derivada de midi-base-v2.js (probada en Hydra)
 //
-// Principio: la lectura MIDI probada no se cambia.
-// - CC 48..56: faders, normalizados 0..1
-// - Notas: botones declarados por el sketch
-// - LEDs 64..71: indicadores de F1..F8
-// - FMASTER (CC56): sin LED
-// - GP.midi.show(): solo monitor MIDI visual
+// Sketch API:
+//   GP.midi.buttons(['N11', 'N24'])
+//   GP.midi.faders(['F1', 'FMASTER'])
+//
+// Internal MIDI numbers never need to appear in the sketch.
 // ======================================================
 ;(function () {
   window.GP = window.GP || {}
@@ -20,18 +18,45 @@
 
   const midi = {}
 
-  const FADER_CC_START = 48
-  const FADER_CC_END = 56
+  const FADER_CC = {
+    F1: 48,
+    F2: 49,
+    F3: 50,
+    F4: 51,
+    F5: 52,
+    F6: 53,
+    F7: 54,
+    F8: 55,
+    FMASTER: 56
+  }
+
   const FADER_LED = {
-    48: 64,
-    49: 65,
-    50: 66,
-    51: 67,
-    52: 68,
-    53: 69,
-    54: 70,
-    55: 71
-    // 56 = FMASTER, sin LED
+    F1: 64,
+    F2: 65,
+    F3: 66,
+    F4: 67,
+    F5: 68,
+    F6: 69,
+    F7: 70,
+    F8: 71
+    // FMASTER intentionally has no LED.
+  }
+
+  // APC Mini 8x8 pad grid: N11..N88 -> MIDI notes 0..63.
+  function buttonToNote(name) {
+    const match = /^N([1-8])([1-8])$/i.exec(String(name).trim())
+    if (!match) throw new Error(`GP MIDI: botón inválido "${name}". Usá N11..N88.`)
+
+    const row = Number(match[1])
+    const column = Number(match[2])
+    return (row - 1) * 8 + (column - 1)
+  }
+
+  function faderToCC(name) {
+    const key = String(name).trim().toUpperCase()
+    const cc = FADER_CC[key]
+    if (cc == null) throw new Error(`GP MIDI: fader inválido "${name}". Usá F1..F8 o FMASTER.`)
+    return cc
   }
 
   const state = {
@@ -42,9 +67,7 @@
     activeButtons: [],
     activeFaders: [],
     buttonState: {},
-    faderValues: Object.fromEntries(
-      Array.from({ length: 9 }, (_, i) => [FADER_CC_START + i, 0])
-    ),
+    faderValues: Object.fromEntries(Object.values(FADER_CC).map(cc => [cc, 0])),
     buttonHandlers: {},
     faderHandlers: {},
     monitorVisible: false,
@@ -66,8 +89,8 @@
       sendLed(note, state.buttonState[note] ? 4 : 1)
     }
 
-    for (const cc of state.activeFaders) {
-      const led = FADER_LED[cc]
+    for (const name of state.activeFaders) {
+      const led = FADER_LED[name]
       if (led !== undefined) sendLed(led, 1)
     }
   }
@@ -87,10 +110,9 @@
   function registerListeners() {
     if (state.listenersRegistered) return
 
-    // IMPORTANTE: esta es la forma probada en midi-base-v2.
-    // El objeto { index, value } es entregado por midi.js.
+    // This is intentionally the proven midi-base-v2 fader reader.
     window.midi.channel(0).onCC('*', ({ index, value }) => {
-      if (index >= FADER_CC_START && index <= FADER_CC_END) {
+      if (index >= 48 && index <= 56) {
         state.faderValues[index] = value / 127
         for (const fn of state.faderHandlers[index] || []) {
           fn(state.faderValues[index])
@@ -98,8 +120,8 @@
       }
     })
 
-    // Registramos las notas una sola vez. El sketch decide cuáles despertar.
-    for (let note = 0; note <= 127; note++) {
+    // APC Mini 8x8 grid = notes 0..63.
+    for (let note = 0; note <= 63; note++) {
       window.midi.channel(0).onNote(note, event => {
         if (!state.activeButtons.includes(note)) return
 
@@ -137,9 +159,7 @@
         ? outputs.find(output => output.name === outputName)
         : outputs[0]
 
-      if (!selected) {
-        throw new Error('GP MIDI: no MIDI output found')
-      }
+      if (!selected) throw new Error('GP MIDI: no MIDI output found')
 
       state.output = selected
       state.outputName = selected.name || 'Salida MIDI sin nombre'
@@ -157,22 +177,22 @@
     }
   }
 
-  // Despierta botones usando exactamente los identificadores MIDI declarados.
-  midi.buttons = function (notes = []) {
+  // Despierta los botones declarados por el sketch.
+  midi.buttons = function (names = []) {
     if (!state.output) throw new Error('GP MIDI: ejecutá await GP.midi.start() primero')
 
     stopLedLoop()
     clearLeds()
 
-    state.activeButtons = [...new Set(notes.map(Number))]
+    const normalized = [...new Set(names.map(name => String(name).trim().toUpperCase()))]
+    const notes = normalized.map(buttonToNote)
+
+    state.activeButtons = notes
     state.buttonState = {}
 
-    for (const note of state.activeButtons) {
-      if (note < 0 || note > 127) {
-        throw new Error(`GP MIDI: invalid button note ${note}`)
-      }
+    for (const note of notes) {
       state.buttonState[note] = false
-      state.buttonHandlers[note] = state.buttonHandlers[note] || []
+      state.buttonHandlers[note] = []
     }
 
     paintActiveLeds()
@@ -180,10 +200,15 @@
     return midi
   }
 
-  midi.on = function (note, callback) {
-    note = Number(note)
+  // Estado del botón: true/false.
+  midi.button = function (name) {
+    return !!state.buttonState[buttonToNote(name)]
+  }
+
+  midi.on = function (name, callback) {
+    const note = buttonToNote(name)
     if (!state.activeButtons.includes(note)) {
-      throw new Error(`GP MIDI: button ${note} is not active`)
+      throw new Error(`GP MIDI: botón ${name} no está activo`)
     }
 
     state.buttonHandlers[note] = state.buttonHandlers[note] || []
@@ -191,24 +216,26 @@
     return midi
   }
 
-  // Despierta faders por CC exacto. El sketch decide cuáles necesita.
-  midi.faders = function (ccs = []) {
+  // Despierta los faders declarados por el sketch.
+  midi.faders = function (names = []) {
     if (!state.output) throw new Error('GP MIDI: ejecutá await GP.midi.start() primero')
 
     stopLedLoop()
     clearLeds()
 
-    state.activeFaders = [...new Set(ccs.map(Number))]
+    const normalized = [...new Set(names.map(name => String(name).trim().toUpperCase()))]
+    const ccs = normalized.map(faderToCC)
 
-    for (const cc of state.activeFaders) {
-      if (cc < FADER_CC_START || cc > FADER_CC_END) {
-        throw new Error(`GP MIDI: invalid fader CC ${cc}`)
-      }
+    state.activeFaders = normalized
+
+    for (let i = 0; i < normalized.length; i++) {
+      const name = normalized[i]
+      const cc = ccs[i]
 
       state.faderValues[cc] = 0
       state.faderHandlers[cc] = []
 
-      const led = FADER_LED[cc]
+      const led = FADER_LED[name]
       if (led !== undefined) sendLed(led, 1)
     }
 
@@ -217,20 +244,13 @@
     return midi
   }
 
-  // Valor normalizado 0..1 del CC exacto.
-  midi.fader = function (cc) {
-    cc = Number(cc)
-    if (cc < FADER_CC_START || cc > FADER_CC_END) {
-      throw new Error(`GP MIDI: invalid fader CC ${cc}`)
-    }
-    return state.faderValues[cc] ?? 0
+  // Valor normalizado 0..1 del fader.
+  midi.fader = function (name) {
+    return state.faderValues[faderToCC(name)] ?? 0
   }
 
-  midi.onFader = function (cc, callback) {
-    cc = Number(cc)
-    if (cc < FADER_CC_START || cc > FADER_CC_END) {
-      throw new Error(`GP MIDI: invalid fader CC ${cc}`)
-    }
+  midi.onFader = function (name, callback) {
+    const cc = faderToCC(name)
     state.faderHandlers[cc] = state.faderHandlers[cc] || []
     state.faderHandlers[cc].push(callback)
     return midi
@@ -274,7 +294,6 @@
   }
 
   midi.state = state
-
   window.GP.midi = midi
   console.info('[GP MIDI] base v0.3 cargada; ejecutá await GP.midi.start()')
 })()
