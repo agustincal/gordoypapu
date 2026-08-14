@@ -1,23 +1,23 @@
 // G&P — FLUIDO VERTICAL
 // by Agustín Calviño
 // Gordo y Papu
-// VERSION 01 — audio + controls
+// VERSION 02 — infraestructura MIDI/audio actualizada
 //
-// SETUP
-// await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@f7d5a93fab386560b1d82381276252af0066c279/architecture/gp/gp-base-v0.4.js')
-// await GP.init({song:'vociferan', midi:true})
-// await GP.audio.start()
-// GP.midi.faders(['F1','F2'])
-// GP.midi.buttons(['N11','N12'])
+// CONFIGURACIÓN
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@eb94ca5e71dc3126cc2b21e43c7bfd023d68e9ae/architecture/gp/gp-base-v0.5.js')
+await GP.init({song:'vociferan', midi:true})
+await GP.audio.start()
+GP.midi.faders(['F1','F2'])
+GP.midi.buttons(['N11','N12'])
 //
 // F1–F8 / FMASTER → 0–1 | N11–N88 → 0/1
 // bass / drums / synth / vocals → .low() .mid() .high()
 //
-// REACTIVE: bass.low() / drums.mid() | F1 / F2 | N11 / N12
+// REACTIVO: bass.low() / drums.mid() | F1 / F2 | N11 / N12
 
 
 // ======================================================
-// SKETCH
+// MOVIMIENTO GENERAL
 // ======================================================
 
 let r1 = () => bass.low()
@@ -29,6 +29,11 @@ let movement = () =>
 let pulse = () =>
   0.5 + Math.sin(time * 0.45) * (0.25 + r2() * 0.35)
 
+
+// ======================================================
+// ESTRUCTURA BASE
+// ======================================================
+
 let base = osc(3, 0.04, 0.4)
   .rotate(movement)
   .repeatX(() => 2 + F2 * 3)
@@ -39,6 +44,11 @@ let base = osc(3, 0.04, 0.4)
   )
   .contrast(1.4)
 
+
+// ======================================================
+// ESTRUCTURA VERTICAL
+// ======================================================
+
 let vertical = osc(7, 0.02, 0.5)
   .rotate(() => -movement())
   .repeatX(5)
@@ -47,6 +57,11 @@ let vertical = osc(7, 0.02, 0.5)
     () => 0.06 + r1() * 0.16
   )
   .contrast(1.8)
+
+
+// ======================================================
+// TEXTURA ORGÁNICA
+// ======================================================
 
 let organic = noise(2, 0.2)
   .pixelate(
@@ -58,6 +73,11 @@ let organic = noise(2, 0.2)
     () => 0.08 + r2() * 0.12
   )
   .contrast(1.5)
+
+
+// ======================================================
+// COMPOSICIÓN FINAL
+// ======================================================
 
 base
   .blend(vertical, 0.5)
