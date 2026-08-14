@@ -1,10 +1,10 @@
 // G&P — MODULAR ARCHITECTURE
 // by Agustín Calviño
 // Gordo y Papu
-// VERSION 02 — Vociferan + controles activos
+// VERSION 02 — infraestructura MIDI/audio actualizada
 //
 // CONFIGURACIÓN
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@f7d5a93fab386560b1d82381276252af0066c279/architecture/gp/gp-base-v0.4.js')
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@eb94ca5e71dc3126cc2b21e43c7bfd023d68e9ae/architecture/gp/gp-base-v0.5.js')
 await GP.init({song:'vociferan', midi:true})
 await GP.audio.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8'])
@@ -16,7 +16,7 @@ GP.midi.buttons(['N11','N12','N13','N14','N15','N16','N17','N18'])
 
 
 // ======================================================
-// SKETCH
+// MOVIMIENTO GENERAL
 // ======================================================
 
 let r1 = () => bass.low()
@@ -28,6 +28,11 @@ let move = () =>
 let pulse = () =>
   1 + Math.sin(time * 0.43) * (0.05 + F2 * 0.08 + r2() * 0.12)
 
+
+// ======================================================
+// REJILLA PRINCIPAL
+// ======================================================
+
 let grid = shape(4, 0.5, 0.01)
   .repeatX(() => 4 + F1 * 4)
   .repeatY(8)
@@ -36,6 +41,11 @@ let grid = shape(4, 0.5, 0.01)
     0.75
   )
   .scrollX(move)
+
+
+// ======================================================
+// BANDAS
+// ======================================================
 
 let bands = osc(
   () => 4 + r1() * 5,
@@ -51,12 +61,22 @@ let bands = osc(
     () => 0.06 + N11 * (0.06 + r1() * 0.12)
   )
 
+
+// ======================================================
+// COLUMNAS
+// ======================================================
+
 let columns = osc(12, 0.015, 0.2)
   .repeatX(() => 3 + F2 * 4)
   .repeatY(2)
   .scrollX(() =>
     Math.sin(time * 0.31) * (0.02 + r2() * 0.05)
   )
+
+
+// ======================================================
+// COMPOSICIÓN FINAL
+// ======================================================
 
 grid
   .blend(bands, () => 0.2 + N11 * 0.3)
