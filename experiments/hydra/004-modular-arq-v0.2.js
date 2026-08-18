@@ -4,7 +4,7 @@
 // VERSION 02 — infraestructura MIDI/audio actualizada
 //
 // CONFIGURACIÓN
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@eb94ca5e71dc3126cc2b21e43c7bfd023d68e9ae/architecture/gp/gp-base-v0.5.js')
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@a24a0c13d7e12eb6034e1929a70a4ae4eb44a264/architecture/gp/gp-base-AkaiMini-v0.6.js')
 await GP.init({song:'vociferan', midi:true})
 await GP.audio.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8'])
