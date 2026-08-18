@@ -1,20 +1,15 @@
 // G&P — PLEGADO
 // por Agustín Calviño
-// Gordo y Papu
 // VERSIÓN 07 — infraestructura MIDI/audio actualizada
-//
-// CONFIGURACIÓN
+// CONFIGURACIÓN======================================================
 await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@a24a0c13d7e12eb6034e1929a70a4ae4eb44a264/architecture/gp/gp-base-AkaiMini-v0.6.js')
 await GP.init({song:'vociferan', midi:true})
 await GP.audio.start()
 GP.midi.faders(['F1','F2','F3','F4','F5'])
 GP.midi.buttons(['N11','N12','N82'])
-//
 // F1–F8 / FMASTER → 0–1 | N11–N88 → 0/1
 // bass / drums / synth / vocals → .low() .mid() .high()
 // REACTIVO: bass.low() / drums.mid() | F1 / F2 / F3 / F4 / F5 | N11 / N12 / N82
-
-
 // ======================================================
 // PLEGADO — ESCALERAS SUPERPUESTAS
 // ======================================================
@@ -37,11 +32,9 @@ let angle = () =>
 let density = () =>
   5 + F4 * 30 + r2() * 8
 
-
 // ======================================================
 // GENERACIÓN DE CADA ESCALERA
 // ======================================================
-
 // Cada escalera se construye de forma independiente.
 // Así evitamos ciclos de retroalimentación cuando las copias se superponen.
 function staircase(offsetX, offsetY, rotation) {
@@ -94,12 +87,9 @@ function staircase(offsetX, offsetY, rotation) {
         .scrollX(() => driftX() * 0.5)
     )
 }
-
-
 // ======================================================
 // COPIAS CERCANAS
 // ======================================================
-
 // Las copias permanecen próximas para superponerse y formar una estructura densa.
 let spread = () =>
   0.018 + r2() * 0.045 + N82 * 0.055
