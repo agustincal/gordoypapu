@@ -6,21 +6,18 @@
 //   F1 .. F8, FMASTER  → valores de fader normalizados
 //   N11 .. N88         → estados de botones 0/1
 //
-// v0.6: conserva los últimos valores MIDI de los faders
-// durante un refresh de la página.
 // Sin MIDI conectado, los controles permanecen disponibles
 // con valor 0 hasta que MIDI pueda iniciarse.
 // ======================================================
 ;(function () {
   window.GP = window.GP || {}
 
-  if (window.GP.midi && window.GP.midi.version === '0.6-AkaiMini') {
-    console.info('[GP MIDI] AkaiMini v0.6 ya está cargada')
+  if (window.GP.midi && window.GP.midi.version === '0.5-AkaiMini') {
+    console.info('[GP MIDI] AkaiMini v0.5 ya está cargada')
     return
   }
 
   const midi = {}
-  const STORAGE_KEY = 'GP_AkaiMini_Faders_v0.6'
 
   const FADER_CC = {
     F1: 48, F2: 49, F3: 50, F4: 51,
@@ -46,23 +43,6 @@
     return cc
   }
 
-  function loadSavedFaders() {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-      for (const cc of Object.values(FADER_CC)) {
-        if (typeof saved[cc] === 'number') state.faderValues[cc] = saved[cc]
-      }
-    } catch (_) {}
-  }
-
-  function saveFader(cc, value) {
-    try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}')
-      saved[cc] = value
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
-    } catch (_) {}
-  }
-
   const state = {
     status: 'idle', access: null, output: null, outputName: null,
     activeButtons: [], activeFaders: [], buttonState: {},
@@ -70,8 +50,6 @@
     buttonHandlers: {}, faderHandlers: {}, monitorVisible: false,
     listenersRegistered: false, ledInterval: null
   }
-
-  loadSavedFaders()
 
   function sendLed(note, value) {
     if (state.output) state.output.send([0x90, note, value])
@@ -131,7 +109,6 @@
     channel.onCC('*', ({ index, value }) => {
       if (index >= 48 && index <= 56) {
         state.faderValues[index] = value
-        saveFader(index, value)
         for (const fn of state.faderHandlers[index] || []) fn(value)
       }
     })
@@ -221,6 +198,7 @@
     state.activeFaders = normalized
     for (const name of normalized) {
       const cc = faderToCC(name)
+      state.faderValues[cc] = 0
       state.faderHandlers[cc] = []
       const led = FADER_LED[name]
       if (led !== undefined && state.output) sendLed(led, 1)
