@@ -2,43 +2,33 @@
 // por Agustín Calviño
 // Gordo y Papu
 // VERSIÓN 01 — base MIDI
-//
+
 // CONFIGURACIÓN
 await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@a24a0c13d7e12eb6034e1929a70a4ae4eb44a264/architecture/gp/gp-base-AkaiMini-v0.6.js')
 await GP.init({song:'fluorescente', midi:true})
 await GP.audio.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8'])
-//
+
 // F1–F8 → controles MIDI
 // bass / drums / synth / vocals → audio reactivo
 
-
-// ================================
-// VISUAL
-// ================================
-
+// VISUAL ===========================================
 osc(
-  () => 2 + F1 * 30,
-  () => 0.01 + F2 * 0.3,
-  () => F3
+  () => 2 + F1 * 0.3,
+  () => 0.01 + F2 * 0.01,
+  () => F3 * 0.01
 )
-
   // F4
-  .rotate(() => F4 * 3)
-
+  .rotate(() => F4 * 0.03)
   // F5
-  .kaleid(() => 1 + Math.floor(F5 * 7))
-
+  .kaleid(() => 1 + Math.floor(F5 * 1))
   // F6
-  .scale(() => 0.5 + F6 * 2)
-
+  .scale(() => 0.5 + F6 * 0.2)
   // F7
   .pixelate(
-    () => 10 + F7 * 100,
-    () => 10 + F7 * 100
+    () => 1 + F7 * 1,
+    () => 1 + F7 * 1
   )
-
   // F8
-  .contrast(() => 0.5 + F8 * 3)
-
+  .contrast(() => 1 + F8 * 0.66)
   .out()
