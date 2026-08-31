@@ -105,10 +105,10 @@
   // MIDI
   // ------------------------------------------------------
 
-  const MIDI_URL = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@7e46a93d8b02c4f4b8dc882a885d4d4d7f0110cd/architecture/gp/gp-midi-base-AkaiMini-v0.5.js'
+  const MIDI_URL = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@647e3a624aceda63aec1dd994d015f86fc222008/architecture/gp/gp-midi-base-AkaiMini-v0.6.js'
 
   async function initMidi() {
-    if (window.GP.midi && window.GP.midi.version === '0.5-AkaiMini') {
+    if (window.GP.midi && window.GP.midi.version === '0.6-AkaiMini') {
       return window.GP.midi
     }
     await loadScript(MIDI_URL)
