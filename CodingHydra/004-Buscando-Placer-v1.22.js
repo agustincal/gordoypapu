@@ -17,21 +17,53 @@ GP.midi.buttons(['N11','N12','N13','N14','N15','N16','N17','N18'])
 // Object.values(GP.audio.stems).forEach(s => s.player.muted = true)
 
 // ======================================================
-// 02 — ESTADOS
+// 02 — BOTONES
 // ======================================================
+// N11 → CAMBIA MODO (0 / 1 / 2)
+// N12 → PULSE ON/OFF
+// N13 → SPIN ON/OFF
+// N14 → MODO 0
+// N15 → MODO 1
+// N16 → MODO 2
+// N17 → RESET ROTACIÓN
+// N18 → PULSE ON/OFF
+
 let mode = 0
 let pulse = 0
 let spin = false
 let rotation = 0
 
-GP.midi.on('N11', ({active}) => { if (active) mode = (mode + 1) % 3 })
-GP.midi.on('N12', ({active}) => { pulse = active ? 1 : 0 })
-GP.midi.on('N13', ({active}) => { if (active) spin = !spin })
-GP.midi.on('N14', ({active}) => { if (active) mode = 0 })
-GP.midi.on('N15', ({active}) => { if (active) mode = 1 })
-GP.midi.on('N16', ({active}) => { if (active) mode = 2 })
-GP.midi.on('N17', ({active}) => { if (active) rotation = 0 })
-GP.midi.on('N18', ({active}) => { if (active) pulse = 1 - pulse })
+GP.midi.on('N11', ({active}) => {
+  if (active) mode = (mode + 1) % 3
+})
+
+GP.midi.on('N12', ({active}) => {
+  pulse = active ? 1 : 0
+})
+
+GP.midi.on('N13', ({active}) => {
+  if (active) spin = !spin
+})
+
+GP.midi.on('N14', ({active}) => {
+  if (active) mode = 0
+})
+
+GP.midi.on('N15', ({active}) => {
+  if (active) mode = 1
+})
+
+GP.midi.on('N16', ({active}) => {
+  if (active) mode = 2
+})
+
+GP.midi.on('N17', ({active}) => {
+  if (active) rotation = 0
+})
+
+GP.midi.on('N18', ({active}) => {
+  if (active) pulse = 1 - pulse
+})
 
 // ======================================================
 // 03 — REACTIVOS DE AUDIO
