@@ -17,106 +17,103 @@ GP.midi.buttons(['N11','N12','N13','N14','N15','N16','N17','N18'])
 // Object.values(GP.audio.stems).forEach(s => s.player.muted = true)
 
 // ======================================================
-// 02 — ESTADOS DE LOS BOTONES
+// 02 — ESTADOS
 // ======================================================
 let mode = 0
 let pulse = 0
+let spin = false
 let rotation = 0
 
 GP.midi.on('N11', ({active}) => { if (active) mode = (mode + 1) % 3 })
 GP.midi.on('N12', ({active}) => { pulse = active ? 1 : 0 })
-GP.midi.on('N13', ({active}) => { if (active) rotation += 0.2 })
+GP.midi.on('N13', ({active}) => { if (active) spin = !spin })
 GP.midi.on('N14', ({active}) => { if (active) mode = 0 })
 GP.midi.on('N15', ({active}) => { if (active) mode = 1 })
 GP.midi.on('N16', ({active}) => { if (active) mode = 2 })
+GP.midi.on('N17', ({active}) => { if (active) rotation = 0 })
+GP.midi.on('N18', ({active}) => { if (active) pulse = 1 - pulse })
 
 // ======================================================
-// 03 — REACTIVOS
+// 03 — REACTIVOS DE AUDIO
 // ======================================================
 let bassReact = () => bass.low()
-let drumReact = () => drums.mid()
+let drumReact = () => Math.max(0, drums.mid() - 0.25)
 let synthReact = () => synth.mid()
 let vocalReact = () => vocals.high()
 
 // ======================================================
-// 04 — MOTOR DE MODULACIÓN
+// 04 — CONTROLES DERIVADOS
 // ======================================================
-// Cada modo cambia la relación entre los mismos controles.
 let freq = () => {
-  if (mode === 0) return 1 + F1 * 10 + drumReact() * F2 * 8
-  if (mode === 1) return 3 + F1 * 30 + synthReact() * 20
-  return 0.5 + F1 * 4 + vocalReact() * 25
+  if (mode === 0) return 1 + F1 * 8 + drumReact() * 4
+  if (mode === 1) return 4 + F1 * 22 + synthReact() * 18
+  return 1 + F1 * 5 + vocalReact() * 18
 }
 
 let speed = () => {
   if (mode === 0) return 0.15 + F2 * 0.8
-  if (mode === 1) return 0.4 + F3 * 2 + bassReact() * 0.8
-  return 0.05 + F2 * 0.3 + vocalReact() * 0.5
+  if (mode === 1) return 0.2 + F3 * 1.5 + bassReact() * 0.5
+  return 0.05 + F2 * 0.4 + vocalReact() * 0.7
 }
 
-let shape = () => 80 + F3 * 320 + bassReact() * F4 * 300
-let pixel = () => Math.max(2, 200 - F7 * 198 - drumReact() * 80)
-let scale = () => 1 + F8 * 1.8 + vocalReact() * F8 * 1.5
+let amp = () => 100 + F3 * 250 + bassReact() * F4 * 200
+let pixels = () => Math.max(2, 12 + F7 * 100 + drumReact() * 80)
+let modAmount = () => 0.05 + F6 * 0.35 + (pulse ? drumReact() * 0.45 : 0)
+let finalScale = () => 1 + F8 * 1.5 + vocalReact() * 0.5
 
 // ======================================================
 // 05 — ROTACIÓN
 // ======================================================
 let rot = () => {
-  rotation += speed() * 0.002
+  if (spin) rotation += 0.002 + F4 * 0.006
   return rotation
 }
 
 // ======================================================
-// 06 — CAPA A: CAMPO BASE
+// 06 — CAMPO BASE
 // ======================================================
-let layerA = () => osc(freq, speed, shape)
+let base = osc(
+  freq,
+  speed,
+  amp
+)
   .color(
-    () => 0.25 + F1 * 0.75,
-    () => 0.15 + bassReact() * 0.85,
-    () => 0.35 + F2 * 0.65
+    () => 0.9,
+    () => 0.7 + bassReact() * 0.25,
+    () => 0.8
   )
-  .rotate(rot)
 
 // ======================================================
-// 07 — CAPA B: RASTER / INTERFERENCIA
+// 07 — RASTER / INTERFERENCIA
 // ======================================================
-let layerB = () => osc(
-  () => 20 + F4 * 80 + synthReact() * 60,
-  () => 0.1 + F5 * 0.8,
-  () => 100 + F6 * 500
+let raster = osc(
+  () => 45 + F4 * 35 + synthReact() * 40,
+  () => 0.3 + F5 * 0.5,
+  () => 100 + F6 * 250
 )
-  .pixelate(pixel, pixel)
-  .kaleid(() => 2 + Math.floor(F3 * 6))
-  .rotate(() => -rot())
+  .color(0.9, 0.9, 0.9)
+  .rotate(() => rot())
+  .pixelate(pixels, pixels)
+  .kaleid(() => 2 + Math.floor(F3 * 5))
 
 // ======================================================
-// 08 — CAPA C: VOCAL DISTURBANCE
+// 08 — MEZCLA
 // ======================================================
-let layerC = () => osc(
-  () => 2 + vocalReact() * 35,
-  () => 0.2 + vocalReact() * 2,
-  () => 40 + F7 * 500
-)
-  .colorama(() => vocalReact() * 0.8)
-  .scale(() => 0.8 + vocalReact() * F8 * 2)
-
-// ======================================================
-// 09 — MEZCLA PRINCIPAL
-// ======================================================
-layerA()
-  .diff(layerB())
-  .diff(layerC())
+base
+  .diff(raster)
+  .scrollX(() => 2 + F5 * 8 + bassReact() * 2)
+  .colorama(() => synthReact() * F6 * 0.4)
+  .luma(() => 0.05 + F1 * 0.15)
+  .repeatX(1)
+  .repeatY(1)
   .modulate(
     osc(
-      () => 1 + F4 * 12 + drumReact() * 20,
-      () => 0.1 + F5,
-      () => 80 + F6 * 300
+      () => 1 + F4 * 8 + drumReact() * 12,
+      () => 0.1 + F5 * 0.5,
+      () => 100 + F6 * 200
     ),
-    () => 0.05 + F7 * 0.7 + (pulse ? drumReact() * 0.8 : 0)
+    modAmount
   )
-  .scrollX(() => (F5 - 0.5) * 4 + bassReact() * F6)
-  .scrollY(() => (F6 - 0.5) * 3 + vocalReact() * 0.5)
-  .scale(scale)
-  .contrast(() => 1 + F8 * 0.7 + drumReact() * 0.5)
-  .luma(() => 0.2 + F1 * 0.35)
+  .scale(finalScale)
+  .contrast(() => 1 + F8 * 0.5 + drumReact() * 0.4)
   .out()
