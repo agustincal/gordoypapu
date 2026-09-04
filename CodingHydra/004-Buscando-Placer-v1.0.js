@@ -3,7 +3,7 @@
 
 //
 // SETUP
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@1753a2556ad4e4c9ac214b17b5dadbe515bdba68/architecture/gp/gp-base-AkaiMini-v0.6.js')
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-base-AkaiMini-v0.6.js')
 await GP.init({song:'buscandoplacer', midi:true})
 await GP.audio.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8'])
