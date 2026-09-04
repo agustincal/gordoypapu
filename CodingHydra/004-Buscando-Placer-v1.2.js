@@ -24,7 +24,7 @@ let pulse = 0
 let rotation = 0
 
 GP.midi.on('N11', ({active}) => { if (active) mode = (mode + 1) % 3 })
-GP.midi.on('N12', ({active}) => { if (active) pulse = active ? 1 : 0 })
+GP.midi.on('N12', ({active}) => { pulse = active ? 1 : 0 })
 GP.midi.on('N13', ({active}) => { if (active) rotation += 0.2 })
 GP.midi.on('N14', ({active}) => { if (active) mode = 0 })
 GP.midi.on('N15', ({active}) => { if (active) mode = 1 })
@@ -33,11 +33,10 @@ GP.midi.on('N16', ({active}) => { if (active) mode = 2 })
 // ======================================================
 // 03 — REACTIVOS
 // ======================================================
-let bass = () => bassReact()
-let bassReact = () => GP.audio.stems.bass?.analyser?.low?.() || 0
-let drumReact = () => GP.audio.stems.drums?.analyser?.mid?.() || 0
-let synthReact = () => GP.audio.stems.synth?.analyser?.mid?.() || 0
-let vocalReact = () => GP.audio.stems.vocals?.analyser?.high?.() || 0
+let bassReact = () => bass.low()
+let drumReact = () => drums.mid()
+let synthReact = () => synth.mid()
+let vocalReact = () => vocals.high()
 
 // ======================================================
 // 04 — MOTOR DE MODULACIÓN
@@ -56,7 +55,6 @@ let speed = () => {
 }
 
 let shape = () => 80 + F3 * 320 + bassReact() * F4 * 300
-let colorShift = () => F5 * 0.2 + synthReact() * F6 * 0.8
 let pixel = () => Math.max(2, 200 - F7 * 198 - drumReact() * 80)
 let scale = () => 1 + F8 * 1.8 + vocalReact() * F8 * 1.5
 
