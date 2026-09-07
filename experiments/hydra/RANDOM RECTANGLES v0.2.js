@@ -1,6 +1,6 @@
 // ==========================================================
 // GyP — RANDOM RECTANGLES v0.2
-// DRUM TRIGGER / TRIADIC-HARMONIC COLOR PALETTE
+// DRUM REACTIVE / TRIADIC-HARMONIC COLOR PALETTE
 // ==========================================================
 
 // ==========================================================
@@ -18,13 +18,9 @@ await GP.audio.start()
 // 02 — CONFIGURACIÓN
 // ==========================================================
 
-// Sensibilidad del disparo de drums.
-// Subir = menos disparos / bajar = más disparos.
-const DRUM_THRESHOLD = 0.20;
-
-// Tiempo mínimo entre dos disparos.
-// Evita que un mismo golpe genere varios estados.
-const DRUM_COOLDOWN = 0.10;
+// Cantidad de estados de intensidad de drums.
+// La señal de drums se convierte en un valor discreto.
+const DRUM_LEVELS = 6;
 
 // ==========================================================
 // 03 — RANDOM DETERMINISTA
@@ -36,33 +32,24 @@ function rnd(n, seed) {
 }
 
 // ==========================================================
-// 04 — ESTADO
+// 04 — ESTADO REACTIVO
 // ==========================================================
 
-// El estado S NO avanza con el tiempo.
-// Solo cambia cuando detectamos un golpe de drums.
-let S = 0;
-let lastDrum = 0;
+// IMPORTANTE:
+// La versión anterior intentaba hacer S++ con un if en el
+// código principal. Eso no funciona como detector por frame:
+// el valor quedaba calculado al construir el sketch.
+//
+// Ahora el valor que alimenta la composición es directamente
+// reactivo a drums.mid(). Cuando cambia de nivel, cambia la
+// semilla y por lo tanto cambia la composición.
 
-// ==========================================================
-// 05 — REACTIVO DE DRUMS
-// ==========================================================
-
-let drumReact = () => Math.max(0, drums.mid() - DRUM_THRESHOLD);
-
-// ==========================================================
-// 06 — DETECCIÓN DE GOLPE
-// ==========================================================
-
-let drum = drums.mid();
-
-if (drum > DRUM_THRESHOLD && time - lastDrum > DRUM_COOLDOWN) {
-  S++;
-  lastDrum = time;
+function drumState() {
+  return Math.floor(Math.max(0, drums.mid()) * DRUM_LEVELS);
 }
 
 // ==========================================================
-// 07 — HSV → RGB
+// 05 — HSV → RGB
 // ==========================================================
 
 function hsv(h, s, v) {
@@ -94,33 +81,36 @@ function hsv(h, s, v) {
 }
 
 // ==========================================================
-// 08 — PALETA
+// 06 — PALETA
 // ==========================================================
 
-// Cada golpe genera una paleta nueva.
-// La estructura cromática sigue siendo triádica.
-let H = rnd(S, 100) * 360;
+function palette() {
+  let S = drumState();
+  let H = rnd(S, 100) * 360;
 
-let PAL = [
-  hsv(H,       1.00, 0.60),
-  hsv(H + 120, 1.00, 0.60),
-  hsv(H + 240, 1.00, 0.60),
-  hsv(H + 120, 0.45, 1.00),
-  hsv(H + 240, 0.55, 0.25)
-];
+  return [
+    hsv(H,       1.00, 0.60),
+    hsv(H + 120, 1.00, 0.60),
+    hsv(H + 240, 1.00, 0.60),
+    hsv(H + 120, 0.45, 1.00),
+    hsv(H + 240, 0.55, 0.25)
+  ];
+}
 
 // ==========================================================
-// 09 — RECTÁNGULO
+// 07 — RECTÁNGULO
 // ==========================================================
 
 function rectangle(i) {
+  let S = drumState();
+  let PAL = palette();
   let seed = S * 100 + i * 37;
 
-  // POSICIÓN — cambia solamente al llegar un drum nuevo
+  // POSICIÓN
   let x = rnd(seed, 1) * 1.25 - 0.625;
   let y = rnd(seed, 2) * 1.25 - 0.625;
 
-  // TAMAÑO — rectángulos grandes
+  // TAMAÑO — mantenemos exactamente la escala de v0.1
   let w = 0.9 + rnd(seed, 3) * 0.75;
   let h = 0.8 + rnd(seed, 4) * 0.75;
 
@@ -138,10 +128,11 @@ function rectangle(i) {
 }
 
 // ==========================================================
-// 10 — CANTIDAD DE RECTÁNGULOS
+// 08 — CANTIDAD DE RECTÁNGULOS
 // ==========================================================
 
 function rectangleCount() {
+  let S = drumState();
   let r = rnd(S, 999);
 
   if (r < 0.10) return 1;
@@ -154,21 +145,18 @@ function rectangleCount() {
 }
 
 // ==========================================================
-// 11 — COMPOSICIÓN
+// 09 — COMPOSICIÓN
 // ==========================================================
 
 let count = rectangleCount();
 let comp = rectangle(0);
-
-// El último rectángulo queda arriba y tapa completamente
-// al anterior. No hay transparencia ni blending.
 
 for (let i = 1; i < count; i++) {
   comp = comp.layer(rectangle(i));
 }
 
 // ==========================================================
-// 12 — OUTPUT
+// 10 — OUTPUT
 // ==========================================================
 
 comp.out(o0);
