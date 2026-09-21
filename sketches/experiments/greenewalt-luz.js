@@ -40,12 +40,17 @@ try {
 }
 
 
-// TODO: una vez que subas gp-midi-base-AkaiMini-v0.8.js al repo,
-// reemplazá @main por el hash del commit (como hacías con v0.6),
-// para que este sketch quede fijo a esa versión.
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.8.js')
+// TODO: subí gp-midi-base-AkaiMini-v0.9.js al repo, sacá el hash del
+// commit en GitHub Desktop (History → click derecho → Copy SHA) y
+// reemplazá @main acá abajo, como hiciste con v0.8.
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.9.js')
 await GP.midi.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8','FMASTER'])
+
+// DIAGNÓSTICO 2 — F7 ya procesado por la base (0..127, con zona
+// muerta + reescalado aplicados). Cuando confirmes que anda bien,
+// borrá esta línea.
+setInterval(() => console.log('[F7 después de la base, 0-127]', F7), 300)
 
 
 // --------------------------------------------------
@@ -121,7 +126,9 @@ const UMBRAL_SUSTAIN = 0.5
 
 function fader(nombre) {
   const c = CALIBRACION[nombre]
-  const crudo = window[c.raw] ?? 0
+  // la base entrega 0..127 (crudo MIDI, confirmado con showmidi),
+  // acá lo normalizamos a 0..1 antes de aplicar la calibración.
+  const crudo = (window[c.raw] ?? 0) / 127
   let t = c.borde ? Math.min(1, crudo / c.borde) : crudo
   if (c.curva && c.curva !== 1) t = Math.pow(t, c.curva)
   return c.min + t * (c.max - c.min)
@@ -146,7 +153,7 @@ update = () => {
   const dt = Math.min(time - ultimo, 0.1)
   ultimo = time
 
-  const sostenido = F8 >= UMBRAL_SUSTAIN
+  const sostenido = (F8 / 127) >= UMBRAL_SUSTAIN
   const kSube = 1 - Math.exp(-dt / fader('F1'))
   const kBaja = 1 - Math.exp(-dt / fader('F2'))
 
