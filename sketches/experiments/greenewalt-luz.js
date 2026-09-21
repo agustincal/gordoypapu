@@ -13,10 +13,37 @@
 // del sketch no cambia.
 // ======================================================
 
-// TODO: una vez que subas gp-midi-base-AkaiMini-v0.7.js al repo,
+// --------------------------------------------------
+// DIAGNÓSTICO — muestra en la consola del navegador todo lo que
+// manda la controladora, sin depender de GP.midi ni de este sketch.
+// Útil para ver el nombre real del dispositivo y los números de
+// nota/CC que realmente llegan (F12 → pestaña Console).
+// Dejalo mientras depurás; después comentalo o borralo.
+// --------------------------------------------------
+try {
+  const accesoDiag = await navigator.requestMIDIAccess()
+  console.log('[showmidi] entradas MIDI detectadas:', [...accesoDiag.inputs.values()].map(i => i.name))
+  accesoDiag.inputs.forEach(entrada => {
+    entrada.onmidimessage = ({ data }) => {
+      const [estado, dato1, dato2] = data
+      const canal = (estado & 0x0f) + 1
+      const tipo = estado & 0xf0
+      const nombreTipo =
+        tipo === 0x90 ? 'note on' :
+        tipo === 0x80 ? 'note off' :
+        tipo === 0xB0 ? 'control change' : `0x${tipo.toString(16)}`
+      console.log(`[showmidi] ${entrada.name} · canal ${canal} · ${nombreTipo} · dato1=${dato1} · dato2=${dato2}`)
+    }
+  })
+} catch (err) {
+  console.error('[showmidi] no se pudo acceder a MIDI:', err)
+}
+
+
+// TODO: una vez que subas gp-midi-base-AkaiMini-v0.8.js al repo,
 // reemplazá @main por el hash del commit (como hacías con v0.6),
 // para que este sketch quede fijo a esa versión.
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.7.js')
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.8.js')
 await GP.midi.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8','FMASTER'])
 
