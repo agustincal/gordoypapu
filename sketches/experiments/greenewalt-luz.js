@@ -43,7 +43,7 @@ try {
 // TODO: subí gp-midi-base-AkaiMini-v0.9.js al repo, sacá el hash del
 // commit en GitHub Desktop (History → click derecho → Copy SHA) y
 // reemplazá @main acá abajo, como hiciste con v0.8.
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.9.js')
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@c4d7ecbb3f9b78ca7d403905f5ce948637a35850/architecture/gp/gp-midi-base-AkaiMini-v0.9.js')
 await GP.midi.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8','FMASTER'])
 
@@ -200,12 +200,28 @@ if (acceso) {
 
 // --------------------------------------------------
 // VISUAL: 8 lámparas (una por columna), color = mezcla de sus filas
+//
+// Antes esto sumaba los colores de las filas activas y recién al
+// final clampeaba — con dos o tres notas juntas eso satura rápido
+// a blanco/gris. Ahora es un PROMEDIO PONDERADO: la mezcla de color
+// no depende de cuántas notas estén sonando (rojo + azul = violeta,
+// no blanco), y la intensidad total se maneja aparte, por el peso
+// (suma de niveles) de la columna.
 // --------------------------------------------------
 
-function lampara(c, canal) {
-  let v = 0
-  for (let f = 0; f < 8; f++) v += PALETA[f][canal] * nivel[f * 8 + c]
-  return Math.min(1, v) * fader('FMASTER')
+function pesoColumna(c) {
+  let peso = 0
+  for (let f = 0; f < 8; f++) peso += nivel[f * 8 + c]
+  return peso
+}
+
+function lampara(c, canal, peso) {
+  if (peso <= 0) return 0
+  let mezcla = 0
+  for (let f = 0; f < 8; f++) mezcla += PALETA[f][canal] * nivel[f * 8 + c]
+  mezcla /= peso                     // color promedio de las notas activas
+  const brillo = Math.min(1, peso)   // más notas = más brillo, hasta el tope
+  return mezcla * brillo * fader('FMASTER')
 }
 
 let luces = solid(0, 0, 0, 1)
@@ -218,7 +234,11 @@ for (let c = 0; c < 8; c++) {
       () => fader('F5')
     )
     .rotate(() => time * fader('F3') * (c % 2 ? -1 : 1) * (1 + c * 0.2))
-    .color(() => lampara(c, 0), () => lampara(c, 1), () => lampara(c, 2))
+    .color(
+      () => lampara(c, 0, pesoColumna(c)),
+      () => lampara(c, 1, pesoColumna(c)),
+      () => lampara(c, 2, pesoColumna(c))
+    )
   )
 }
 
