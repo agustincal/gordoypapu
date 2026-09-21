@@ -42,7 +42,7 @@
   // debajo del umbral, se fuerza a 0. Agregá acá cualquier otro
   // fader ruidoso de tu controladora; el resto queda sin tocar (0).
   const FADER_DEADZONE = {
-    F7: 0.1
+    F7: 0.2
   }
 
   const CC_TO_FADER = Object.fromEntries(
