@@ -13,7 +13,10 @@
 // del sketch no cambia.
 // ======================================================
 
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@647e3a624aceda63aec1dd994d015f86fc222008/architecture/gp/gp-midi-base-AkaiMini-v0.6.js')
+// TODO: una vez que subas gp-midi-base-AkaiMini-v0.7.js al repo,
+// reemplazá @main por el hash del commit (como hacías con v0.6),
+// para que este sketch quede fijo a esa versión.
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.7.js')
 await GP.midi.start()
 GP.midi.faders(['F1','F2','F3','F4','F5','F6','F7','F8','FMASTER'])
 
