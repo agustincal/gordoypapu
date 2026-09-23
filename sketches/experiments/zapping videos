@@ -1,0 +1,107 @@
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/architecture/gp/gp-midi-base-AkaiMini-v0.9.js')
+await GP.midi.start()
+GP.midi.buttons([])
+
+const BASE_VIDEOS = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/assets/videos01/'
+const videos = Array.from({ length: 61 }, (_, n) => {
+  const num = String(n + 1).padStart(2, '0')
+  return `${BASE_VIDEOS}Kim_chi_fied_rice_${num}.mp4`
+})
+
+const VIDEO_ASPECT = 720 / 1280
+const AJUSTE = 1   // ajustá a ojo según el clip
+
+const AKAI = /apc|akai/i
+const KORG = /korg|padkontrol/i
+const MODO_PRUEBA = false   // true = disparar con la fila 7 del Akai (percusión simulada)
+const ROL = { percusion: 3 }
+
+s1.initVideo(videos[0])
+
+let rx = 0, ry = 0, rw = 1, rh = 1
+let imgScale = 1, imgX = 0, imgY = 0
+let cargando = false
+
+const rect = () => shape(4, 1, 0.001)
+  .scale(() => rw, () => rh)
+  .scrollX(() => rx)
+  .scrollY(() => ry)
+
+const nuevoRectangulo = () => {
+  if (cargando) return
+  cargando = true
+
+  const i = Math.floor(Math.random() * videos.length)
+  const v = document.createElement('video')
+  v.crossOrigin = 'anonymous'
+  v.loop = true
+  v.muted = true
+  v.playsInline = true
+  v.src = videos[i]
+
+  v.addEventListener('playing', () => {
+    const anterior = s1.src
+    s1.src = v
+    s1.dynamic = true
+
+    if (anterior) {
+      anterior.pause()
+      anterior.removeAttribute('src')
+      anterior.load()
+    }
+
+    rw = 0.4 + Math.random() * 0.4
+    rh = 0.4 + Math.random() * 0.4
+    rx = (Math.random() - 0.5) * 0.7
+    ry = (Math.random() - 0.5) * 0.7
+    imgScale = 0.75 + Math.random() * 0.25
+    imgX = (Math.random() - 0.5) * 0.2
+    imgY = (Math.random() - 0.5) * 0.2
+
+    cargando = false
+  }, { once: true })
+
+  v.load()
+  v.play().catch(() => {})
+}
+
+if (window._gpCollageMidi) window._gpCollageMidi.forEach(([inp, fn]) => inp.removeEventListener('midimessage', fn))
+window._gpCollageMidi = []
+
+navigator.requestMIDIAccess().then(acc => {
+  acc.inputs.forEach(inp => {
+    console.log('MIDI in:', inp.name)
+    const esAkai = AKAI.test(inp.name), esKorg = KORG.test(inp.name)
+    if (!esAkai && !esKorg) return
+
+    const fn = m => {
+      const [st, nota, vel] = m.data
+      const on = (st & 0xF0) === 0x90 && vel > 0
+      if (!on) return
+
+      if (esKorg && !MODO_PRUEBA) {
+        const canal = (st & 0x0F) + 1
+        if (canal === ROL.percusion) nuevoRectangulo()
+        return
+      }
+      if (esKorg) return
+
+      if (esAkai && MODO_PRUEBA && nota <= 63) {
+        const fila = Math.floor(nota / 8) + 1
+        if (fila === 7) nuevoRectangulo()
+      }
+    }
+    inp.addEventListener('midimessage', fn)
+    window._gpCollageMidi.push([inp, fn])
+  })
+})
+
+src(o0)
+  .layer(
+    src(s1)
+      .scale(() => imgScale, () => imgScale / ((width / height) / VIDEO_ASPECT) * AJUSTE)
+      .scrollX(() => imgX)
+      .scrollY(() => imgY)
+      .mask(rect())
+  )
+  .out()
