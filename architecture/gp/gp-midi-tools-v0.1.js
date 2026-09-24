@@ -96,4 +96,37 @@
       const urlMidi = URL.createObjectURL(blobMidi)
       const aMidi = document.createElement('a')
       aMidi.href = urlMidi
-      aMidi.download =
+      aMidi.download = `ensayo-midi-${ts}.json`
+      aMidi.click()
+      URL.revokeObjectURL(urlMidi)
+
+      if (!audioChunks.length) {
+        console.warn('no hay audio grabado para descargar (¿se habilitó el mic al iniciar?)')
+        return
+      }
+
+      setTimeout(() => {
+        const blobAudio = new Blob(audioChunks, { type: 'audio/webm' })
+        const urlAudio = URL.createObjectURL(blobAudio)
+        const aAudio = document.createElement('a')
+        aAudio.href = urlAudio
+        aAudio.download = `ensayo-audio-${ts}.webm`
+        aAudio.click()
+        URL.revokeObjectURL(urlAudio)
+      }, 300)
+    }
+  }
+
+  // ---- atajos de teclado para el grabador: R=iniciar, S=detener, D=descargar ----
+  let atajosInstalados = false
+  GP.tools.atajosTeclado = () => {
+    if (atajosInstalados) return
+    atajosInstalados = true
+    window.addEventListener('keydown', (e) => {
+      if (e.repeat) return
+      if (e.key === 'r' || e.key === 'R') GP.tools.grabador.iniciar()
+      if (e.key === 's' || e.key === 'S') GP.tools.grabador.detener()
+      if (e.key === 'd' || e.key === 'D') GP.tools.grabador.descargar()
+    })
+  }
+})()
