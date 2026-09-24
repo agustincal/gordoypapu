@@ -36,33 +36,73 @@
     panel.textContent = lineas.join('\n')
   }
 
-  // ---- grabador de MIDI (para tener una versión de ensayo offline) ----
+  // ---- grabador de MIDI + audio en sincro (para tener una versión de ensayo offline) ----
   let grabando = false
   let grabacion = []
   let inicio = 0
+  let audioRecorder = null
+  let audioChunks = []
 
   GP.tools.grabador = {
-    iniciar() {
+    async iniciar() {
+      if (grabando) return   // evita reiniciar si ya está grabando
       grabacion = []
       inicio = performance.now()
       grabando = true
       console.log('grabando MIDI...')
+
+      audioChunks = []
+      audioRecorder = null
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        audioRecorder = new MediaRecorder(stream)
+        audioRecorder.ondataavailable = e => { if (e.data.size > 0) audioChunks.push(e.data) }
+        audioRecorder.start()
+        console.log('grabando audio... (mic OK)')
+      } catch (err) {
+        console.warn('NO se pudo grabar audio (revisar permiso de mic):', err)
+      }
     },
     detener() {
+      if (!grabando) return
       grabando = false
       console.log('grabación detenida,', grabacion.length, 'mensajes')
+      if (audioRecorder && audioRecorder.state !== 'inactive') {
+        audioRecorder.stop()
+        audioRecorder.stream.getTracks().forEach(t => t.stop())
+      } else {
+        console.warn('no había audio activo para detener')
+      }
     },
     registrar(nombre, data) {
       if (grabando) grabacion.push([performance.now() - inicio, nombre, [...data]])
     },
     descargar() {
-      const blob = new Blob([JSON.stringify(grabacion)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `ensayo-midi-${Date.now()}.json`
-      a.click()
-      URL.revokeObjectURL(url)
+      const ts = Date.now()
+
+      const blobMidi = new Blob([JSON.stringify(grabacion)], { type: 'application/json' })
+      const urlMidi = URL.createObjectURL(blobMidi)
+      const aMidi = document.createElement('a')
+      aMidi.href = urlMidi
+      aMidi.download = `ensayo-midi-${ts}.json`
+      aMidi.click()
+      URL.revokeObjectURL(urlMidi)
+
+      if (!audioChunks.length) {
+        console.warn('no hay audio grabado para descargar (¿se habilitó el mic al iniciar?)')
+        return
+      }
+
+      // pequeño delay para que el navegador no bloquee la segunda descarga
+      setTimeout(() => {
+        const blobAudio = new Blob(audioChunks, { type: 'audio/webm' })
+        const urlAudio = URL.createObjectURL(blobAudio)
+        const aAudio = document.createElement('a')
+        aAudio.href = urlAudio
+        aAudio.download = `ensayo-audio-${ts}.webm`
+        aAudio.click()
+        URL.revokeObjectURL(urlAudio)
+      }, 300)
     }
   }
 
@@ -72,6 +112,7 @@
     if (atajosInstalados) return
     atajosInstalados = true
     window.addEventListener('keydown', (e) => {
+      if (e.repeat) return   // ignora el auto-repeat si se mantiene la tecla apretada
       if (e.key === 'r' || e.key === 'R') GP.tools.grabador.iniciar()
       if (e.key === 's' || e.key === 'S') GP.tools.grabador.detener()
       if (e.key === 'd' || e.key === 'D') GP.tools.grabador.descargar()
