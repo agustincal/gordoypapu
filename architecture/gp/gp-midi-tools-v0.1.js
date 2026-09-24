@@ -118,15 +118,16 @@
   }
 
   // ---- atajos de teclado para el grabador: R=iniciar, S=detener, D=descargar ----
-  let atajosInstalados = false
+  // saca el listener anterior antes de poner uno nuevo, así no se acumulan
+  // si el sketch se re-ejecuta varias veces (típico al ir editando en vivo)
   GP.tools.atajosTeclado = () => {
-    if (atajosInstalados) return
-    atajosInstalados = true
-    window.addEventListener('keydown', (e) => {
+    if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos)
+    window._gpToolsAtajos = (e) => {
       if (e.repeat) return
       if (e.key === 'r' || e.key === 'R') GP.tools.grabador.iniciar()
       if (e.key === 's' || e.key === 'S') GP.tools.grabador.detener()
       if (e.key === 'd' || e.key === 'D') GP.tools.grabador.descargar()
-    })
+    }
+    window.addEventListener('keydown', window._gpToolsAtajos)
   }
 })()
