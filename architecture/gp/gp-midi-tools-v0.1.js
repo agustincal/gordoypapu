@@ -42,10 +42,11 @@
   let inicio = 0
   let audioRecorder = null
   let audioChunks = []
+  let audioListo = Promise.resolve()   // se resuelve cuando el audio terminó de volcarse
 
   GP.tools.grabador = {
     async iniciar() {
-      if (grabando) return   // evita reiniciar si ya está grabando
+      if (grabando) return
       grabacion = []
       inicio = performance.now()
       grabando = true
@@ -67,55 +68,32 @@
       if (!grabando) return
       grabando = false
       console.log('grabación detenida,', grabacion.length, 'mensajes')
+
       if (audioRecorder && audioRecorder.state !== 'inactive') {
-        audioRecorder.stop()
-        audioRecorder.stream.getTracks().forEach(t => t.stop())
+        const recorder = audioRecorder
+        audioListo = new Promise(resolve => {
+          recorder.onstop = () => {
+            console.log('audio listo,', audioChunks.length, 'chunks')
+            resolve()
+          }
+        })
+        recorder.stop()
+        recorder.stream.getTracks().forEach(t => t.stop())
       } else {
         console.warn('no había audio activo para detener')
+        audioListo = Promise.resolve()
       }
     },
     registrar(nombre, data) {
       if (grabando) grabacion.push([performance.now() - inicio, nombre, [...data]])
     },
-    descargar() {
+    async descargar() {
+      await audioListo   // espera a que el audio termine de procesarse
+
       const ts = Date.now()
 
       const blobMidi = new Blob([JSON.stringify(grabacion)], { type: 'application/json' })
       const urlMidi = URL.createObjectURL(blobMidi)
       const aMidi = document.createElement('a')
       aMidi.href = urlMidi
-      aMidi.download = `ensayo-midi-${ts}.json`
-      aMidi.click()
-      URL.revokeObjectURL(urlMidi)
-
-      if (!audioChunks.length) {
-        console.warn('no hay audio grabado para descargar (¿se habilitó el mic al iniciar?)')
-        return
-      }
-
-      // pequeño delay para que el navegador no bloquee la segunda descarga
-      setTimeout(() => {
-        const blobAudio = new Blob(audioChunks, { type: 'audio/webm' })
-        const urlAudio = URL.createObjectURL(blobAudio)
-        const aAudio = document.createElement('a')
-        aAudio.href = urlAudio
-        aAudio.download = `ensayo-audio-${ts}.webm`
-        aAudio.click()
-        URL.revokeObjectURL(urlAudio)
-      }, 300)
-    }
-  }
-
-  // ---- atajos de teclado para el grabador: R=iniciar, S=detener, D=descargar ----
-  let atajosInstalados = false
-  GP.tools.atajosTeclado = () => {
-    if (atajosInstalados) return
-    atajosInstalados = true
-    window.addEventListener('keydown', (e) => {
-      if (e.repeat) return   // ignora el auto-repeat si se mantiene la tecla apretada
-      if (e.key === 'r' || e.key === 'R') GP.tools.grabador.iniciar()
-      if (e.key === 's' || e.key === 'S') GP.tools.grabador.detener()
-      if (e.key === 'd' || e.key === 'D') GP.tools.grabador.descargar()
-    })
-  }
-})()
+      aMidi.download =
