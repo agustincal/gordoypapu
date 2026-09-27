@@ -117,17 +117,19 @@
     }
   }
 
-  // ---- atajos de teclado para el grabador: R=iniciar, S=detener, D=descargar ----
-  // saca el listener anterior antes de poner uno nuevo, así no se acumulan
-  // si el sketch se re-ejecuta varias veces (típico al ir editando en vivo)
-  GP.tools.atajosTeclado = () => {
-    if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos)
-    window._gpToolsAtajos = (e) => {
-      if (e.repeat) return
-      if (e.key === 'r' || e.key === 'R') GP.tools.grabador.iniciar()
-      if (e.key === 's' || e.key === 'S') GP.tools.grabador.detener()
-      if (e.key === 'd' || e.key === 'D') GP.tools.grabador.descargar()
-    }
-    window.addEventListener('keydown', window._gpToolsAtajos)
+// dentro de gp-midi-tools-v0.1.js, reemplaza atajosTeclado():
+GP.tools.atajosTeclado = () => {
+  if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos, true)
+  window._gpToolsAtajos = (e) => {
+    if (!e.ctrlKey || !e.altKey) return   // sólo actúa con Ctrl+Alt, el resto pasa normal
+    const k = e.key.toLowerCase()
+    if (k !== 'r' && k !== 's' && k !== 'd') return
+    e.preventDefault()
+    e.stopPropagation()
+    if (k === 'r') GP.tools.grabador.iniciar()
+    if (k === 's') GP.tools.grabador.detener()
+    if (k === 'd') GP.tools.grabador.descargar()
   }
+  window.addEventListener('keydown', window._gpToolsAtajos, true)   // true = fase de captura, antes que el editor
+}
 })()
