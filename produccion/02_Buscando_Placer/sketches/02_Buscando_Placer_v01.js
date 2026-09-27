@@ -32,29 +32,30 @@ const RUTEO = [
   { dispositivo: 'korg', canales: [16],   accion: 'cambiarEstado' },
   { dispositivo: 'akai', notas: [56, 57, 58, 59, 60, 61, 62, 63], accion: 'disparar' },
   { dispositivo: 'akai', notas: [0],  accion: 'toggleBarrido' },
-  { dispositivo: 'akai', notas: [84], accion: 'grabadorCiclo' },
-  { dispositivo: 'akai', notas: [82], accion: 'velocidadX2' },
-  { dispositivo: 'akai', notas: [83], accion: 'velocidadDiv2' },
+  { dispositivo: 'akai', notas: [98], accion: 'grabadorCiclo',  led: true },
+  { dispositivo: 'akai', notas: [82], accion: 'velocidadX2',    led: true },
+  { dispositivo: 'akai', notas: [83], accion: 'velocidadDiv2',  led: true },
 ]
 
-// TODO: reemplazar por la lista curada — estos valores son placeholder del refactor
+// DEFAULT compartido por todos los estados (todavía no varía nada de esto)
+const DEFAULT = { f1: 0.5, f2: 0.8, f4: 0.8, f5: 0.5, f6: 0, usaIman: false, usaBarrido: false, ritmo: ['negra'] }
+
 const ESTADOS = [
-  { nombre: 'estado 1',  f1: 0.1, f2: 0.2, f3: 0.3, f4: 0.5, f5: 0.4, f6: 0.1, usaIman: false, usaColorPantalla: true,  usaBarrido: true  },
-  { nombre: 'estado 2',  f1: 0.3, f2: 0.5, f3: 0.6, f4: 0.7, f5: 0.5, f6: 0.2, usaIman: false, usaColorPantalla: true,  usaBarrido: false },
-  { nombre: 'estado 3',  f1: 0.6, f2: 0.1, f3: 0.4, f4: 0.3, f5: 0.7, f6: 0.4, usaIman: false, usaColorPantalla: false, usaBarrido: true  },
-  { nombre: 'estado 4',  f1: 0.2, f2: 0.8, f3: 0.2, f4: 0.9, f5: 0.3, f6: 0.6, usaIman: true,  usaColorPantalla: true,  usaBarrido: false },
-  { nombre: 'estado 5',  f1: 0.7, f2: 0.4, f3: 0.8, f4: 0.5, f5: 0.6, f6: 0.3, usaIman: false, usaColorPantalla: true,  usaBarrido: true  },
-  { nombre: 'estado 6',  f1: 0.4, f2: 0.6, f3: 0.5, f4: 0.4, f5: 0.8, f6: 0.5, usaIman: false, usaColorPantalla: true,  usaBarrido: false },
-  { nombre: 'estado 7',  f1: 0.9, f2: 0.3, f3: 0.7, f4: 0.6, f5: 0.2, f6: 0.7, usaIman: false, usaColorPantalla: false, usaBarrido: true  },
-  { nombre: 'estado 8',  f1: 0.5, f2: 0.9, f3: 0.3, f4: 0.8, f5: 0.5, f6: 0.9, usaIman: false, usaColorPantalla: true,  usaBarrido: false },
-  { nombre: 'estado 9',  f1: 0.3, f2: 0.2, f3: 0.9, f4: 0.2, f5: 0.9, f6: 0.4, usaIman: true,  usaColorPantalla: true,  usaBarrido: true  },
-  { nombre: 'estado 10', f1: 0.8, f2: 0.7, f3: 0.6, f4: 1.0, f5: 0.7, f6: 1.0, usaIman: false, usaColorPantalla: true,  usaBarrido: false },
+  { nombre: 'estado 1',  ...DEFAULT, f3: 0.1, usaColorPantalla: false },
+  { nombre: 'estado 2',  ...DEFAULT, f3: 0.2, usaColorPantalla: true  },
+  { nombre: 'estado 3',  ...DEFAULT, f3: 0.3, usaColorPantalla: false },
+  { nombre: 'estado 4',  ...DEFAULT, f3: 0.4, usaColorPantalla: true  },
+  { nombre: 'estado 5',  ...DEFAULT, f3: 0.5, usaColorPantalla: false },
+  { nombre: 'estado 6',  ...DEFAULT, f3: 0.6, usaColorPantalla: true  },
+  { nombre: 'estado 7',  ...DEFAULT, f3: 0.7, usaColorPantalla: false },
+  { nombre: 'estado 8',  ...DEFAULT, f3: 0.8, usaColorPantalla: true  },
+  { nombre: 'estado 9',  ...DEFAULT, f3: 0.9, usaColorPantalla: false },
+  { nombre: 'estado 10', ...DEFAULT, f3: 1.0, usaColorPantalla: true  },
 ]
 
 GP.zapping.init({
   videos,
   estados: ESTADOS,
-  subdivisiones: [24, 12, 6],  // negra, corchea, semicorchea — mismo progreso 4:2:1 de antes, ahora en pulsos reales
   rafagaCantidad: 3,
   rafagaPoll: 30,
   fuente: s1,
@@ -82,12 +83,15 @@ const coincide = (regla, dispositivo, canal, nota) => {
 
 const ejecutar = (accion, { on, off, nota }) => {
   if (accion === 'disparar') { if (on) GP.zapping.disparar(nota); if (off) GP.zapping.cortarBarrido() }
-  if (accion === 'pulso' && on) GP.zapping.pulso()
   if (accion === 'cambiarEstado' && on) GP.zapping.avanzarEstado()
   if (accion === 'toggleBarrido' && on) GP.zapping.toggleBarrido()
   if (accion === 'grabadorCiclo' && on) GP.tools.grabadorCiclo()
   if (accion === 'velocidadX2' && on) GP.zapping.multiplicarVelocidad(2)
   if (accion === 'velocidadDiv2' && on) GP.zapping.multiplicarVelocidad(0.5)
+}
+
+const setLed = (nota, encendido) => {
+  if (GP.midi.state && GP.midi.state.output) GP.midi.state.output.send([0x90, nota, encendido ? 4 : 1])
 }
 
 if (window._gpCollageMidi) window._gpCollageMidi.forEach(([inp, fn]) => inp.removeEventListener('midimessage', fn))
@@ -100,23 +104,25 @@ navigator.requestMIDIAccess().then(acc => {
     const dispositivo = esAkai ? 'akai' : 'korg'
 
     const fn = m => {
-  const [st, nota, vel] = m.data
-  GP.tools.grabador.registrar(inp.name, m.data)
+      const [st, nota, vel] = m.data
+      GP.tools.grabador.registrar(inp.name, m.data)
 
-  if (st === 0xF8) { GP.zapping.pulso(); return }  // clock real del padKONTROL → ritmo por BPM
+      if (st === 0xF8) { GP.zapping.pulso(); return }  // clock real del padKONTROL → ritmo por BPM
 
-  const tipo = st & 0xF0
-  const on = tipo === 0x90 && vel > 0
-  const off = tipo === 0x80 || (tipo === 0x90 && vel === 0)
-  const canal = (st & 0x0F) + 1
+      const tipo = st & 0xF0
+      const on = tipo === 0x90 && vel > 0
+      const off = tipo === 0x80 || (tipo === 0x90 && vel === 0)
+      const canal = (st & 0x0F) + 1
 
-  GP.tools.log(inp.name, m.data)
+      GP.tools.log(inp.name, m.data)
 
-  const dispositivo = esAkai ? 'akai' : 'korg'
-  for (const regla of RUTEO) {
-    if (coincide(regla, dispositivo, canal, nota)) ejecutar(regla.accion, { on, off, nota })
-  }
-}
+      for (const regla of RUTEO) {
+        if (coincide(regla, dispositivo, canal, nota)) {
+          ejecutar(regla.accion, { on, off, nota })
+          if (regla.led && (on || off)) setLed(nota, on)
+        }
+      }
+    }
     inp.addEventListener('midimessage', fn)
     window._gpCollageMidi.push([inp, fn])
   })

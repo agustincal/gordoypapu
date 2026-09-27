@@ -2,7 +2,7 @@
 // GP_02_Buscando_Placer__visual
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: motor visual — estados, ritmo por figuras musicales, multiplicador de velocidad,
-//      disparo de recuadros, ráfaga, barrido (distancia según duración de nota), iman
+//      precarga de imágenes, disparo de recuadros, ráfaga, barrido (distancia según nota), iman
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
 // Actualizado: 2026-09-27
 // ============================================================
@@ -10,8 +10,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.2') return
-  GP.zapping = { _version: 'v1.2' }
+  if (GP.zapping && GP.zapping._version === 'v1.3') return
+  GP.zapping = { _version: 'v1.3' }
 
   // Figuras musicales en pulsos de clock real (24 pulsos = 1 negra, estándar MIDI 24ppqn)
   const FIGURAS = {
@@ -44,6 +44,17 @@
     velocidad = Math.max(VELOCIDAD_MIN, Math.min(VELOCIDAD_MAX, velocidad * factor))
   }
   GP.zapping.velocidad = () => velocidad
+
+  // precarga de imágenes: se llenan al hacer init(), disparar() las usa directo de memoria
+  let imagenesPrecargadas = []
+  const precargarImagenes = (urls) => {
+    imagenesPrecargadas = urls.map(url => {
+      const img = new Image()
+      img.crossOrigin = 'anonymous'
+      img.src = url
+      return img
+    })
+  }
 
   const rect = {
     rx: 0, ry: 0, rw: 1, rh: 1,
@@ -96,6 +107,7 @@
     contadorPulsos = 0
     pasoRitmo = 0
     velocidad = 1
+    precargarImagenes(cfg.videos)
   }
 
   GP.zapping.update = () => {
@@ -135,25 +147,7 @@
     rect.cargando = true
     rect.sueltaPendiente = false
 
-    const i = Math.floor(Math.random() * cfg.videos.length)
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.src = cfg.videos[i]
-
-    const timeoutId = setTimeout(() => {
-      console.warn('imagen tardó demasiado en cargar, se libera el disparo:', cfg.videos[i])
-      rect.cargando = false
-    }, 4000)
-
-    const liberar = () => { clearTimeout(timeoutId); rect.cargando = false }
-
-    img.addEventListener('error', () => {
-      console.warn('error al cargar la imagen, se libera el disparo:', cfg.videos[i])
-      liberar()
-    }, { once: true })
-
-    img.addEventListener('load', () => {
-      liberar()
+    const aplicar = (img) => {
       cfg.fuente.src = img
       cfg.fuente.dynamic = true
 
@@ -170,7 +164,7 @@
       rect.imgYFin = (Math.random() - 0.5) * 0.2
 
       if (ATAQUE_ACTIVO && !rect.sueltaPendiente) {
-        const factor = duracionTicks / FIGURAS.negra  // negra=1x, redonda=4x, corchea=0.5x...
+        const factor = duracionTicks / FIGURAS.negra
         const angulo = Math.random() * Math.PI * 2
         const distancia = 1.3 * factor
         rect.rxIni = rect.rxFin + Math.cos(angulo) * distancia
@@ -185,4 +179,76 @@
         rect.ry = rect.ryFin
         rect.imgX = rect.imgXFin
         rect.imgY = rect.imgYFin
-        barriendoActivo =
+        barriendoActivo = false
+      }
+      rect.cargando = false
+    }
+
+    const i = Math.floor(Math.random() * cfg.videos.length)
+    const precargada = imagenesPrecargadas[i]
+
+    if (precargada && precargada.complete && precargada.naturalWidth > 0) {
+      aplicar(precargada)  // ya está en memoria — cambio instantáneo, sin jitter de carga
+      return
+    }
+
+    // todavía no terminó de precargar (recién arrancó el sketch) o falló: cargar ahora como respaldo
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = cfg.videos[i]
+
+    const timeoutId = setTimeout(() => {
+      console.warn('imagen tardó demasiado en cargar, se libera el disparo:', cfg.videos[i])
+      rect.cargando = false
+    }, 4000)
+
+    img.addEventListener('error', () => {
+      console.warn('error al cargar la imagen, se libera el disparo:', cfg.videos[i])
+      clearTimeout(timeoutId)
+      rect.cargando = false
+    }, { once: true })
+
+    img.addEventListener('load', () => {
+      clearTimeout(timeoutId)
+      aplicar(img)
+    }, { once: true })
+  }
+
+  GP.zapping.rafaga = (nota = 60, cantidad = cfg.rafagaCantidad) => {
+    let disparados = 0
+    const intentar = () => {
+      if (disparados >= cantidad) return
+      if (rect.cargando) { setTimeout(intentar, cfg.rafagaPoll); return }
+      GP.zapping.disparar(nota)
+      disparados++
+      setTimeout(intentar, cfg.rafagaPoll)
+    }
+    intentar()
+  }
+
+  GP.zapping.avanzarEstado = () => {
+    estadoActual = (estadoActual + 1) % cfg.estados.length
+    const e = estado()
+    colorPantallaActivo = e.usaColorPantalla
+    if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
+    ATAQUE_ACTIVO = e.usaBarrido
+    contadorPulsos = 0
+    pasoRitmo = 0
+    GP.zapping.rafaga(60)
+  }
+
+  // llamado en cada pulso de clock real (0xF8) del padKONTROL
+  GP.zapping.pulso = () => {
+    const patron = estado().ritmo && estado().ritmo.length ? estado().ritmo : ['negra']
+    const objetivoTicks = FIGURAS[patron[pasoRitmo % patron.length]] || FIGURAS.negra
+    const objetivoEfectivo = objetivoTicks / velocidad
+
+    contadorPulsos++
+    if (contadorPulsos >= objetivoEfectivo) {
+      contadorPulsos = 0
+      pasoRitmo = (pasoRitmo + 1) % patron.length
+      GP.zapping.disparar(60, objetivoTicks)
+    }
+  }
+  
+})()
