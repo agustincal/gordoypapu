@@ -250,5 +250,4 @@
       GP.zapping.disparar(60, objetivoTicks)
     }
   }
-  
 })()
