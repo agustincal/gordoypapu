@@ -6,6 +6,7 @@
 // ============================================================
 
 await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js')
+await GP_cargarModulosBuscandoPlacer()
 
 await GP.midi.start({ outputName: 'APC MINI' })
 GP.midi.buttons(['N11', 'N81', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N88'])

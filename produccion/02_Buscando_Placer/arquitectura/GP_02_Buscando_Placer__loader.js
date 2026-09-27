@@ -11,10 +11,12 @@
   window.GP._rama = window.GP._rama || 'main'
 })()
 
-const GP_RAMA = window.GP._rama
-const GP_BASE = `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_RAMA}/produccion/02_Buscando_Placer/arquitectura/`
+window.GP_cargarModulosBuscandoPlacer = async function () {
+  const GP_RAMA = window.GP._rama
+  const GP_BASE = `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_RAMA}/produccion/02_Buscando_Placer/arquitectura/`
 
-await loadScript(GP_BASE + 'GP_02_Buscando_Placer__midibase.js')
-await loadScript(GP_BASE + 'GP_02_Buscando_Placer__tools.js')
-await loadScript(GP_BASE + 'GP_02_Buscando_Placer__ensayo.js')
-await loadScript(GP_BASE + 'GP_02_Buscando_Placer__visual.js')
+  await loadScript(GP_BASE + 'GP_02_Buscando_Placer__midibase.js')
+  await loadScript(GP_BASE + 'GP_02_Buscando_Placer__tools.js')
+  await loadScript(GP_BASE + 'GP_02_Buscando_Placer__ensayo.js')
+  await loadScript(GP_BASE + 'GP_02_Buscando_Placer__visual.js')
+}
