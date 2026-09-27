@@ -33,6 +33,8 @@ const RUTEO = [
   { dispositivo: 'akai', notas: [56, 57, 58, 59, 60, 61, 62, 63], accion: 'disparar' },
   { dispositivo: 'akai', notas: [0],  accion: 'toggleBarrido' },
   { dispositivo: 'akai', notas: [84], accion: 'grabadorCiclo' },
+  { dispositivo: 'akai', notas: [82], accion: 'velocidadX2' },
+  { dispositivo: 'akai', notas: [83], accion: 'velocidadDiv2' },
 ]
 
 // TODO: reemplazar por la lista curada — estos valores son placeholder del refactor
@@ -84,6 +86,8 @@ const ejecutar = (accion, { on, off, nota }) => {
   if (accion === 'cambiarEstado' && on) GP.zapping.avanzarEstado()
   if (accion === 'toggleBarrido' && on) GP.zapping.toggleBarrido()
   if (accion === 'grabadorCiclo' && on) GP.tools.grabadorCiclo()
+  if (accion === 'velocidadX2' && on) GP.zapping.multiplicarVelocidad(2)
+  if (accion === 'velocidadDiv2' && on) GP.zapping.multiplicarVelocidad(0.5)
 }
 
 if (window._gpCollageMidi) window._gpCollageMidi.forEach(([inp, fn]) => inp.removeEventListener('midimessage', fn))
