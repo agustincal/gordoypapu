@@ -2,7 +2,11 @@
   if (!window.GP) window.GP = {}
   const GP = window.GP
 
-  GP.tools = {}
+  // evita reinicializar el módulo entero en cada re-evaluación del sketch
+  // (si no, se pierde una grabación de audio en curso, el panel, y los listeners).
+  // para que tome una versión nueva de este archivo hace falta recargar la página (F5).
+  if (GP.tools && GP.tools._version === 'v0.4') return
+  GP.tools = { _version: 'v0.4' }
 
   // ---- panel MIDI en pantalla ----
   let panelEl = null
@@ -36,13 +40,13 @@
     panel.textContent = lineas.join('\n')
   }
 
-  // ---- grabador de MIDI + audio en sincro (para tener una versión de ensayo offline) ----
+  // ---- grabador de MIDI + audio en sincro ----
   let grabando = false
   let grabacion = []
   let inicio = 0
   let audioRecorder = null
   let audioChunks = []
-  let audioListo = Promise.resolve()   // se resuelve cuando el audio terminó de volcarse
+  let audioListo = Promise.resolve()
 
   GP.tools.grabador = {
     async iniciar() {
@@ -51,7 +55,6 @@
       inicio = performance.now()
       grabando = true
       console.log('grabando MIDI...')
-
       audioChunks = []
       audioRecorder = null
       try {
@@ -68,7 +71,6 @@
       if (!grabando) return
       grabando = false
       console.log('grabación detenida,', grabacion.length, 'mensajes')
-
       if (audioRecorder && audioRecorder.state !== 'inactive') {
         const recorder = audioRecorder
         audioListo = new Promise(resolve => {
@@ -88,10 +90,8 @@
       if (grabando) grabacion.push([performance.now() - inicio, nombre, [...data]])
     },
     async descargar() {
-      await audioListo   // espera a que el audio termine de procesarse
-
+      await audioListo
       const ts = Date.now()
-
       const blobMidi = new Blob([JSON.stringify(grabacion)], { type: 'application/json' })
       const urlMidi = URL.createObjectURL(blobMidi)
       const aMidi = document.createElement('a')
@@ -99,12 +99,10 @@
       aMidi.download = `ensayo-midi-${ts}.json`
       aMidi.click()
       URL.revokeObjectURL(urlMidi)
-
       if (!audioChunks.length) {
         console.warn('no hay audio grabado para descargar (¿se habilitó el mic al iniciar?)')
         return
       }
-
       setTimeout(() => {
         const blobAudio = new Blob(audioChunks, { type: 'audio/webm' })
         const urlAudio = URL.createObjectURL(blobAudio)
@@ -117,19 +115,32 @@
     }
   }
 
-// dentro de gp-midi-tools-v0.1.js, reemplaza atajosTeclado():
-GP.tools.atajosTeclado = () => {
-  if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos, true)
-  window._gpToolsAtajos = (e) => {
-    if (!e.ctrlKey || !e.altKey) return   // sólo actúa con Ctrl+Alt, el resto pasa normal
-    const k = e.key.toLowerCase()
-    if (k !== 'r' && k !== 's' && k !== 'd') return
-    e.preventDefault()
-    e.stopPropagation()
-    if (k === 'r') GP.tools.grabador.iniciar()
-    if (k === 's') GP.tools.grabador.detener()
-    if (k === 'd') GP.tools.grabador.descargar()
+  // ---- control por un solo pad MIDI: cicla iniciar → detener → descargar ----
+  // guarda su propio estado acá adentro, protegido por el guard de versión de
+  // arriba, así sobrevive a reevaluaciones del sketch principal sin perderse
+  let cicloEstado = 0   // 0 = listo para grabar, 1 = grabando, 2 = listo para descargar
+  GP.tools.grabadorCiclo = () => {
+    cicloEstado = (cicloEstado + 1) % 3
+    if (cicloEstado === 1) GP.tools.grabador.iniciar()
+    else if (cicloEstado === 2) GP.tools.grabador.detener()
+    else GP.tools.grabador.descargar()
   }
-  window.addEventListener('keydown', window._gpToolsAtajos, true)   // true = fase de captura, antes que el editor
-}
+
+  // ---- atajos de teclado: R=iniciar, S=detener, D=descargar ----
+  // (se puede seguir usando en paralelo al pad, si hace falta; ver también
+  // GP.tools.grabadorCiclo() para control por MIDI)
+  GP.tools.atajosTeclado = () => {
+    if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos, true)
+    window._gpToolsAtajos = (e) => {
+      if (!e.ctrlKey || !e.altKey) return
+      const k = e.key.toLowerCase()
+      if (k !== 'r' && k !== 's' && k !== 'd') return
+      e.preventDefault()
+      e.stopPropagation()
+      if (k === 'r') GP.tools.grabador.iniciar()
+      if (k === 's') GP.tools.grabador.detener()
+      if (k === 'd') GP.tools.grabador.descargar()
+    }
+    window.addEventListener('keydown', window._gpToolsAtajos, true)
+  }
 })()
