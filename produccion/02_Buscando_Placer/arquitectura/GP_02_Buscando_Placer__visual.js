@@ -1,7 +1,8 @@
 // ============================================================
 // GP_02_Buscando_Placer__visual
 // Canción 02 · Buscando Placer (Gordo y Papu)
-// Rol: motor visual — estados, disparo de recuadros, ráfaga, barrido, iman
+// Rol: motor visual — estados, ritmo por figuras musicales, multiplicador de velocidad,
+//      disparo de recuadros, ráfaga, barrido (distancia según duración de nota), iman
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
 // Actualizado: 2026-09-27
 // ============================================================
@@ -9,13 +10,24 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.0') return
-  GP.zapping = { _version: 'v1.0' }
+  if (GP.zapping && GP.zapping._version === 'v1.2') return
+  GP.zapping = { _version: 'v1.2' }
+
+  // Figuras musicales en pulsos de clock real (24 pulsos = 1 negra, estándar MIDI 24ppqn)
+  const FIGURAS = {
+    redonda: 96,
+    blanca: 48,
+    negra: 24,
+    corchea: 12,
+    semicorchea: 6,
+    fusa: 3,
+  }
+  GP.zapping.FIGURAS = FIGURAS
 
   let cfg = null
   let estadoActual = 0
-  let parteActual = 0
   let contadorPulsos = 0
+  let pasoRitmo = 0
   let colorPantallaActivo = false
   let colorPantalla = [1, 1, 1]
   let ATAQUE_ACTIVO = false
@@ -23,6 +35,15 @@
   let ataqueInicio = 0
   let ataqueDur = ATAQUE_MAX
   let barriendoActivo = false
+
+  // multiplicador de velocidad del ritmo (pads x2 / ÷2, tipo Resolume)
+  let velocidad = 1
+  const VELOCIDAD_MIN = 0.25
+  const VELOCIDAD_MAX = 8
+  GP.zapping.multiplicarVelocidad = (factor) => {
+    velocidad = Math.max(VELOCIDAD_MIN, Math.min(VELOCIDAD_MAX, velocidad * factor))
+  }
+  GP.zapping.velocidad = () => velocidad
 
   const rect = {
     rx: 0, ry: 0, rw: 1, rh: 1,
@@ -70,11 +91,11 @@
     cfg = Object.assign({
       rafagaCantidad: 3,
       rafagaPoll: 30,
-      subdivisiones: [4, 2, 1],
     }, config)
     estadoActual = 0
-    parteActual = 0
     contadorPulsos = 0
+    pasoRitmo = 0
+    velocidad = 1
   }
 
   GP.zapping.update = () => {
@@ -107,7 +128,9 @@
 
   GP.zapping.toggleBarrido = () => { ATAQUE_ACTIVO = !ATAQUE_ACTIVO }
 
-  GP.zapping.disparar = (nota = 60) => {
+  // duracionTicks: cuántos pulsos de clock dura la figura que disparó este recuadro
+  // (negra = referencia 1x). Determina qué tan lejos y qué tan lento entra el barrido.
+  GP.zapping.disparar = (nota = 60, duracionTicks = FIGURAS.negra) => {
     if (rect.cargando) return
     rect.cargando = true
     rect.sueltaPendiente = false
@@ -147,53 +170,19 @@
       rect.imgYFin = (Math.random() - 0.5) * 0.2
 
       if (ATAQUE_ACTIVO && !rect.sueltaPendiente) {
+        const factor = duracionTicks / FIGURAS.negra  // negra=1x, redonda=4x, corchea=0.5x...
         const angulo = Math.random() * Math.PI * 2
-        const distancia = 1.3
+        const distancia = 1.3 * factor
         rect.rxIni = rect.rxFin + Math.cos(angulo) * distancia
         rect.ryIni = rect.ryFin + Math.sin(angulo) * distancia
         rect.rx = rect.rxIni
         rect.ry = rect.ryIni
         ataqueInicio = time
-        ataqueDur = ATAQUE_MAX
+        ataqueDur = ATAQUE_MAX * factor
         barriendoActivo = true
       } else {
         rect.rx = rect.rxFin
         rect.ry = rect.ryFin
         rect.imgX = rect.imgXFin
         rect.imgY = rect.imgYFin
-        barriendoActivo = false
-      }
-    }, { once: true })
-  }
-
-  GP.zapping.rafaga = (nota = 60, cantidad = cfg.rafagaCantidad) => {
-    let disparados = 0
-    const intentar = () => {
-      if (disparados >= cantidad) return
-      if (rect.cargando) { setTimeout(intentar, cfg.rafagaPoll); return }
-      GP.zapping.disparar(nota)
-      disparados++
-      setTimeout(intentar, cfg.rafagaPoll)
-    }
-    intentar()
-  }
-
-  GP.zapping.avanzarEstado = () => {
-    estadoActual = (estadoActual + 1) % cfg.estados.length
-    const e = estado()
-    colorPantallaActivo = e.usaColorPantalla
-    if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
-    ATAQUE_ACTIVO = e.usaBarrido
-    parteActual = (parteActual + 1) % cfg.subdivisiones.length
-    contadorPulsos = 0
-    GP.zapping.rafaga(60)
-  }
-
-  GP.zapping.pulso = () => {
-    contadorPulsos++
-    if (contadorPulsos >= cfg.subdivisiones[parteActual]) {
-      contadorPulsos = 0
-      GP.zapping.disparar(60)
-    }
-  }
-})()
+        barriendoActivo =
