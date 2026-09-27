@@ -1,8 +1,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.ensayo && GP.ensayo._version === 'v0.1') return
-  GP.ensayo = { _version: 'v0.1' }
+  if (GP.ensayo && GP.ensayo._version === 'v0.2') return
+  GP.ensayo = { _version: 'v0.2' }
 
   let grabacion = null
   let audioEl = null
@@ -71,11 +71,11 @@
 
     const inicio = performance.now()
     let enviados = 0
-    grabacion.forEach(([ms, nombreOriginal]) => {
+    grabacion.forEach(([ms, nombreOriginal, bytes]) => {
       const esKorgMsg = /korg|padkontrol/i.test(nombreOriginal)
       const salida = esKorgMsg ? salidaKorg : salidaAkai
       if (!salida) return
-      salida.send(grabacion.find(m => m[0] === ms && m[1] === nombreOriginal)[2], inicio + ms)
+      salida.send(bytes, inicio + ms)
       enviados++
     })
     setEstado(`reproduciendo: ${enviados}/${grabacion.length} mensajes programados`)
