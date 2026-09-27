@@ -5,7 +5,7 @@
 // Actualizado: 2026-09-27
 // ============================================================
 
-await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js')
+await loadScript('https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js?t=' + Date.now())
 await GP_cargarModulosBuscandoPlacer()
 
 await GP.midi.start({ outputName: 'APC MINI' })
