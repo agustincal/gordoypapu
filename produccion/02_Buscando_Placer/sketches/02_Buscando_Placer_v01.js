@@ -6,7 +6,7 @@
 // ============================================================
 
 // después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
-const GP_SHA = '780ed3bdca9ffb70c3cfc463a1f5d78d20eef094'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
+const GP_SHA = '1b052eca146f802753081a373a59de92c684b15e'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -29,7 +29,6 @@ const MODO_PRUEBA = false
 // Qué dispara qué — un solo lugar para editar rutas MIDI
 const RUTEO = [
   { dispositivo: 'korg', canales: [2, 3], accion: 'disparar' },
-  { dispositivo: 'korg', canales: [10],   accion: 'pulso' },
   { dispositivo: 'korg', canales: [16],   accion: 'cambiarEstado' },
   { dispositivo: 'akai', notas: [56, 57, 58, 59, 60, 61, 62, 63], accion: 'disparar' },
   { dispositivo: 'akai', notas: [0],  accion: 'toggleBarrido' },
@@ -53,7 +52,7 @@ const ESTADOS = [
 GP.zapping.init({
   videos,
   estados: ESTADOS,
-  subdivisiones: [4, 2, 1],
+  subdivisiones: [24, 12, 6],  // negra, corchea, semicorchea — mismo progreso 4:2:1 de antes, ahora en pulsos reales
   rafagaCantidad: 3,
   rafagaPoll: 30,
   fuente: s1,
@@ -67,7 +66,7 @@ const limpiar = v => v < DEAD ? 0 : (v - DEAD) / (1 - DEAD)
 const VOZ = () => limpiar(Math.min(1, a.fft[0]))
 
 s1.initImage(videos[0])
-GP.tools.panel().textContent = 'esperando ch16 de padKONTROL...'
+GP.tools.panel().textContent = 'esperando MIDI...'
 
 update = () => GP.zapping.update()
 
@@ -97,19 +96,23 @@ navigator.requestMIDIAccess().then(acc => {
     const dispositivo = esAkai ? 'akai' : 'korg'
 
     const fn = m => {
-      const [st, nota, vel] = m.data
-      const tipo = st & 0xF0
-      const on = tipo === 0x90 && vel > 0
-      const off = tipo === 0x80 || (tipo === 0x90 && vel === 0)
-      const canal = (st & 0x0F) + 1
+  const [st, nota, vel] = m.data
+  GP.tools.grabador.registrar(inp.name, m.data)
 
-      if (canal === 16 && /padkontrol/i.test(inp.name)) GP.tools.log(inp.name, m.data)
-      GP.tools.grabador.registrar(inp.name, m.data)
+  if (st === 0xF8) { GP.zapping.pulso(); return }  // clock real del padKONTROL → ritmo por BPM
 
-      for (const regla of RUTEO) {
-        if (coincide(regla, dispositivo, canal, nota)) ejecutar(regla.accion, { on, off, nota })
-      }
-    }
+  const tipo = st & 0xF0
+  const on = tipo === 0x90 && vel > 0
+  const off = tipo === 0x80 || (tipo === 0x90 && vel === 0)
+  const canal = (st & 0x0F) + 1
+
+  GP.tools.log(inp.name, m.data)
+
+  const dispositivo = esAkai ? 'akai' : 'korg'
+  for (const regla of RUTEO) {
+    if (coincide(regla, dispositivo, canal, nota)) ejecutar(regla.accion, { on, off, nota })
+  }
+}
     inp.addEventListener('midimessage', fn)
     window._gpCollageMidi.push([inp, fn])
   })
