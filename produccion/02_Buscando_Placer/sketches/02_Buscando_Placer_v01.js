@@ -6,7 +6,7 @@
 // ============================================================
 
 // después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
-const GP_SHA = '200df67bed5a72dad8d81a16af52ce12f663ce67'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
+const GP_SHA = '89f61874ffa297bed507fc9cc976a2e7761eb564'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -33,8 +33,6 @@ const RUTEO = [
   { dispositivo: 'akai', notas: [56, 57, 58, 59, 60, 61, 62, 63], accion: 'disparar' },
   { dispositivo: 'akai', notas: [0],  accion: 'toggleBarrido' },
   { dispositivo: 'akai', notas: [98], accion: 'grabadorCiclo',  led: true },
-  { dispositivo: 'akai', notas: [82], accion: 'velocidadX2',    led: true },
-  { dispositivo: 'akai', notas: [83], accion: 'velocidadDiv2',  led: true },
 ]
 
 // DEFAULT compartido por todos los estados — todo en 0 por ahora, se va a ir curando estado por estado
@@ -89,9 +87,11 @@ const ejecutar = (accion, { on, off, nota }) => {
   if (accion === 'cambiarEstado' && on) GP.zapping.avanzarEstado()
   if (accion === 'toggleBarrido' && on) GP.zapping.toggleBarrido()
   if (accion === 'grabadorCiclo' && on) GP.tools.grabadorCiclo()
-  if (accion === 'velocidadX2' && on) GP.zapping.multiplicarVelocidad(2)
-  if (accion === 'velocidadDiv2' && on) GP.zapping.multiplicarVelocidad(0.5)
+  if (accion === 'cambiarEstado' && on) {
+    const idx = GP.zapping.avanzarEstado()
+    if (GP.ensayo.overlayEstado) GP.ensayo.overlayEstado.mostrar(idx) // borrar esta línea cuando termines de curar estados
 }
+
 
 const setLed = (nota, encendido) => {
   if (GP.midi.state && GP.midi.state.output) GP.midi.state.output.send([0x90, nota, encendido ? 4 : 1])

@@ -7,7 +7,9 @@
 // ============================================================
 
 window.GP_cargarModulosBuscandoPlacer = async function (rama = 'main') {
+  window.GP_RAMA = rama // nuevo: disponible para cualquier módulo (ej. overlay de estado en ensayo.js)
   const GP_BASE = `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${rama}/produccion/02_Buscando_Placer/arquitectura/`
+  ...
 
   await loadScript(GP_BASE + 'GP_02_Buscando_Placer__midibase.js')
   await loadScript(GP_BASE + 'GP_02_Buscando_Placer__tools.js')

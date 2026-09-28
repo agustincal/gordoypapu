@@ -13,6 +13,7 @@
   if (GP.ensayo && GP.ensayo._version === 'v0.3') {
     // el módulo ya está cargado — solo nos aseguramos de que el panel siga visible y al frente
     if (GP.ensayo._panelEl) document.body.appendChild(GP.ensayo._panelEl)
+    if (GP.ensayo.overlayEstado && GP.ensayo.overlayEstado._el) document.body.appendChild(GP.ensayo.overlayEstado._el) // nuevo
     return
   }
   GP.ensayo = { _version: 'v0.3' }
@@ -102,4 +103,44 @@
     if (audioEl) { audioEl.pause(); audioEl.currentTime = 0 }
     setEstado('detenido')
   })
+
+  GP.ensayo.overlayEstado = (function () {
+  const CARPETA = 'numeracion%201-13' // la carpeta del repo tiene un espacio, va como %20
+  const TOTAL = 13 // numeracion_00.png .. numeracion_12.png
+  const imgs = []
+  let el = null
+  let activo = true // podés apagarlo en consola: GP.ensayo.overlayEstado.activo = false
+
+  const base = () => `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${window.GP_RAMA || 'main'}/produccion/02_Buscando_Placer/assets/${CARPETA}/`
+
+  function precargar() {
+    for (let i = 0; i < TOTAL; i++) {
+      const img = new Image()
+      img.src = base() + `numeracion_${String(i).padStart(2, '0')}.png`
+      imgs[i] = img
+    }
+  }
+
+  function crearElemento() {
+    el = document.createElement('img')
+    el.id = 'gpOverlayEstado'
+    el.style.cssText = `position: fixed; top: 8px; right: 8px; z-index: 2147483647; width: 90px; opacity: 0.9; pointer-events: none;`
+    document.body.appendChild(el)
+  }
+
+  function mostrar(indice) {
+    if (!activo) return
+    if (!el) crearElemento()
+    if (!document.body.contains(el)) document.body.appendChild(el)
+    if (imgs[indice]) el.src = imgs[indice].src
+  }
+
+  precargar()
+  return {
+    mostrar,
+    get _el() { return el },
+    get activo() { return activo },
+    set activo(v) { activo = v; if (el) el.style.display = v ? '' : 'none' }
+  }
+})()
 })()

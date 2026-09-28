@@ -210,7 +210,8 @@
 
     img.addEventListener('load', () => {
       clearTimeout(timeoutId)
-      aplicar(img)
+      aplicar(iGP.zapping.avanzarEstado = () => {
+mg)
     }, { once: true })
   }
 
@@ -226,16 +227,17 @@
     intentar()
   }
 
-  GP.zapping.avanzarEstado = () => {
-    estadoActual = (estadoActual + 1) % cfg.estados.length
-    const e = estado()
-    colorPantallaActivo = e.usaColorPantalla
-    if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
-    ATAQUE_ACTIVO = e.usaBarrido
-    contadorPulsos = 0
-    pasoRitmo = 0
-    GP.zapping.rafaga(60)
-  }
+GP.zapping.avanzarEstado = () => {
+  estadoActual = (estadoActual + 1) % cfg.estados.length
+  const e = estado()
+  colorPantallaActivo = e.usaColorPantalla
+  if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
+  ATAQUE_ACTIVO = e.usaBarrido
+  contadorPulsos = 0
+  pasoRitmo = 0
+  GP.zapping.rafaga(60)
+  return estadoActual // nuevo — para que el sketch pueda mostrar el overlay de número de estado
+}
 
   // llamado en cada pulso de clock real (0xF8) del padKONTROL
   GP.zapping.pulso = () => {
