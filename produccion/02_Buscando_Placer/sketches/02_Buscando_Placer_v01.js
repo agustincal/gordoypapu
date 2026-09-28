@@ -6,7 +6,7 @@
 // ============================================================
 
 // después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
-const GP_SHA = '89f61874ffa297bed507fc9cc976a2e7761eb564'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
+const GP_SHA = 'bd633e01b89a6d479b76346a91148a2a663b6030'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -84,14 +84,13 @@ const coincide = (regla, dispositivo, canal, nota) => {
 
 const ejecutar = (accion, { on, off, nota }) => {
   if (accion === 'disparar') { if (on) GP.zapping.disparar(nota); if (off) GP.zapping.cortarBarrido() }
-  if (accion === 'cambiarEstado' && on) GP.zapping.avanzarEstado()
-  if (accion === 'toggleBarrido' && on) GP.zapping.toggleBarrido()
-  if (accion === 'grabadorCiclo' && on) GP.tools.grabadorCiclo()
   if (accion === 'cambiarEstado' && on) {
     const idx = GP.zapping.avanzarEstado()
     if (GP.ensayo.overlayEstado) GP.ensayo.overlayEstado.mostrar(idx) // borrar esta línea cuando termines de curar estados
+  }
+  if (accion === 'toggleBarrido' && on) GP.zapping.toggleBarrido()
+  if (accion === 'grabadorCiclo' && on) GP.tools.grabadorCiclo()
 }
-
 
 const setLed = (nota, encendido) => {
   if (GP.midi.state && GP.midi.state.output) GP.midi.state.output.send([0x90, nota, encendido ? 4 : 1])
