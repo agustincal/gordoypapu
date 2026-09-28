@@ -1,17 +1,17 @@
 // ============================================================
 // GP_02_Buscando_Placer__visual
 // Canción 02 · Buscando Placer (Gordo y Papu)
-// Rol: motor visual — estados, ritmo por figuras musicales, multiplicador de velocidad,
-//      precarga de imágenes, disparo de recuadros, ráfaga, barrido (distancia según nota), iman
+// Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes,
+//      disparo de recuadros, ráfaga, barrido (distancia según nota), iman
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
-// Actualizado: 2026-09-27
+// Actualizado: 2026-09-28
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.3') return
-  GP.zapping = { _version: 'v1.3' }
+  if (GP.zapping && GP.zapping._version === 'v1.4') return
+  GP.zapping = { _version: 'v1.4' }
 
   // Figuras musicales en pulsos de clock real (24 pulsos = 1 negra, estándar MIDI 24ppqn)
   const FIGURAS = {
@@ -36,7 +36,7 @@
   let ataqueDur = ATAQUE_MAX
   let barriendoActivo = false
 
-  // multiplicador de velocidad del ritmo (pads x2 / ÷2, tipo Resolume)
+  // multiplicador de velocidad del ritmo — obsoleto desde la grilla de pasos, se deja sin usar por ahora
   let velocidad = 1
   const VELOCIDAD_MIN = 0.25
   const VELOCIDAD_MAX = 8
@@ -140,7 +140,7 @@
 
   GP.zapping.toggleBarrido = () => { ATAQUE_ACTIVO = !ATAQUE_ACTIVO }
 
-  // duracionTicks: cuántos pulsos de clock dura la figura que disparó este recuadro
+  // duracionTicks: cuántos pulsos de clock dura el paso que disparó este recuadro
   // (negra = referencia 1x). Determina qué tan lejos y qué tan lento entra el barrido.
   GP.zapping.disparar = (nota = 60, duracionTicks = FIGURAS.negra) => {
     if (rect.cargando) return
@@ -210,8 +210,7 @@
 
     img.addEventListener('load', () => {
       clearTimeout(timeoutId)
-      aplicar(iGP.zapping.avanzarEstado = () => {
-mg)
+      aplicar(img)
     }, { once: true })
   }
 
@@ -227,17 +226,17 @@ mg)
     intentar()
   }
 
-GP.zapping.avanzarEstado = () => {
-  estadoActual = (estadoActual + 1) % cfg.estados.length
-  const e = estado()
-  colorPantallaActivo = e.usaColorPantalla
-  if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
-  ATAQUE_ACTIVO = e.usaBarrido
-  contadorPulsos = 0
-  pasoRitmo = 0
-  GP.zapping.rafaga(60)
-  return estadoActual // nuevo — para que el sketch pueda mostrar el overlay de número de estado
-}
+  GP.zapping.avanzarEstado = () => {
+    estadoActual = (estadoActual + 1) % cfg.estados.length
+    const e = estado()
+    colorPantallaActivo = e.usaColorPantalla
+    if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
+    ATAQUE_ACTIVO = e.usaBarrido
+    contadorPulsos = 0
+    pasoRitmo = 0
+    GP.zapping.rafaga(60)
+    return estadoActual // para que el sketch pueda mostrar el overlay de número de estado
+  }
 
   // llamado en cada pulso de clock real (0xF8) del padKONTROL
   GP.zapping.pulso = () => {
