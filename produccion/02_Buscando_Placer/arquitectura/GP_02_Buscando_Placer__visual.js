@@ -70,7 +70,10 @@
   const SUAVIZADO = 0.15
   const RANGO_AJUSTE = 0.3
   const clamp01 = v => Math.max(0, Math.min(1, v))
-  const conEstado = (base, fRaw) => clamp01(base + (fRaw - 0.5) * 2 * RANGO_AJUSTE)
+const conEstado = (base, fRaw) => {
+  const centro = RANGO_AJUSTE + base * (1 - 2 * RANGO_AJUSTE) // reubica la base para que la ventana del fader nunca se recorte
+  return centro + (fRaw - 0.5) * 2 * RANGO_AJUSTE
+}
   const estado = () => cfg.estados[Math.max(0, estadoActual)]
 
   const f1 = () => conEstado(estado().f1, f1s)
