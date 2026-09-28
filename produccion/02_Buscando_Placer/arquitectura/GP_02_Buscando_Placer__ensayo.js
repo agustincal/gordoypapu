@@ -9,8 +9,13 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.ensayo && GP.ensayo._version === 'v0.2') return
-  GP.ensayo = { _version: 'v0.2' }
+
+  if (GP.ensayo && GP.ensayo._version === 'v0.3') {
+    // el módulo ya está cargado — solo nos aseguramos de que el panel siga visible y al frente
+    if (GP.ensayo._panelEl) document.body.appendChild(GP.ensayo._panelEl)
+    return
+  }
+  GP.ensayo = { _version: 'v0.3' }
 
   let grabacion = null
   let audioEl = null
@@ -20,7 +25,7 @@
   const panel = document.createElement('div')
   panel.id = 'gpEnsayoPanel'
   panel.style.cssText = `
-    position: fixed; bottom: 8px; left: 8px; z-index: 99999;
+    position: fixed; bottom: 8px; left: 8px; z-index: 2147483647;
     background: rgba(0,0,0,0.75); color: #fff; font: 12px/1.5 monospace;
     padding: 10px 12px; border-radius: 6px; display: flex; flex-direction: column; gap: 6px;
   `
@@ -34,6 +39,7 @@
     </div>
   `
   document.body.appendChild(panel)
+  GP.ensayo._panelEl = panel
 
   const estado = panel.querySelector('#gpEnsayoEstado')
   const setEstado = (t) => { estado.textContent = t }
