@@ -239,15 +239,15 @@
 
   // llamado en cada pulso de clock real (0xF8) del padKONTROL
   GP.zapping.pulso = () => {
-    const patron = estado().ritmo && estado().ritmo.length ? estado().ritmo : ['negra']
-    const objetivoTicks = FIGURAS[patron[pasoRitmo % patron.length]] || FIGURAS.negra
-    const objetivoEfectivo = objetivoTicks / velocidad
+    const patron = estado().ritmo || 'X...'  // default: un solo golpe por negra (4 semicorcheas)
+    const resolucion = FIGURAS[estado().resolucion] || FIGURAS.semicorchea
 
     contadorPulsos++
-    if (contadorPulsos >= objetivoEfectivo) {
+    if (contadorPulsos >= resolucion) {
       contadorPulsos = 0
+      const paso = patron[pasoRitmo % patron.length]
       pasoRitmo = (pasoRitmo + 1) % patron.length
-      GP.zapping.disparar(60, objetivoTicks)
+      if (paso === 'X' || paso === 'x') GP.zapping.disparar(60, resolucion)
     }
   }
 })()
