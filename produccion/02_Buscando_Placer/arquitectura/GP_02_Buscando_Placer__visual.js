@@ -71,7 +71,7 @@
   const RANGO_AJUSTE = 0.3
   const clamp01 = v => Math.max(0, Math.min(1, v))
   const conEstado = (base, fRaw) => clamp01(base + (fRaw - 0.5) * 2 * RANGO_AJUSTE)
-  const estado = () => cfg.estados[estadoActual]
+  const estado = () => cfg.estados[Math.max(0, estadoActual)]
 
   const f1 = () => conEstado(estado().f1, f1s)
   const f2 = () => conEstado(estado().f2, f2s)
@@ -98,17 +98,14 @@
     .scrollY(() => rect.ry)
     .modulateScrollX(noise(3, .4).pixelate(1, 120), () => f1() * .5)
 
-  GP.zapping.init = (config) => {
-    cfg = Object.assign({
-      rafagaCantidad: 3,
-      rafagaPoll: 30,
-    }, config)
-    estadoActual = 0
-    contadorPulsos = 0
-    pasoRitmo = 0
-    velocidad = 1
-    precargarImagenes(cfg.videos)
-  }
+GP.zapping.init = (config) => {
+  cfg = Object.assign({ rafagaCantidad: 3, rafagaPoll: 30 }, config)
+  estadoActual = -1 // todavía no arrancó ningún estado — el primer toque de pad activa el estado 1
+  contadorPulsos = 0
+  pasoRitmo = 0
+  velocidad = 1
+  precargarImagenes(cfg.videos)
+}
 
   GP.zapping.update = () => {
     f1s += (F1 / 127 - f1s) * SUAVIZADO
@@ -227,7 +224,7 @@
   }
 
   GP.zapping.avanzarEstado = () => {
-    estadoActual = (estadoActual + 1) % cfg.estados.length
+    estadoActual = Math.min(estadoActual + 1, cfg.estados.length - 1) // ya no da la vuelta con %
     const e = estado()
     colorPantallaActivo = e.usaColorPantalla
     if (colorPantallaActivo) colorPantalla = [Math.random(), Math.random(), Math.random()]
@@ -235,7 +232,7 @@
     contadorPulsos = 0
     pasoRitmo = 0
     GP.zapping.rafaga(60)
-    return estadoActual // para que el sketch pueda mostrar el overlay de número de estado
+    return estadoActual
   }
 
   // llamado en cada pulso de clock real (0xF8) del padKONTROL
