@@ -104,27 +104,18 @@
     setEstado('detenido')
   })
 
-  GP.ensayo.overlayEstado = (function () {
-  const CARPETA = 'numeracion%201-13' // la carpeta del repo tiene un espacio, va como %20
-  const TOTAL = 13 // numeracion_00.png .. numeracion_12.png
-  const imgs = []
+GP.ensayo.overlayEstado = (function () {
   let el = null
   let activo = true // podés apagarlo en consola: GP.ensayo.overlayEstado.activo = false
 
-  const base = () => `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${window.GP_RAMA || 'main'}/produccion/02_Buscando_Placer/assets/${CARPETA}/`
-
-  function precargar() {
-    for (let i = 0; i < TOTAL; i++) {
-      const img = new Image()
-      img.src = base() + `numeracion_${String(i).padStart(2, '0')}.png`
-      imgs[i] = img
-    }
-  }
-
   function crearElemento() {
-    el = document.createElement('img')
+    el = document.createElement('div')
     el.id = 'gpOverlayEstado'
-    el.style.cssText = `position: fixed; top: 8px; right: 8px; z-index: 2147483647; width: 90px; opacity: 0.9; pointer-events: none;`
+    el.style.cssText = `
+      position: fixed; top: 8px; right: 8px; z-index: 2147483647;
+      background: rgba(0,0,0,0.75); color: #fff; font: bold 28px/1 monospace;
+      padding: 10px 16px; border-radius: 6px; pointer-events: none;
+    `
     document.body.appendChild(el)
   }
 
@@ -132,15 +123,13 @@
     if (!activo) return
     if (!el) crearElemento()
     if (!document.body.contains(el)) document.body.appendChild(el)
-    if (imgs[indice]) el.src = imgs[indice].src
+    el.textContent = `estado ${indice + 1}` // +1 porque estadoActual es 0-indexado
   }
 
-  precargar()
   return {
     mostrar,
     get _el() { return el },
     get activo() { return activo },
     set activo(v) { activo = v; if (el) el.style.display = v ? '' : 'none' }
   }
-})()
 })()
