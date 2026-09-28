@@ -237,7 +237,8 @@ GP.zapping.init = (config) => {
 
   // llamado en cada pulso de clock real (0xF8) del padKONTROL
   GP.zapping.pulso = () => {
-    const patron = estado().ritmo || 'X...'  // default: un solo golpe por negra (4 semicorcheas)
+    if (estadoActual < 0) return // todavía no arrancó el primer estado
+    const patron = estado().ritmo || 'X...'
     const resolucion = FIGURAS[estado().resolucion] || FIGURAS.semicorchea
 
     contadorPulsos++
