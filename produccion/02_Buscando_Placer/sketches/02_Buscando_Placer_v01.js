@@ -6,7 +6,7 @@
 // ============================================================
 
 // después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
-const GP_SHA = 'e836f6c95a3009fb3eec99746db8a4ed69286e01'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
+const GP_SHA = '708266a41dae468361a1ff072c97eb7951ff80ea'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -38,7 +38,7 @@ const RUTEO = [
 ]
 
 // DEFAULT compartido por todos los estados (todavía no varía nada de esto)
-const DEFAULT = { f1: 0.5, f2: 0.8, f4: 0.8, f5: 0.5, f6: 0, usaIman: false, usaBarrido: false, ritmo: ['negra'] }
+const DEFAULT = { f1: 0.0, f2: 0.0, f4: 0.0, f5: 0.0, f6: 0, usaIman: false, usaBarrido: false, ritmo: ['negra'] }
 
 const ESTADOS = [
   { nombre: 'estado 1',  ...DEFAULT, f3: 0.1, usaColorPantalla: false },
