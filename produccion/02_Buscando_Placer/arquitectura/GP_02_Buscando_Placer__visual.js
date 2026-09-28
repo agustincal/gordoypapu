@@ -3,6 +3,8 @@
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes,
 //      disparo de recuadros, ráfaga, barrido (distancia según nota), iman
+// Faders: cada estado define un valor 0-1 directo; tocar el fader físico lo
+//         toma en vivo (takeover) hasta el próximo cambio de estado
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
 // Actualizado: 2026-09-28
 // ============================================================
@@ -10,8 +12,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.4') return
-  GP.zapping = { _version: 'v1.4' }
+  if (GP.zapping && GP.zapping._version === 'v1.5') return
+  GP.zapping = { _version: 'v1.5' }
 
   // Figuras musicales en pulsos de clock real (24 pulsos = 1 negra, estándar MIDI 24ppqn)
   const FIGURAS = {
@@ -68,20 +70,25 @@
 
   let f1s = 0, f2s = 0, f3s = 0, f4s = 0, f5s = 0, f6s = 0
   const SUAVIZADO = 0.15
-  const RANGO_AJUSTE = 0.3
   const clamp01 = v => Math.max(0, Math.min(1, v))
-const conEstado = (base, fRaw) => {
-  const centro = RANGO_AJUSTE + base * (1 - 2 * RANGO_AJUSTE) // reubica la base para que la ventana del fader nunca se recorte
-  return centro + (fRaw - 0.5) * 2 * RANGO_AJUSTE
-}
+
+  // Sistema de "takeover": cada estado arranca usando su valor curado (0-1 directo, sin blend).
+  // En cuanto tocás un fader (se aleja de dónde estaba al entrar al estado), ese parámetro
+  // pasa a estar 100% controlado por el fader hasta el próximo cambio de estado.
+  const UMBRAL_TOQUE = 3 // en unidades MIDI crudas (0-127) — margen para no disparar por ruido
+  let faderBase = [0, 0, 0, 0, 0, 0]      // dónde estaba físicamente cada fader al entrar al estado actual
+  let faderTocado = [false, false, false, false, false, false]
+
+  const valorParam = (idx, baseEstado, suavizado) => clamp01(faderTocado[idx] ? suavizado : baseEstado)
+
   const estado = () => cfg.estados[Math.max(0, estadoActual)]
 
-  const f1 = () => conEstado(estado().f1, f1s)
-  const f2 = () => conEstado(estado().f2, f2s)
-  const f3 = () => conEstado(estado().f3, f3s)
-  const f4 = () => conEstado(estado().f4, f4s)
-  const f5 = () => conEstado(estado().f5, f5s)
-  const f6 = () => conEstado(estado().f6, f6s)
+  const f1 = () => valorParam(0, estado().f1, f1s)
+  const f2 = () => valorParam(1, estado().f2, f2s)
+  const f3 = () => valorParam(2, estado().f3, f3s)
+  const f4 = () => valorParam(3, estado().f4, f4s)
+  const f5 = () => valorParam(4, estado().f5, f5s)
+  const f6 = () => valorParam(5, estado().f6, f6s)
   GP.zapping.f = { f1, f2, f3, f4, f5, f6 }
 
   GP.zapping.pixelSize = () => 600 - (f2() ** 3) * 595
@@ -101,16 +108,23 @@ const conEstado = (base, fRaw) => {
     .scrollY(() => rect.ry)
     .modulateScrollX(noise(3, .4).pixelate(1, 120), () => f1() * .5)
 
-GP.zapping.init = (config) => {
-  cfg = Object.assign({ rafagaCantidad: 3, rafagaPoll: 30 }, config)
-  estadoActual = -1 // todavía no arrancó ningún estado — el primer toque de pad activa el estado 1
-  contadorPulsos = 0
-  pasoRitmo = 0
-  velocidad = 1
-  precargarImagenes(cfg.videos)
-}
+  GP.zapping.init = (config) => {
+    cfg = Object.assign({ rafagaCantidad: 3, rafagaPoll: 30 }, config)
+    estadoActual = -1 // todavía no arrancó ningún estado — el primer toque de pad activa el estado 1
+    contadorPulsos = 0
+    pasoRitmo = 0
+    velocidad = 1
+    faderBase = [F1, F2, F3, F4, F5, F6]
+    faderTocado = [false, false, false, false, false, false]
+    precargarImagenes(cfg.videos)
+  }
 
   GP.zapping.update = () => {
+    const raw = [F1, F2, F3, F4, F5, F6]
+    for (let i = 0; i < 6; i++) {
+      if (!faderTocado[i] && Math.abs(raw[i] - faderBase[i]) > UMBRAL_TOQUE) faderTocado[i] = true
+    }
+
     f1s += (F1 / 127 - f1s) * SUAVIZADO
     f2s += (F2 / 127 - f2s) * SUAVIZADO
     f3s += (F3 / 127 - f3s) * SUAVIZADO
@@ -234,6 +248,8 @@ GP.zapping.init = (config) => {
     ATAQUE_ACTIVO = e.usaBarrido
     contadorPulsos = 0
     pasoRitmo = 0
+    faderBase = [F1, F2, F3, F4, F5, F6]                        // dónde está cada fader AHORA (para detectar movimiento)
+    faderTocado = [false, false, false, false, false, false]   // vuelve a usar los valores curados del estado
     GP.zapping.rafaga(60)
     return estadoActual
   }
