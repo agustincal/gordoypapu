@@ -133,3 +133,5 @@ GP.ensayo.overlayEstado = (function () {
     set activo(v) { activo = v; if (el) el.style.display = v ? '' : 'none' }
   }
 })()
+
+})()   // <- este es el que faltaba: cierra el IIFE de todo el archivo (el que abre en la línea 9)
