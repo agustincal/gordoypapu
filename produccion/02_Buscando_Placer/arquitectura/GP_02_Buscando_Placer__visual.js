@@ -2,18 +2,20 @@
 // GP_02_Buscando_Placer__visual
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes,
-//      disparo de recuadros, ráfaga, barrido (distancia según nota), iman
-// Faders: cada estado define un valor 0-1 directo; tocar el fader físico lo
-//         toma en vivo (takeover) hasta el próximo cambio de estado
+//      disparo de recuadros, ráfaga, barrido (distancia según nota), iman,
+//      efectos de escena en F7/F8 (glitch VHS, y un slot libre)
+// Faders: F1-F4 = efectos recuadro, F5-F8 = efectos escena. Cada estado define
+//         un valor 0-1 directo; tocar el fader físico lo toma en vivo (takeover,
+//         con una transición suave) hasta el próximo cambio de estado.
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
-// Actualizado: 2026-09-28
+// Actualizado: 2026-09-30
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.5') return
-  GP.zapping = { _version: 'v1.5' }
+  if (GP.zapping && GP.zapping._version === 'v1.6') return
+  GP.zapping = { _version: 'v1.6' }
 
   // Figuras musicales en pulsos de clock real (24 pulsos = 1 negra, estándar MIDI 24ppqn)
   const FIGURAS = {
@@ -68,28 +70,40 @@
   }
   GP.zapping.rect = rect
 
-  let f1s = 0, f2s = 0, f3s = 0, f4s = 0, f5s = 0, f6s = 0
+  const NUM_FADERS = 8 // F1-F4 recuadro, F5-F8 escena
+  let f1s = 0, f2s = 0, f3s = 0, f4s = 0, f5s = 0, f6s = 0, f7s = 0, f8s = 0
   const SUAVIZADO = 0.15
   const clamp01 = v => Math.max(0, Math.min(1, v))
+  const RAW_FADERS = () => [F1, F2, F3, F4, F5, F6, F7, F8]
 
   // Sistema de "takeover": cada estado arranca usando su valor curado (0-1 directo, sin blend).
   // En cuanto tocás un fader (se aleja de dónde estaba al entrar al estado), ese parámetro
-  // pasa a estar 100% controlado por el fader hasta el próximo cambio de estado.
-  const UMBRAL_TOQUE = 3 // en unidades MIDI crudas (0-127) — margen para no disparar por ruido
-  let faderBase = [0, 0, 0, 0, 0, 0]      // dónde estaba físicamente cada fader al entrar al estado actual
-  let faderTocado = [false, false, false, false, false, false]
+  // desliza suave (en VELOCIDAD_MEZCLA) hacia estar 100% controlado por el fader, hasta el
+  // próximo cambio de estado.
+  const UMBRAL_TOQUE = 3     // en unidades MIDI crudas (0-127) — margen para no disparar por ruido
+  const VELOCIDAD_MEZCLA = 0.08 // qué tan rápido se completa la transición al tocar
+  let faderBase = new Array(NUM_FADERS).fill(0)     // dónde estaba físicamente cada fader al entrar al estado
+  let faderTocado = new Array(NUM_FADERS).fill(false)
+  let mezclaFader = new Array(NUM_FADERS).fill(0)   // 0 = usa valor curado, 1 = usa fader en vivo
 
-  const valorParam = (idx, baseEstado, suavizado) => clamp01(faderTocado[idx] ? suavizado : baseEstado)
+  const valorParam = (idx, baseEstado, suavizado) =>
+    clamp01(baseEstado + (suavizado - baseEstado) * mezclaFader[idx])
 
   const estado = () => cfg.estados[Math.max(0, estadoActual)]
 
-  const f1 = () => valorParam(0, estado().f1, f1s)
-  const f2 = () => valorParam(1, estado().f2, f2s)
-  const f3 = () => valorParam(2, estado().f3, f3s)
-  const f4 = () => valorParam(3, estado().f4, f4s)
-  const f5 = () => valorParam(4, estado().f5, f5s)
-  const f6 = () => valorParam(5, estado().f6, f6s)
-  GP.zapping.f = { f1, f2, f3, f4, f5, f6 }
+  // --- F1-F4: efectos recuadro ---
+  const f1 = () => valorParam(0, estado().f1 ?? 0, f1s)
+  const f2 = () => valorParam(1, estado().f2 ?? 0, f2s)
+  const f3 = () => valorParam(2, estado().f3 ?? 0, f3s)
+  const f4 = () => valorParam(3, estado().f4 ?? 0, f4s) // libre — antes tinte, sin uso visual por ahora
+
+  // --- F5-F8: efectos escena ---
+  const f5 = () => valorParam(4, estado().f5 ?? 0, f5s) // imán (a futuro sale de estados)
+  const f6 = () => valorParam(5, estado().f6 ?? 0, f6s) // libre
+  const f7 = () => valorParam(6, estado().f7 ?? 0, f7s) // glitch VHS
+  const f8 = () => valorParam(7, estado().f8 ?? 0, f8s) // reservado — modulador de color, sin diseñar
+
+  GP.zapping.f = { f1, f2, f3, f4, f5, f6, f7, f8 }
 
   GP.zapping.pixelSize = () => 600 - (f2() ** 3) * 595
   GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40
@@ -101,6 +115,23 @@
   GP.zapping.iman = (px, py, fase) => shape(64, 0.2, 0.9)
     .scroll(() => px + 0.015 * Math.sin(time * 0.4 + fase), () => py + 0.015 * Math.cos(time * 0.3 + fase))
     .mult(noise(3, .3), 1)
+
+  // --- Efectos de escena en fader (F7, F8) ---
+  // Cada uno expone una función "textura" (la fuente que modula la escena) y una función
+  // "intensidad" (0-1, según el estado + fader). Para cambiar el efecto de un fader más
+  // adelante, alcanza con reemplazar su función de textura/intensidad — el wiring en el
+  // sketch (el .modulateScrollX del render) no se toca.
+
+  // F7: glitch tipo VHS / señal de video defectuosa — corrimiento de franjas horizontales.
+  // El ruido se "aplana" a 1 columna x 180 filas, así cada franja horizontal tiene su
+  // propio corrimiento, constante a lo ancho — el look clásico de tracking roto.
+  GP.zapping.texturaF7 = () => noise(3, 0.15).pixelate(1, 180)
+  GP.zapping.intensidadF7 = () => estado().usaGlitchF7 ? f7() * 0.35 : 0
+
+  // F8: reservado — placeholder neutro (intensidad siempre 0) hasta que se diseñe
+  // el modulador de color. Dejar wireado en el sketch cuando se defina qué hace.
+  GP.zapping.texturaF8 = () => noise(1, 0)
+  GP.zapping.intensidadF8 = () => 0
 
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
     .scale(() => rect.rw, () => rect.rh)
@@ -114,15 +145,18 @@
     contadorPulsos = 0
     pasoRitmo = 0
     velocidad = 1
-    faderBase = [F1, F2, F3, F4, F5, F6]
-    faderTocado = [false, false, false, false, false, false]
+    faderBase = RAW_FADERS()
+    faderTocado = new Array(NUM_FADERS).fill(false)
+    mezclaFader = new Array(NUM_FADERS).fill(0)
     precargarImagenes(cfg.videos)
   }
 
   GP.zapping.update = () => {
-    const raw = [F1, F2, F3, F4, F5, F6]
-    for (let i = 0; i < 6; i++) {
+    const raw = RAW_FADERS()
+    for (let i = 0; i < NUM_FADERS; i++) {
       if (!faderTocado[i] && Math.abs(raw[i] - faderBase[i]) > UMBRAL_TOQUE) faderTocado[i] = true
+      const objetivo = faderTocado[i] ? 1 : 0
+      mezclaFader[i] += (objetivo - mezclaFader[i]) * VELOCIDAD_MEZCLA
     }
 
     f1s += (F1 / 127 - f1s) * SUAVIZADO
@@ -131,6 +165,8 @@
     f4s += (F4 / 127 - f4s) * SUAVIZADO
     f5s += (F5 / 127 - f5s) * SUAVIZADO
     f6s += (F6 / 127 - f6s) * SUAVIZADO
+    f7s += (F7 / 127 - f7s) * SUAVIZADO
+    f8s += (F8 / 127 - f8s) * SUAVIZADO
 
     if (!barriendoActivo) return
     const t = Math.min(1, (time - ataqueInicio) / ataqueDur)
@@ -248,8 +284,9 @@
     ATAQUE_ACTIVO = e.usaBarrido
     contadorPulsos = 0
     pasoRitmo = 0
-    faderBase = [F1, F2, F3, F4, F5, F6]                        // dónde está cada fader AHORA (para detectar movimiento)
-    faderTocado = [false, false, false, false, false, false]   // vuelve a usar los valores curados del estado
+    faderBase = RAW_FADERS()                          // dónde está cada fader AHORA (para detectar movimiento)
+    faderTocado = new Array(NUM_FADERS).fill(false)    // vuelve a usar los valores curados del estado
+    mezclaFader = new Array(NUM_FADERS).fill(0)
     GP.zapping.rafaga(60)
     return estadoActual
   }

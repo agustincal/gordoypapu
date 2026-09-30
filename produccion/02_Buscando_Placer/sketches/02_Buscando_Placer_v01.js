@@ -2,7 +2,7 @@
 // 02_Buscando_Placer_v01
 // Canción 02 · Buscando Placer (Gordo y Papu) — sketch de producción
 // Config de esta versión: estados, ruteo MIDI, assets. El motor vive en /arquitectura
-// Actualizado: 2026-09-27
+// Actualizado: 2026-09-30
 // ============================================================
 
 // después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
@@ -13,7 +13,7 @@ await GP_cargarModulosBuscandoPlacer(GP_SHA)
 
 await GP.midi.start({ outputName: 'APC MINI' })
 GP.midi.buttons(['N11', 'N81', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N88'])
-GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6'])
+GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8']) // F1-F4 recuadro, F5-F8 escena (master queda aparte por ahora)
 
 // ---------- CONFIG (lo único que tocás para ajustar) ----------
 
@@ -36,7 +36,14 @@ const RUTEO = [
 ]
 
 // DEFAULT compartido por todos los estados — todo en 0 por ahora, se va a ir curando estado por estado
-const DEFAULT = { f1: 0, f2: 0, f4: 0, f5: 0, f6: 0, usaIman: true, usaBarrido: false, ritmo: 'X...', resolucion: 'semicorchea' }
+// f4 (recuadro) y f6 (escena) libres por ahora. f7 = glitch VHS (usaGlitchF7 lo activa por estado).
+// f8 (escena) reservado, sin efecto todavía.
+const DEFAULT = {
+  f1: 0, f2: 0, f4: 0,
+  f5: 0, f6: 0, f7: 0, f8: 0,
+  usaIman: true, usaBarrido: false, usaGlitchF7: false,
+  ritmo: 'X...', resolucion: 'semicorchea',
+}
 
 const ESTADOS = [
   { nombre: 'estado 1',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X.X.X.X.X.X.X.X.' }, // 16 compases — ejemplo con síncopa
@@ -45,7 +52,7 @@ const ESTADOS = [
   { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' }, // 16 compases — ejemplo con síncopa
   { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false }, // 16 compases
   { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  }, // 16 compases
-  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false }, // 16 compases
+  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 0.4 }, // 16 compases — de prueba, con glitch VHS activado
   { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  }, // 16 compases
   { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false }, // 16 compases
   { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  }, // 12 compases
@@ -146,6 +153,7 @@ src(o0)
       .mask(GP.zapping.rectShape())
   )
   .modulate(GP.zapping.iman(0, 0, 0), () => GP.zapping.imanIntensidad(VOZ()))
+  .modulateScrollX(GP.zapping.texturaF7(), () => GP.zapping.intensidadF7()) // F7 — glitch VHS (efecto escena)
   .out(o0)
 
 src(o0)
