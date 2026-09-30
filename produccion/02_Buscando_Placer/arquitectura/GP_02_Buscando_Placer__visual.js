@@ -96,6 +96,10 @@
     .scroll(() => px + 0.015 * Math.sin(time * 0.4 + fase), () => py + 0.015 * Math.cos(time * 0.3 + fase))
     .mult(noise(3, .3), 1)
 
+  GP.zapping.usaMalaSenalF7 = () => !!estado().usaGlitchF7
+    GP.zapping.texturaF7 = () => noise(30, 10).pixelate(1, 100)
+    GP.zapping.intensidadF7 = () => GP.zapping.usaMalaSenalF7() ? f7() * 0.06 : 0
+
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
     .scale(() => rect.rw, () => rect.rh)
     .scrollX(() => rect.rx)

@@ -40,7 +40,7 @@ const ESTADOS = [
   { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' },
   { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false },
   { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  },
-  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false },
+  { nombre: 'estado 7', ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 1 },
   { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  },
   { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false },
   { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  },
@@ -132,3 +132,17 @@ src(o0)
       )
       .scrollX(() => GP.zapping.rect.imgX)
       .scrollY(() => GP.zapping.rect.imgY)
+      .pixelate(() => GP.zapping.pixelSize(), () => GP.zapping.pixelSize())
+      .modulateScrollX(noise(3, .1).pixelate(1, 120), () => GP.zapping.f.f1() * 2)
+      .mult(solid(() => GP.zapping.rect.tinteR, () => GP.zapping.rect.tinteG, () => GP.zapping.rect.tinteB), () => GP.zapping.f.f4())
+      .mask(GP.zapping.rectShape())
+  )
+  .modulate(GP.zapping.iman(0, 0, 0), () => GP.zapping.imanIntensidad(VOZ()))
+  .out(o0)
+
+src(o0)
+  .modulateScrollX(GP.zapping.texturaF7(), GP.zapping.intensidadF7)
+  .mult(solid(() => GP.zapping.colorPantalla()[0], () => GP.zapping.colorPantalla()[1], () => GP.zapping.colorPantalla()[2]), GP.zapping.colorAlpha)
+  .out(o1)
+
+render(o1)
