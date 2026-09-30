@@ -2,20 +2,17 @@
 // 02_Buscando_Placer_v01
 // Canción 02 · Buscando Placer (Gordo y Papu) — sketch de producción
 // Config de esta versión: estados, ruteo MIDI, assets. El motor vive en /arquitectura
-// Actualizado: 2026-09-30
+// Actualizado: 2026-09-27
 // ============================================================
 
-// después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
-const GP_SHA = '6f06b884b6c9bdeded996a2631410916c9744b49'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
+const GP_SHA = 'e8c29af329743a6786499e909432b0436d7c2c4c'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
 
 await GP.midi.start({ outputName: 'APC MINI' })
 GP.midi.buttons(['N11', 'N81', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N88'])
-GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8']) // F1-F4 recuadro, F5-F8 escena (master queda aparte por ahora)
-
-// ---------- CONFIG (lo único que tocás para ajustar) ----------
+GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'])
 
 const BASE_IMAGENES = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/sequence01/'
 const videos = ['01.jpg', '02.jpg', '03.jpg', '04.jpg', '05.jpg', '06.jpg'].map(n => BASE_IMAGENES + n)
@@ -26,7 +23,6 @@ const AKAI = /apc|akai/i
 const KORG = /korg|padkontrol/i
 const MODO_PRUEBA = false
 
-// Qué dispara qué — un solo lugar para editar rutas MIDI
 const RUTEO = [
   { dispositivo: 'korg', canales: [2, 3], accion: 'disparar' },
   { dispositivo: 'korg', canales: [16],   accion: 'cambiarEstado' },
@@ -35,30 +31,22 @@ const RUTEO = [
   { dispositivo: 'akai', notas: [98], accion: 'grabadorCiclo',  led: true },
 ]
 
-// DEFAULT compartido por todos los estados — todo en 0 por ahora, se va a ir curando estado por estado
-// f4 (recuadro) y f6 (escena) libres por ahora. f7 = glitch VHS (usaGlitchF7 lo activa por estado).
-// f8 (escena) reservado, sin efecto todavía.
-const DEFAULT = {
-  f1: 0, f2: 0, f4: 0,
-  f5: 0, f6: 0, f7: 0, f8: 0,
-  usaIman: true, usaBarrido: false, usaGlitchF7: false,
-  ritmo: 'X...', resolucion: 'semicorchea',
-}
+const DEFAULT = { f1: 0, f2: 0, f4: 0, f5: 0, f6: 0, usaIman: true, usaBarrido: false, ritmo: 'X...', resolucion: 'semicorchea' }
 
 const ESTADOS = [
-  { nombre: 'estado 1',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X.X.X.X.X.X.X.X.' }, // 16 compases — ejemplo con síncopa
-  { nombre: 'estado 2',  ...DEFAULT, f3: 0.18, usaColorPantalla: true  }, // 8 compases
-  { nombre: 'estado 3',  ...DEFAULT, f3: 0.25, usaColorPantalla: false }, // 8 compases
-  { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' }, // 16 compases — ejemplo con síncopa
-  { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false }, // 16 compases
-  { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  }, // 16 compases
-  { nombre: 'estado 7', ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 1 },
-  { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  }, // 16 compases
-  { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false }, // 16 compases
-  { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  }, // 12 compases
-  { nombre: 'estado 11', ...DEFAULT, f3: 0.85, usaColorPantalla: false }, // 8 compases
-  { nombre: 'estado 12', ...DEFAULT, f3: 0.93, usaColorPantalla: true  }, // 16 compases
-  { nombre: 'estado 13', ...DEFAULT, f3: 1.00, usaColorPantalla: false }, // hasta el final
+  { nombre: 'estado 1',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X.X.X.X.X.X.X.X.' },
+  { nombre: 'estado 2',  ...DEFAULT, f3: 0.18, usaColorPantalla: true  },
+  { nombre: 'estado 3',  ...DEFAULT, f3: 0.25, usaColorPantalla: false },
+  { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' },
+  { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false },
+  { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  },
+  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false },
+  { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  },
+  { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false },
+  { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  },
+  { nombre: 'estado 11', ...DEFAULT, f3: 0.85, usaColorPantalla: false },
+  { nombre: 'estado 12', ...DEFAULT, f3: 0.93, usaColorPantalla: true  },
+  { nombre: 'estado 13', ...DEFAULT, f3: 1.00, usaColorPantalla: false },
 ]
 
 GP.zapping.init({
@@ -69,7 +57,6 @@ GP.zapping.init({
   fuente: s1,
 })
 
-// ---------- audio reactivo (voz) ----------
 a.setBins(4); a.setSmooth(0.85); a.setScale(8); a.setCutoff(0.1)
 a.show()
 const DEAD = 0.5
@@ -81,7 +68,6 @@ GP.tools.panel().textContent = 'esperando MIDI...'
 
 update = () => GP.zapping.update()
 
-// ---------- ruteo MIDI ----------
 const coincide = (regla, dispositivo, canal, nota) => {
   if (regla.dispositivo !== dispositivo) return false
   if (regla.canales && !regla.canales.includes(canal)) return false
@@ -93,7 +79,7 @@ const ejecutar = (accion, { on, off, nota }) => {
   if (accion === 'disparar') { if (on) GP.zapping.disparar(nota); if (off) GP.zapping.cortarBarrido() }
   if (accion === 'cambiarEstado' && on) {
     const idx = GP.zapping.avanzarEstado()
-    if (GP.ensayo.overlayEstado) GP.ensayo.overlayEstado.mostrar(idx) // borrar esta línea cuando termines de curar estados
+    if (GP.ensayo.overlayEstado) GP.ensayo.overlayEstado.mostrar(idx)
   }
   if (accion === 'toggleBarrido' && on) GP.zapping.toggleBarrido()
   if (accion === 'grabadorCiclo' && on) GP.tools.grabadorCiclo()
@@ -116,7 +102,7 @@ navigator.requestMIDIAccess().then(acc => {
       const [st, nota, vel] = m.data
       GP.tools.grabador.registrar(inp.name, m.data)
 
-      if (st === 0xF8) { GP.zapping.pulso(); return }  // clock real del padKONTROL → ritmo por BPM
+      if (st === 0xF8) { GP.zapping.pulso(); return }
 
       const tipo = st & 0xF0
       const on = tipo === 0x90 && vel > 0
@@ -138,10 +124,11 @@ navigator.requestMIDIAccess().then(acc => {
 })
 
 src(o0)
-  .layer(GP.zapping.lineaF7())
-  .modulateScrollX(GP.zapping.texturaF7(), GP.zapping.intensidadF7)
-  .scroll(GP.zapping.scrollXF7, 0, GP.zapping.scrollVelocidadF7)
-  .mult(solid(() => GP.zapping.colorPantalla()[0], () => GP.zapping.colorPantalla()[1], () => GP.zapping.colorPantalla()[2]), GP.zapping.colorAlpha)
-  .out(o1)
-
-render(o1)
+  .layer(
+    src(s1)
+      .scale(
+        () => GP.zapping.rect.imgScale * GP.zapping.escalaExtra(),
+        () => (GP.zapping.rect.imgScale / ((width / height) / VIDEO_ASPECT) * AJUSTE) * GP.zapping.escalaExtra()
+      )
+      .scrollX(() => GP.zapping.rect.imgX)
+      .scrollY(() => GP.zapping.rect.imgY)
