@@ -2,10 +2,11 @@
 // GP_02_Buscando_Placer__visual
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes,
-//      disparo de recuadros, ráfaga, barrido (distancia según nota), iman
-// Faders: F1-F4 = efectos recuadro, F5-F8 = efectos escena (F7/F8 sin usar todavía).
-//         Cada estado define un valor 0-1 directo; tocar el fader físico lo toma
-//         en vivo (takeover, con transición suave) hasta el próximo cambio de estado.
+//      disparo de recuadros, ráfaga, barrido (distancia según nota), iman,
+//      efectos de escena en F7/F8 (mala señal, y un slot libre)
+// Faders: F1-F4 = efectos recuadro, F5-F8 = efectos escena. Cada estado define
+//         un valor 0-1 directo; tocar el fader físico lo toma en vivo (takeover,
+//         con transición suave) hasta el próximo cambio de estado.
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
 // Actualizado: 2026-09-30
 // ============================================================
@@ -13,7 +14,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.6') return
+  if (GP.zapping && GP.zapping._version === 'v1.7') return
   GP.zapping = { _version: 'v1.7' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
@@ -87,7 +88,7 @@
 
   GP.zapping.pixelSize = () => 600 - (f2() ** 3) * 595
   GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40
-  GP.zapping.if (GP.zapping && GP.zapping._version === 'v1.6') returnIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
+  GP.zapping.imanIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
   GP.zapping.colorPantalla = () => colorPantalla
   GP.zapping.estadoNombre = () => estado().nombre || `estado ${estadoActual}`
@@ -97,8 +98,8 @@
     .mult(noise(3, .3), 1)
 
   GP.zapping.usaMalaSenalF7 = () => !!estado().usaGlitchF7
-    GP.zapping.texturaF7 = () => noise(30, 10).pixelate(1, 100)
-    GP.zapping.intensidadF7 = () => GP.zapping.usaMalaSenalF7() ? f7() * 0.06 : 0
+  GP.zapping.texturaF7 = () => noise(30, 10).pixelate(1, 100)
+  GP.zapping.intensidadF7 = () => GP.zapping.usaMalaSenalF7() ? f7() * 0.06 : 0
 
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
     .scale(() => rect.rw, () => rect.rh)
@@ -111,7 +112,23 @@
     estadoActual = -1
     contadorPulsos = 0
     pasoRitmo = 0
-    velocidad = 1GP.zapping = { _version: 'v1.6' }
+    velocidad = 1
+    faderBase = RAW_FADERS()
+    faderTocado = new Array(NUM_FADERS).fill(false)
+    mezclaFader = new Array(NUM_FADERS).fill(0)
+    precargarImagenes(cfg.videos)
+  }
+
+  GP.zapping.update = () => {
+    const raw = RAW_FADERS()
+    for (let i = 0; i < NUM_FADERS; i++) {
+      if (!faderTocado[i] && Math.abs(raw[i] - faderBase[i]) > UMBRAL_TOQUE) faderTocado[i] = true
+      const objetivo = faderTocado[i] ? 1 : 0
+      mezclaFader[i] += (objetivo - mezclaFader[i]) * VELOCIDAD_MEZCLA
+    }
+    f1s += (F1 / 127 - f1s) * SUAVIZADO
+    f2s += (F2 / 127 - f2s) * SUAVIZADO
+    f3s += (F3 / 127 - f3s) * SUAVIZADO
     f4s += (F4 / 127 - f4s) * SUAVIZADO
     f5s += (F5 / 127 - f5s) * SUAVIZADO
     f6s += (F6 / 127 - f6s) * SUAVIZADO
