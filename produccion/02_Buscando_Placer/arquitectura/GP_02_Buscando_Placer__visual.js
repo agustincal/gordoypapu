@@ -3,10 +3,12 @@
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes,
 //      disparo de recuadros, ráfaga, barrido (distancia según nota), iman,
-//      efectos de escena en F7/F8 (glitch VHS, y un slot libre)
+//      efectos de escena en F7/F8 (mala señal, y un slot libre)
 // Faders: F1-F4 = efectos recuadro, F5-F8 = efectos escena. Cada estado define
 //         un valor 0-1 directo; tocar el fader físico lo toma en vivo (takeover,
 //         con una transición suave) hasta el próximo cambio de estado.
+// F7 (mala señal) va en la etapa o0→o1 del sketch, NO en el loop de feedback:
+//         probado que acumula y destruye la imagen si se aplica adentro del loop.
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
 // Actualizado: 2026-09-30
 // ============================================================
@@ -14,8 +16,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.6') return
-  GP.zapping = { _version: 'v1.6' }
+  if (GP.zapping && GP.zapping._version === 'v1.7') return
+  GP.zapping = { _version: 'v1.7' }
 
   // Figuras musicales en pulsos de clock real (24 pulsos = 1 negra, estándar MIDI 24ppqn)
   const FIGURAS = {
@@ -100,7 +102,7 @@
   // --- F5-F8: efectos escena ---
   const f5 = () => valorParam(4, estado().f5 ?? 0, f5s) // imán (a futuro sale de estados)
   const f6 = () => valorParam(5, estado().f6 ?? 0, f6s) // libre
-  const f7 = () => valorParam(6, estado().f7 ?? 0, f7s) // glitch VHS
+  const f7 = () => valorParam(6, estado().f7 ?? 0, f7s) // mala señal
   const f8 = () => valorParam(7, estado().f8 ?? 0, f8s) // reservado — modulador de color, sin diseñar
 
   GP.zapping.f = { f1, f2, f3, f4, f5, f6, f7, f8 }
@@ -117,16 +119,29 @@
     .mult(noise(3, .3), 1)
 
   // --- Efectos de escena en fader (F7, F8) ---
-  // Cada uno expone una función "textura" (la fuente que modula la escena) y una función
-  // "intensidad" (0-1, según el estado + fader). Para cambiar el efecto de un fader más
-  // adelante, alcanza con reemplazar su función de textura/intensidad — el wiring en el
-  // sketch (el .modulateScrollX del render) no se toca.
+  // Cada uno expone las funciones necesarias para wirearlo en el sketch; para cambiar el
+  // efecto de un fader más adelante alcanza con reemplazar su implementación acá.
 
-  // F7: glitch tipo VHS / señal de video defectuosa — corrimiento de franjas horizontales.
-  // El ruido se "aplana" a 1 columna x 180 filas, así cada franja horizontal tiene su
-  // propio corrimiento, constante a lo ancho — el look clásico de tracking roto.
-  GP.zapping.texturaF7 = () => noise(3, 0.15).pixelate(1, 180)
-  GP.zapping.intensidadF7 = () => estado().usaGlitchF7 ? f7() * 0.35 : 0
+  // F7: mala señal — franjas horizontales que se corren lateralmente, con una línea negra
+  // marcando la costura del corrimiento. Validado por separado en un sketch de prueba antes
+  // de integrarlo. IMPORTANTE: se aplica en la etapa o0→o1 del sketch (no en el loop de
+  // feedback) — probado que ahí se acumula sin límite y termina destruyendo la imagen.
+  const MALA_SENAL_ESCALA = 30
+  const MALA_SENAL_VELOCIDAD = 10
+  const MALA_SENAL_BANDAS = 100
+  const MALA_SENAL_SCROLL_X = 0.01
+  const MALA_SENAL_SCROLL_VELOCIDAD = 0.1
+  const MALA_SENAL_ANCHO_LINEA = 0.015
+
+  GP.zapping.usaMalaSenalF7 = () => !!estado().usaGlitchF7
+  GP.zapping.texturaF7 = () => noise(MALA_SENAL_ESCALA, MALA_SENAL_VELOCIDAD).pixelate(1, MALA_SENAL_BANDAS)
+  GP.zapping.intensidadF7 = () => GP.zapping.usaMalaSenalF7() ? f7() * 0.06 : 0
+  GP.zapping.scrollXF7 = () => GP.zapping.usaMalaSenalF7() ? MALA_SENAL_SCROLL_X : 0
+  GP.zapping.scrollVelocidadF7 = () => GP.zapping.usaMalaSenalF7() ? MALA_SENAL_SCROLL_VELOCIDAD : 0
+  GP.zapping.lineaF7 = () => solid(0, 0, 0)
+    .mask(shape(4, 1, 0).scale(MALA_SENAL_ANCHO_LINEA, .2, 200))
+    .scrollX(-0.5)
+    .mult(solid(1, 1, 1), () => GP.zapping.usaMalaSenalF7() ? 1 : 0)
 
   // F8: reservado — placeholder neutro (intensidad siempre 0) hasta que se diseñe
   // el modulador de color. Dejar wireado en el sketch cuando se defina qué hace.

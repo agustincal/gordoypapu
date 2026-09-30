@@ -6,7 +6,7 @@
 // ============================================================
 
 // después de cada push: pegá acá el SHA del commit (git log -1 --format=%h) y listo, sin purgar ni esperar
-const GP_SHA = 'e8c29af329743a6786499e909432b0436d7c2c4c'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
+const GP_SHA = '6f06b884b6c9bdeded996a2631410916c9744b49'  // ej: 'a1b2c3d' — 'main' solo mientras estás iterando en caliente
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -52,7 +52,7 @@ const ESTADOS = [
   { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' }, // 16 compases — ejemplo con síncopa
   { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false }, // 16 compases
   { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  }, // 16 compases
-  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 0.4 }, // 16 compases — de prueba, con glitch VHS activado
+  { nombre: 'estado 7', ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 1 },
   { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  }, // 16 compases
   { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false }, // 16 compases
   { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  }, // 12 compases
@@ -137,26 +137,10 @@ navigator.requestMIDIAccess().then(acc => {
   })
 })
 
-// ---------- render ----------
 src(o0)
-  .layer(
-    src(s1)
-      .scale(
-        () => GP.zapping.rect.imgScale * GP.zapping.escalaExtra(),
-        () => (GP.zapping.rect.imgScale / ((width / height) / VIDEO_ASPECT) * AJUSTE) * GP.zapping.escalaExtra()
-      )
-      .scrollX(() => GP.zapping.rect.imgX)
-      .scrollY(() => GP.zapping.rect.imgY)
-      .pixelate(() => GP.zapping.pixelSize(), () => GP.zapping.pixelSize())
-      .modulateScrollX(noise(3, .1).pixelate(1, 120), () => GP.zapping.f.f1() * 2)
-      .mult(solid(() => GP.zapping.rect.tinteR, () => GP.zapping.rect.tinteG, () => GP.zapping.rect.tinteB), () => GP.zapping.f.f4())
-      .mask(GP.zapping.rectShape())
-  )
-  .modulate(GP.zapping.iman(0, 0, 0), () => GP.zapping.imanIntensidad(VOZ()))
-  .modulateScrollX(GP.zapping.texturaF7(), () => GP.zapping.intensidadF7()) // F7 — glitch VHS (efecto escena)
-  .out(o0)
-
-src(o0)
+  .layer(GP.zapping.lineaF7())
+  .modulateScrollX(GP.zapping.texturaF7(), GP.zapping.intensidadF7)
+  .scroll(GP.zapping.scrollXF7, 0, GP.zapping.scrollVelocidadF7)
   .mult(solid(() => GP.zapping.colorPantalla()[0], () => GP.zapping.colorPantalla()[1], () => GP.zapping.colorPantalla()[2]), GP.zapping.colorAlpha)
   .out(o1)
 
