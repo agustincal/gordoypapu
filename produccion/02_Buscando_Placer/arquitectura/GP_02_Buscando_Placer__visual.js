@@ -14,7 +14,7 @@
   if (!window.GP) window.GP = {}
   const GP = window.GP
   if (GP.zapping && GP.zapping._version === 'v1.6') return
-  GP.zapping = { _version: 'v1.6' }
+  GP.zapping = { _version: 'v1.7' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -87,7 +87,7 @@
 
   GP.zapping.pixelSize = () => 600 - (f2() ** 3) * 595
   GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40
-  GP.zapping.imanIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
+  GP.zapping.if (GP.zapping && GP.zapping._version === 'v1.6') returnIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
   GP.zapping.colorPantalla = () => colorPantalla
   GP.zapping.estadoNombre = () => estado().nombre || `estado ${estadoActual}`
@@ -111,23 +111,7 @@
     estadoActual = -1
     contadorPulsos = 0
     pasoRitmo = 0
-    velocidad = 1
-    faderBase = RAW_FADERS()
-    faderTocado = new Array(NUM_FADERS).fill(false)
-    mezclaFader = new Array(NUM_FADERS).fill(0)
-    precargarImagenes(cfg.videos)
-  }
-
-  GP.zapping.update = () => {
-    const raw = RAW_FADERS()
-    for (let i = 0; i < NUM_FADERS; i++) {
-      if (!faderTocado[i] && Math.abs(raw[i] - faderBase[i]) > UMBRAL_TOQUE) faderTocado[i] = true
-      const objetivo = faderTocado[i] ? 1 : 0
-      mezclaFader[i] += (objetivo - mezclaFader[i]) * VELOCIDAD_MEZCLA
-    }
-    f1s += (F1 / 127 - f1s) * SUAVIZADO
-    f2s += (F2 / 127 - f2s) * SUAVIZADO
-    f3s += (F3 / 127 - f3s) * SUAVIZADO
+    velocidad = 1GP.zapping = { _version: 'v1.6' }
     f4s += (F4 / 127 - f4s) * SUAVIZADO
     f5s += (F5 / 127 - f5s) * SUAVIZADO
     f6s += (F6 / 127 - f6s) * SUAVIZADO
