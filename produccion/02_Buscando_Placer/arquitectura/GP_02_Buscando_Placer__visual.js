@@ -64,6 +64,15 @@
   const SUAVIZADO = 0.15
   const clamp01 = v => Math.max(0, Math.min(1, v))
   const RAW_FADERS = () => [F1, F2, F3, F4, F5, F6, F7, F8]
+  const hslToRgb = (h, s, l) => {
+  const k = n => (n + h * 12) % 12
+  const a = s * Math.min(l, 1 - l)
+  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+  return [f(0), f(8), f(4)]
+}
+
+const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
+  [0, 1 / 3, 2 / 3].map(offset => hslToRgb((hueBase + offset) % 1, s, l))
 
   const UMBRAL_TOQUE = 3
   const VELOCIDAD_MEZCLA = 0.08
@@ -168,6 +177,11 @@
     const aplicar = (img) => {
       cfg.fuente.src = img
       cfg.fuente.dynamic = true
+
+      const paleta = generarTriadica(estado().colorBase ?? 0)
+      const color = paleta[Math.floor(Math.random() * paleta.length)]
+      rect.tinteR = color[0]; rect.tinteG = color[1]; rect.tinteB = color[2]
+
       const rango3 = 0.15 + f3() * 2
       rect.rw = 0.3 + Math.random() * rango3
       rect.rh = 0.3 + Math.random() * rango3

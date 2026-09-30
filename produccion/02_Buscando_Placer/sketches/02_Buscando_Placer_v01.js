@@ -34,19 +34,19 @@ const RUTEO = [
 const DEFAULT = { f1: 0, f2: 0, f4: 0, f5: 0, f6: 0, usaIman: true, usaBarrido: false, ritmo: 'X...', resolucion: 'semicorchea' }
 
 const ESTADOS = [
-  { nombre: 'estado 1',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X.X.X.X.X.X.X.X.' },
-  { nombre: 'estado 2',  ...DEFAULT, f3: 0.18, usaColorPantalla: true  },
-  { nombre: 'estado 3',  ...DEFAULT, f3: 0.25, usaColorPantalla: false },
-  { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' },
-  { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false },
-  { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  },
-  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 1 },
-  { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  },
-  { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false },
-  { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  },
-  { nombre: 'estado 11', ...DEFAULT, f3: 0.85, usaColorPantalla: false },
-  { nombre: 'estado 12', ...DEFAULT, f3: 0.93, usaColorPantalla: true  },
-  { nombre: 'estado 13', ...DEFAULT, f3: 1.00, usaColorPantalla: false },
+  { nombre: 'estado 1',  ...DEFAULT, f3: 0.33, colorBase: 0.00, ritmo: 'X.X.X.X.X.X.X.X.' },
+  { nombre: 'estado 2',  ...DEFAULT, f3: 0.33, colorBase: 0.08, ritmo: 'X.X.X.X.X.X.X.X.' },
+  { nombre: 'estado 3',  ...DEFAULT, f3: 0.25, colorBase: 0.15 },
+  { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, colorBase: 0.23, ritmo: 'X..X..X...X.X...' },
+  { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, colorBase: 0.31 },
+  { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, colorBase: 0.38 },
+  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, colorBase: 0.46, usaGlitchF7: true, f7: 1 },
+  { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, colorBase: 0.54 },
+  { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, colorBase: 0.62 },
+  { nombre: 'estado 10', ...DEFAULT, f3: 0.78, colorBase: 0.69 },
+  { nombre: 'estado 11', ...DEFAULT, f3: 0.85, colorBase: 0.77 },
+  { nombre: 'estado 12', ...DEFAULT, f3: 0.93, colorBase: 0.85 },
+  { nombre: 'estado 13', ...DEFAULT, f3: 1.00, colorBase: 0.92 },
 ]
 
 GP.zapping.init({
@@ -144,7 +144,6 @@ src(o0)
   .layer(GP.zapping.lineaF7())
   .modulateScrollX(GP.zapping.texturaF7(), GP.zapping.intensidadF7)
   .scroll(GP.zapping.scrollXF7, 0, GP.zapping.scrollVelocidadF7)
-  .mult(solid(() => GP.zapping.colorPantalla()[0], () => GP.zapping.colorPantalla()[1], () => GP.zapping.colorPantalla()[2]), GP.zapping.colorAlpha)
   .out(o1)
 
 render(o1)
