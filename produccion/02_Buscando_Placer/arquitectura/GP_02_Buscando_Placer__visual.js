@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.7') return
-  GP.zapping = { _version: 'v1.7' }
+  if (GP.zapping && GP.zapping._version === 'v1.8') return
+  GP.zapping = { _version: 'v1.8' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -99,7 +99,7 @@
 
   GP.zapping.usaMalaSenalF7 = () => !!estado().usaGlitchF7
   GP.zapping.texturaF7 = () => noise(30, 10).pixelate(1, 100)
-  GP.zapping.intensidadF7 = () => GP.zapping.usaMalaSenalF7() ? f7() * 0.06 : 0
+  GP.zapping.intensidadF7 = () => f7() * 0.06
 
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
     .scale(() => rect.rw, () => rect.rh)
