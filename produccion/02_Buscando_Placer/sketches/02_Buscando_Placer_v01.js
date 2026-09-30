@@ -5,7 +5,7 @@
 // Actualizado: 2026-09-27
 // ============================================================
 
-const GP_SHA = 'a58ffd2e8fcdf8de3a3adccd23a3d9af613b38cd'
+const GP_SHA = '27967efc52d28f8c7f3f21d31b7b0a1c1297e56c'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -40,7 +40,7 @@ const ESTADOS = [
   { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, usaColorPantalla: true, ritmo: 'X..X..X...X.X...' },
   { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, usaColorPantalla: false },
   { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, usaColorPantalla: true  },
-  { nombre: 'estado 7', ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 1 },
+  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, usaColorPantalla: false, usaGlitchF7: true, f7: 1 },
   { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, usaColorPantalla: true  },
   { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, usaColorPantalla: false },
   { nombre: 'estado 10', ...DEFAULT, f3: 0.78, usaColorPantalla: true  },
