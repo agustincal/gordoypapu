@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.7') return
-  GP.zapping = { _version: 'v1.9.7' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.8') return
+  GP.zapping = { _version: 'v1.9.8' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
