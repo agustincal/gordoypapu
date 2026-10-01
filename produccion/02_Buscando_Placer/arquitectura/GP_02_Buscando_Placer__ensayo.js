@@ -10,13 +10,13 @@
   if (!window.GP) window.GP = {}
   const GP = window.GP
 
-  if (GP.ensayo && GP.ensayo._version === 'v0.3') {
+  if (GP.ensayo && GP.ensayo._version === 'v0.4') {
     // el módulo ya está cargado — solo nos aseguramos de que el panel siga visible y al frente
     if (GP.ensayo._panelEl) document.body.appendChild(GP.ensayo._panelEl)
     if (GP.ensayo.overlayEstado && GP.ensayo.overlayEstado._el) document.body.appendChild(GP.ensayo.overlayEstado._el) // nuevo
     return
   }
-  GP.ensayo = { _version: 'v0.3' }
+  GP.ensayo = { _version: 'v0.4' }
 
   let grabacion = null
   let audioEl = null
