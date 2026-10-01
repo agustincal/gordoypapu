@@ -104,10 +104,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   const f8 = () => valorParam(7, estado().f8 ?? 0, f8s)
   GP.zapping.f = { f1, f2, f3, f4, f5, f6, f7, f8 }
 
-  GP.zapping.pixelSize = () => {
-    const intensidad = estado().siguenRitmo ? f2() * GP.zapping.envolventeRitmo() : f2()
-    return 600 - (intensidad ** 3) * 595
-  } 
+  GP.zapping.pixelSize = () => 600 - (f2() ** 3) * 595
   GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40 * rect.escalaAparicion
   GP.zapping.imanIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
@@ -126,7 +123,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
 
   GP.zapping.usaMalaSenalF7 = () => !!estado().usaGlitchF7
   GP.zapping.texturaF7 = () => noise(30, 10).pixelate(1, 100)
-  GP.zapping.intensidadF7 = () => f7() * 0.06
+  GP.zapping.intensidadF7 = () => f7() * 0.06 * (estado().siguenRitmo ? GP.zapping.envolventeRitmo() : 1)
   GP.zapping.scrollXF7 = () => 0.01 * f7()
   GP.zapping.scrollVelocidadF7 = () => 0.1 * f7()
   GP.zapping.lineaF7 = () => solid(0, 0, 0)
