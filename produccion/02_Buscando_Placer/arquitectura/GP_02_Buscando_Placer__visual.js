@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.3') return
-  GP.zapping = { _version: 'v1.9.3' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.4') return
+  GP.zapping = { _version: 'v1.9.4' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -110,7 +110,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.envolventeRitmo = () => {
     if (!duracionPasoActual) return 0
     const t = (performance.now() - ultimoGolpeRitmo) / duracionPasoActual
-    return t < 1 ? 1 - t : 0
+    return t < 1 ? t : 1
   }
 
   GP.zapping.iman = (px, py, fase) => shape(64, 0.2, 0.9)
