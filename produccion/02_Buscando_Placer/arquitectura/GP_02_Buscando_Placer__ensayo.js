@@ -84,6 +84,11 @@
     const hayAlgunaSalida = await buscarSalidas()
     if (!hayAlgunaSalida) { setEstado('no hay puertos MIDI virtuales — revisá loopMIDI'); return }
 
+    // limpiar cualquier reproducción anterior todavía en curso antes de programar una nueva
+    if (salidaKorg) salidaKorg.clear()
+    if (salidaAkai) salidaAkai.clear()
+    if (audioEl) { audioEl.pause(); audioEl.currentTime = 0 }
+
     const inicio = performance.now()
     let enviados = 0
     grabacion.forEach(([ms, nombreOriginal, bytes]) => {
