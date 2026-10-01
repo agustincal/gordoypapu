@@ -5,7 +5,7 @@
 // Actualizado: 2026-09-27
 // ============================================================
 
-const GP_SHA = '724e86b0da0a5fa767b2917c818a3cf0ad1d02a9'
+const GP_SHA = 'e089a4fbb5179b71799d34e79d021d2871936d1a'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)

@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.1') return
-  GP.zapping = { _version: 'v1.9.1' }
+  if (GP.zapping && GP.zapping._version === 'v2.0') return
+  GP.zapping = { _version: 'v2.0' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -31,8 +31,16 @@
   let ataqueInicio = 0
   let ataqueDur = ATAQUE_MAX
   let barriendoActivo = false
+  let velocidad = 1
+  let barriendoActivo = false
+
+  let ultimoTickReal = 0
+  let duracionTickMs = 0
+  let ultimoGolpeRitmo = 0
+  let duracionPasoActual = 0
 
   let velocidad = 1
+
   const VELOCIDAD_MIN = 0.25
   const VELOCIDAD_MAX = 8
   GP.zapping.multiplicarVelocidad = (factor) => {
@@ -101,6 +109,12 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
   GP.zapping.colorPantalla = () => colorPantalla
   GP.zapping.estadoNombre = () => estado().nombre || `estado ${estadoActual}`
+
+  GP.zapping.envolventeRitmo = () => {
+  if (!duracionPasoActual) return 0
+  const t = (performance.now() - ultimoGolpeRitmo) / duracionPasoActual
+  return t < 1 ? 1 - t : 0
+  }
 
   GP.zapping.iman = (px, py, fase) => shape(64, 0.2, 0.9)
     .scroll(() => px + 0.015 * Math.sin(time * 0.4 + fase), () => py + 0.015 * Math.cos(time * 0.3 + fase))
@@ -263,6 +277,10 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
 
   GP.zapping.pulso = () => {
     if (estadoActual < 0) return
+    const ahora = performance.now()
+    if (ultimoTickReal) duracionTickMs = ahora - ultimoTickReal
+    ultimoTickReal = ahora
+
     const patron = estado().ritmo || 'X...'
     const resolucion = FIGURAS[estado().resolucion] || FIGURAS.semicorchea
     contadorPulsos++
@@ -270,7 +288,11 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
       contadorPulsos = 0
       const paso = patron[pasoRitmo % patron.length]
       pasoRitmo = (pasoRitmo + 1) % patron.length
-      if (paso === 'X' || paso === 'x') GP.zapping.disparar(60, resolucion)
+      if (paso === 'X' || paso === 'x') {
+        GP.zapping.disparar(60, resolucion)
+        ultimoGolpeRitmo = ahora
+        duracionPasoActual = duracionTickMs * resolucion
+      }
     }
   }
 })()
