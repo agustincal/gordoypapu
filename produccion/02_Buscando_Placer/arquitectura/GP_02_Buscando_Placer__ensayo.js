@@ -3,25 +3,26 @@
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: reproductor de ensayo — reinyecta MIDI grabado (.json) y audio (.webm) sin hardware
 // Cargado por: GP_02_Buscando_Placer__loader · Descartable después del ensayo
-// Actualizado: 2026-09-27
+// Actualizado: 2026-10-01
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
 
-  if (GP.ensayo && GP.ensayo._version === 'v0.3') {
+  if (GP.ensayo && GP.ensayo._version === 'v0.5') {
     // el módulo ya está cargado — solo nos aseguramos de que el panel siga visible y al frente
     if (GP.ensayo._panelEl) document.body.appendChild(GP.ensayo._panelEl)
-    if (GP.ensayo.overlayEstado && GP.ensayo.overlayEstado._el) document.body.appendChild(GP.ensayo.overlayEstado._el) // nuevo
+    if (GP.ensayo.overlayEstado && GP.ensayo.overlayEstado._el) document.body.appendChild(GP.ensayo.overlayEstado._el)
     return
   }
-  GP.ensayo = { _version: 'v0.4' }
+  GP.ensayo = { _version: 'v0.5' }
 
   let grabacion = null
   let audioEl = null
   let salidaKorg = null
   let salidaAkai = null
+  let programados = []  // ids de setTimeout pendientes, para poder cancelarlos
 
   const panel = document.createElement('div')
   panel.id = 'gpEnsayoPanel'
@@ -79,32 +80,39 @@
     return salidaKorg || salidaAkai
   }
 
+  const detenerProgramados = () => {
+    programados.forEach(id => clearTimeout(id))
+    programados = []
+  }
+
   panel.querySelector('#gpEnsayoPlay').addEventListener('click', async () => {
-    if (!grabacion) { setEstado('falta cargar el JSON de MIDI'); return }
-    const hayAlgunaSalida = await buscarSalidas()
-    if (!hayAlgunaSalida) { setEstado('no hay puertos MIDI virtuales — revisá loopMIDI'); return }
+    try {
+      if (!grabacion) { setEstado('falta cargar el JSON de MIDI'); return }
+      const hayAlgunaSalida = await buscarSalidas()
+      if (!hayAlgunaSalida) { setEstado('no hay puertos MIDI virtuales — revisá loopMIDI'); return }
 
-    // limpiar cualquier reproducción anterior todavía en curso antes de programar una nueva
-    if (salidaKorg) salidaKorg.clear()
-    if (salidaAkai) salidaAkai.clear()
-    if (audioEl) { audioEl.pause(); audioEl.currentTime = 0 }
+      detenerProgramados()   // cancela cualquier tanda anterior todavía pendiente
+      if (audioEl) { audioEl.pause(); audioEl.currentTime = 0 }
 
-    const inicio = performance.now()
-    let enviados = 0
-    grabacion.forEach(([ms, nombreOriginal, bytes]) => {
-      const esKorgMsg = /korg|padkontrol/i.test(nombreOriginal)
-      const salida = esKorgMsg ? salidaKorg : salidaAkai
-      if (!salida) return
-      salida.send(bytes, inicio + ms)
-      enviados++
-    })
-    setEstado(`reproduciendo: ${enviados}/${grabacion.length} mensajes programados`)
-    if (audioEl) audioEl.play()
+      let enviados = 0
+      grabacion.forEach(([ms, nombreOriginal, bytes]) => {
+        const esKorgMsg = /korg|padkontrol/i.test(nombreOriginal)
+        const salida = esKorgMsg ? salidaKorg : salidaAkai
+        if (!salida) return
+        const id = setTimeout(() => salida.send(bytes), ms)
+        programados.push(id)
+        enviados++
+      })
+      setEstado(`reproduciendo: ${enviados}/${grabacion.length} mensajes programados`)
+      if (audioEl) audioEl.play()
+    } catch (err) {
+      setEstado(`error: ${err.message}`)
+      console.error('fallo en reproducir ensayo:', err)
+    }
   })
 
   panel.querySelector('#gpEnsayoStop').addEventListener('click', () => {
-    if (salidaKorg) salidaKorg.clear()
-    if (salidaAkai) salidaAkai.clear()
+    detenerProgramados()
     if (audioEl) { audioEl.pause(); audioEl.currentTime = 0 }
     setEstado('detenido')
   })
@@ -139,4 +147,4 @@ GP.ensayo.overlayEstado = (function () {
   }
 })()
 
-})()   // <- este es el que faltaba: cierra el IIFE de todo el archivo (el que abre en la línea 9)
+})()   // <- cierra el IIFE de todo el archivo (el que abre en la línea 9)
