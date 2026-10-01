@@ -1,7 +1,7 @@
 // ============================================================
 // GP_02_Buscando_Placer__visual
 // Canción 02 · Buscando Placer (Gordo y Papu)
-// Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes,
+// Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes/videos,
 //      disparo de recuadros, ráfaga, barrido (distancia según nota), iman,
 //      efectos de escena en F7/F8 (mala señal, y un slot libre)
 // Faders: F1-F4 = efectos recuadro, F5-F8 = efectos escena. Cada estado define
@@ -49,7 +49,9 @@
   }
   GP.zapping.velocidad = () => velocidad
 
+  // --- precarga de medios (imagen o video) ---
   let imagenesPrecargadas = []
+  let videoActivo = null   // referencia al <video> que está reproduciéndose ahora mismo
 
   const crearMedio = (url, modo) => {
     if (modo === 'video') {
@@ -58,10 +60,14 @@
       vid.muted = true
       vid.loop = true
       vid.playsInline = true
+      vid.preload = 'auto'
       vid.src = url
       vid.load()
-      vid.play().catch(() => {})
       return vid
+      // nota: no se llama .play() acá a propósito — solo se reproduce el
+      // video activo (ver aplicar() en disparar), para no saturar los
+      // decoders de hardware del navegador con todo el pool reproduciendo
+      // en simultáneo
     }
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -69,7 +75,7 @@
     return img
   }
 
-   const liberarMedios = () => {
+  const liberarMedios = () => {
     imagenesPrecargadas.forEach(media => {
       if (media && media.tagName === 'VIDEO') {
         media.pause()
@@ -77,6 +83,7 @@
         media.load()
       }
     })
+    videoActivo = null
   }
 
   const medioListo = (media, modo) =>
@@ -230,6 +237,13 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
     rect.sueltaPendiente = false
 
     const aplicar = (img) => {
+      if (cfg.modo === 'video') {
+        if (videoActivo && videoActivo !== img) videoActivo.pause()
+        try { img.currentTime = 0 } catch (e) {}
+        img.play().catch(() => {})
+        videoActivo = img
+      }
+
       cfg.fuente.src = img
       cfg.fuente.dynamic = true
 
@@ -270,10 +284,9 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
       rect.cargando = false
     }
 
-        const i = Math.floor(Math.random() * cfg.videos.length)
+    const i = Math.floor(Math.random() * cfg.videos.length)
     const precargada = imagenesPrecargadas[i]
     if (medioListo(precargada, cfg.modo)) {
-      if (cfg.modo === 'video') { try { precargada.currentTime = 0 } catch (e) {} }
       aplicar(precargada)
       return
     }

@@ -22,7 +22,7 @@ const BASE_VIDEOS   = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/pr
 const archivosImagen = ['01.jpg', '02.jpg', '03.jpg', '04.jpg', '05.jpg', '06.jpg'].map(n => BASE_IMAGENES + n)
 
 const DESDE = 1
-const HASTA = 7
+const HASTA = 20
 const archivosVideo = Array.from({ length: HASTA - DESDE + 1 }, (_, i) =>
   BASE_VIDEOS + `Kim_chi_fied_rice_${String(DESDE + i).padStart(2, '0')}.mp4`
 )
