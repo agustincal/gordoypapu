@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.8') return
-  GP.zapping = { _version: 'v1.9.8' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.9') return
+  GP.zapping = { _version: 'v1.9.9' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -125,7 +125,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.texturaF7 = () => noise(30, 10).pixelate(1, 100)
   GP.zapping.intensidadF7 = () => f7() * 0.06 * (estado().siguenRitmo ? GP.zapping.envolventeRitmo() : 1)
   GP.zapping.scrollXF7 = () => 0.01 * f7()
-  GP.zapping.scrollVelocidadF7 = () => 0.1 * f7()
+  GP.zapping.scrollVelocidadF7 = () => 0.1 * f7() * (estado().siguenRitmo ? GP.zapping.envolventeRitmo() : 1)
   GP.zapping.lineaF7 = () => solid(0, 0, 0)
     .mask(shape(4, 1, 0).scale(0.015, .2, 200))
     .scrollX(-0.5)
