@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.5') return
-  GP.zapping = { _version: 'v1.9.5' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.6') return
+  GP.zapping = { _version: 'v1.9.6' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -108,7 +108,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
     const intensidad = estado().siguenRitmo ? f2() * GP.zapping.envolventeRitmo() : f2()
     return 600 - (intensidad ** 3) * 595
   } 
-  GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40
+  GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40 * rect.escalaAparicion
   GP.zapping.imanIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
   GP.zapping.colorPantalla = () => colorPantalla
@@ -137,7 +137,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.intensidadF1 = () => f1() * .5 * (estado().siguenRitmo ? GP.zapping.envolventeRitmo() : 1)
 
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
-    .scale(() => rect.rw * rect.escalaAparicion, () => rect.rh * rect.escalaAparicion)
+    .scale(() => rect.rw, () => rect.rh)
     .scrollX(() => rect.rx)
     .scrollY(() => rect.ry)
     .modulateScrollX(noise(3, .4).pixelate(1, 120), GP.zapping.intensidadF1)
