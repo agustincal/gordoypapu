@@ -5,7 +5,7 @@
 // Actualizado: 2026-09-27
 // ============================================================
 
-const GP_SHA = 'a3831b7ccb28834b091a1d470cb50d514a817a42'
+const GP_SHA = '33dc71cb6f667a8cc6845059745e41fdf8c5d5f9'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -14,13 +14,18 @@ await GP.midi.start({ outputName: 'APC MINI' })
 GP.midi.buttons(['N11', 'N81', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N88'])
 GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'])
 
-const MODO_FUENTE = 'imagen'   // 'imagen' | 'video' — cambiá esto para probar
+const MODO_FUENTE = 'video'   // 'imagen' | 'video' — cambiá esto para probar
 
 const BASE_IMAGENES = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/sequence01/'
 const BASE_VIDEOS   = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/videos01/'
 
 const archivosImagen = ['01.jpg', '02.jpg', '03.jpg', '04.jpg', '05.jpg', '06.jpg'].map(n => BASE_IMAGENES + n)
-const archivosVideo  = ['01.mp4', '02.mp4', '03.mp4', '04.mp4', '05.mp4', '06.mp4'].map(n => BASE_VIDEOS + n)
+
+const DESDE = 1
+const HASTA = 7
+const archivosVideo = Array.from({ length: HASTA - DESDE + 1 }, (_, i) =>
+  BASE_VIDEOS + `Kim_chi_fied_rice_${String(DESDE + i).padStart(2, '0')}.mp4`
+)
 
 const videos = MODO_FUENTE === 'video' ? archivosVideo : archivosImagen
 const VIDEO_ASPECT = MODO_FUENTE === 'video' ? (720 / 1280) : 1

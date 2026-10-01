@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v2.0') return
-  GP.zapping = { _version: 'v2.0' }
+  if (GP.zapping && GP.zapping._version === 'v2.1') return
+  GP.zapping = { _version: 'v2.1' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -69,12 +69,23 @@
     return img
   }
 
+   const liberarMedios = () => {
+    imagenesPrecargadas.forEach(media => {
+      if (media && media.tagName === 'VIDEO') {
+        media.pause()
+        media.removeAttribute('src')
+        media.load()
+      }
+    })
+  }
+
   const medioListo = (media, modo) =>
     modo === 'video'
       ? !!media && media.readyState >= 3
       : !!media && media.complete && media.naturalWidth > 0
 
   const precargarImagenes = (urls, modo) => {
+    liberarMedios()
     imagenesPrecargadas = urls.map(url => crearMedio(url, modo))
   }
 
