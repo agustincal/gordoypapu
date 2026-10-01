@@ -8,14 +8,14 @@
 //         un valor 0-1 directo; tocar el fader físico lo toma en vivo (takeover,
 //         con transición suave) hasta el próximo cambio de estado.
 // Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
-// Actualizado: 2026-09-30
+// Actualizado: 2026-10-01
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v2.0') return
-  GP.zapping = { _version: 'v2.0' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.2') return
+  GP.zapping = { _version: 'v1.9.2' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -31,8 +31,6 @@
   let ataqueInicio = 0
   let ataqueDur = ATAQUE_MAX
   let barriendoActivo = false
-  let velocidad = 1
-  let barriendoActivo = false
 
   let ultimoTickReal = 0
   let duracionTickMs = 0
@@ -40,7 +38,6 @@
   let duracionPasoActual = 0
 
   let velocidad = 1
-
   const VELOCIDAD_MIN = 0.25
   const VELOCIDAD_MAX = 8
   GP.zapping.multiplicarVelocidad = (factor) => {
@@ -111,9 +108,9 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.estadoNombre = () => estado().nombre || `estado ${estadoActual}`
 
   GP.zapping.envolventeRitmo = () => {
-  if (!duracionPasoActual) return 0
-  const t = (performance.now() - ultimoGolpeRitmo) / duracionPasoActual
-  return t < 1 ? 1 - t : 0
+    if (!duracionPasoActual) return 0
+    const t = (performance.now() - ultimoGolpeRitmo) / duracionPasoActual
+    return t < 1 ? 1 - t : 0
   }
 
   GP.zapping.iman = (px, py, fase) => shape(64, 0.2, 0.9)
