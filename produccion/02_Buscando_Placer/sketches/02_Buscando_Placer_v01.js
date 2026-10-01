@@ -5,7 +5,7 @@
 // Actualizado: 2026-09-27
 // ============================================================
 
-const GP_SHA = '27967efc52d28f8c7f3f21d31b7b0a1c1297e56c'
+const GP_SHA = 'b37720ffb64a5304fc19c0a7fe422d4bee0d860b'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -31,23 +31,26 @@ const RUTEO = [
   { dispositivo: 'akai', notas: [98], accion: 'grabadorCiclo',  led: true },
 ]
 
-const DEFAULT = { f1: 0, f2: 0, f4: 0, f5: 0, f6: 0, usaIman: true, usaBarrido: false, ritmo: 'X...', resolucion: 'semicorchea' }
+// orden de columnas: nombre, f1, f2, f3, f4, f5, f6, f7, f8, usaIman, usaBarrido, colorBase, ritmo, resolucion
+const CAMPOS = ['nombre', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'usaIman', 'usaBarrido', 'colorBase', 'ritmo', 'resolucion']
 
-const ESTADOS = [
-  { nombre: 'estado 1',  ...DEFAULT, f3: 0.33, colorBase: 0.00, ritmo: 'X.X.X.X.X.X.X.X.' },
-  { nombre: 'estado 2',  ...DEFAULT, f3: 0.33, colorBase: 0.08, ritmo: 'X.X.X.X.X.X.X.X.' },
-  { nombre: 'estado 3',  ...DEFAULT, f3: 0.25, colorBase: 0.15 },
-  { nombre: 'estado 4',  ...DEFAULT, f3: 0.33, colorBase: 0.23, ritmo: 'X..X..X...X.X...' },
-  { nombre: 'estado 5',  ...DEFAULT, f3: 0.40, colorBase: 0.31 },
-  { nombre: 'estado 6',  ...DEFAULT, f3: 0.48, colorBase: 0.38 },
-  { nombre: 'estado 7',  ...DEFAULT, f3: 0.55, colorBase: 0.46, usaGlitchF7: true, f7: 1 },
-  { nombre: 'estado 8',  ...DEFAULT, f3: 0.63, colorBase: 0.54 },
-  { nombre: 'estado 9',  ...DEFAULT, f3: 0.70, colorBase: 0.62 },
-  { nombre: 'estado 10', ...DEFAULT, f3: 0.78, colorBase: 0.69 },
-  { nombre: 'estado 11', ...DEFAULT, f3: 0.85, colorBase: 0.77 },
-  { nombre: 'estado 12', ...DEFAULT, f3: 0.93, colorBase: 0.85 },
-  { nombre: 'estado 13', ...DEFAULT, f3: 1.00, colorBase: 0.92 },
+const TABLA = [
+  ['estado 1',  0.00, 0.05, 0.20, 0.00, 0.00, 0.50, 0.00, 0.00, false, false, 0.00, 'X...',                'semicorchea'],
+  ['estado 2',  0.00, 0.05, 0.28, 0.00, 0.00, 0.10, 0.00, 0.00, false, false, 0.08, 'X...',                'semicorchea'],
+  ['estado 3',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X.....X.X...X.X',    'semicorchea'],
+  ['estado 4',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X..',                'semicorchea'],
+  ['estado 5',  0.60, 0.10, 0.55, 0.40, 0.30, 0.65, 0.00, 0.00, true,  true,  0.40, '.....X.X.XXX.X..',    'semicorchea'],
+  ['estado 6',  0.10, 0.05, 0.45, 0.15, 0.10, 0.10, 0.00, 0.00, true,  false, 0.45, '.X.X.X.X.X...X.X',    'semicorchea'],
+  ['estado 7',  0.35, 0.10, 0.60, 0.35, 0.35, 0.15, 0.00, 0.00, true,  true,  0.52, '.....X.X.XXX.X.X',    'semicorchea'],
+  ['estado 8',  0.75, 0.75, 0.65, 0.45, 0.45, 0.70, 0.00, 0.00, true,  true,  0.60, '...X.X.X.X...X.X',    'semicorchea'],
+  ['estado 9',  0.10, 0.05, 0.35, 0.15, 0.10, 0.10, 0.00, 0.00, true,  false, 0.68, '...X.X.X.X.X.X.X',    'semicorchea'],
+  ['estado 10', 0.00, 0.05, 0.20, 0.05, 0.00, 0.05, 0.00, 0.00, false, false, 0.75, '..X..X.......X.X',    'semicorchea'],
+  ['estado 11', 0.45, 0.10, 0.55, 0.35, 0.40, 0.15, 0.00, 0.00, true,  true,  0.83, '.X.X.....X...X.X',    'semicorchea'],
+  ['estado 12', 1.00, 0.75, 1.00, 0.85, 1.00, 0.80, 0.00, 0.00, true,  true,  0.90, '.....X...X.X.X..',    'semicorchea'],
+  ['estado 13', 0.20, 0.05, 0.50, 0.30, 0.20, 0.10, 0.00, 0.00, true,  false, 0.97, 'X...',                'corchea'],
 ]
+
+const ESTADOS = TABLA.map(fila => Object.fromEntries(CAMPOS.map((campo, i) => [campo, fila[i]])))
 
 GP.zapping.init({
   videos,
