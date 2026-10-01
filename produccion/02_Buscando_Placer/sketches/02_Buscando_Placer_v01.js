@@ -5,7 +5,7 @@
 // Actualizado: 2026-09-27
 // ============================================================
 
-const GP_SHA = '0a85a41867b4d6ccb932f807ad0e446be344374c'
+const GP_SHA = '5c9528882514dac0657dd1d382e9ba749887ccd1'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -35,7 +35,7 @@ const RUTEO = [
 const CAMPOS = ['nombre', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'usaIman', 'usaBarrido', 'colorBase', 'ritmo', 'resolucion', 'siguenRitmo']
 
 const TABLA = [
-  ['estado 1',  0.75, 0.75, 0.65, 0.45, 0.45, 0.70, 0.00, 0.00, true,  true,  0.60, '...X.X.X.X...X.X',    'semicorchea', true],
+  ['estado 1',  0.75, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.00, true,  true,  0.00, '...X.X.X.X...X.X',    'semicorchea', true],
   ['estado 2',  0.00, 0.05, 0.28, 0.00, 0.00, 0.10, 0.00, 0.00, false, false, 0.08, 'X...',                'semicorchea', false],
   ['estado 3',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X.....X.X...X.X',    'semicorchea', false],
   ['estado 4',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X..',                'semicorchea', false],

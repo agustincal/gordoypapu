@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.4') return
-  GP.zapping = { _version: 'v1.9.4' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.5') return
+  GP.zapping = { _version: 'v1.9.5' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -36,6 +36,10 @@
   let duracionTickMs = 0
   let ultimoGolpeRitmo = 0
   let duracionPasoActual = 0
+
+  let apareciendoActivo = false
+  let apareceInicio = 0
+  let apareceDur = 0.15   // segundos, corto y fijo — ajustable
 
   let velocidad = 1
   const VELOCIDAD_MIN = 0.25
@@ -100,7 +104,10 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   const f8 = () => valorParam(7, estado().f8 ?? 0, f8s)
   GP.zapping.f = { f1, f2, f3, f4, f5, f6, f7, f8 }
 
-  GP.zapping.pixelSize = () => 600 - (f2() ** 3) * 595
+  GP.zapping.pixelSize = () => {
+    const intensidad = estado().siguenRitmo ? f2() * GP.zapping.envolventeRitmo() : f2()
+    return 600 - (intensidad ** 3) * 595
+  } 
   GP.zapping.escalaExtra = () => 1 + (f6() ** 3) * 40
   GP.zapping.imanIntensidad = (voz) => estado().usaIman ? voz * f5() * f5() : 0
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
@@ -130,7 +137,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.intensidadF1 = () => f1() * .5 * (estado().siguenRitmo ? GP.zapping.envolventeRitmo() : 1)
 
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
-    .scale(() => rect.rw, () => rect.rh)
+    .scale(() => rect.rw * rect.escalaAparicion, () => rect.rh * rect.escalaAparicion)
     .scrollX(() => rect.rx)
     .scrollY(() => rect.ry)
     .modulateScrollX(noise(3, .4).pixelate(1, 120), GP.zapping.intensidadF1)
@@ -162,6 +169,14 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
     f6s += (F6 / 127 - f6s) * SUAVIZADO
     f7s += (F7 / 127 - f7s) * SUAVIZADO
     f8s += (F8 / 127 - f8s) * SUAVIZADO
+
+    if (apareciendoActivo) {
+      const t = Math.min(1, (time - apareceInicio) / apareceDur)
+      const e = 1 - Math.pow(1 - t, 3)
+      rect.escalaAparicion = e
+      if (t >= 1) apareciendoActivo = false
+    }
+
     if (!barriendoActivo) return
     const t = Math.min(1, (time - ataqueInicio) / ataqueDur)
     const e = 1 - Math.pow(1 - t, 3)
@@ -220,6 +235,11 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
         rect.imgX = rect.imgXFin; rect.imgY = rect.imgYFin
         barriendoActivo = false
       }
+
+      apareceInicio = time
+      apareciendoActivo = true
+      rect.escalaAparicion = 0
+
       rect.cargando = false
     }
 
