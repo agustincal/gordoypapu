@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.2') return
-  GP.zapping = { _version: 'v1.9.2' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.3') return
+  GP.zapping = { _version: 'v1.9.3' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -127,11 +127,13 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
     .scrollX(-0.5)
     .mult(solid(1, 1, 1), () => f7() > 0.02 ? 1 : 0)
 
+  GP.zapping.intensidadF1 = () => f1() * .5 * (estado().siguenRitmo ? GP.zapping.envolventeRitmo() : 1)
+
   GP.zapping.rectShape = () => shape(4, 1, 0.001)
     .scale(() => rect.rw, () => rect.rh)
     .scrollX(() => rect.rx)
     .scrollY(() => rect.ry)
-    .modulateScrollX(noise(3, .4).pixelate(1, 120), () => f1() * .5)
+    .modulateScrollX(noise(3, .4).pixelate(1, 120), GP.zapping.intensidadF1)
 
   GP.zapping.init = (config) => {
     cfg = Object.assign({ rafagaCantidad: 3, rafagaPoll: 30 }, config)
