@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.6') return
-  GP.zapping = { _version: 'v1.9.6' }
+  if (GP.zapping && GP.zapping._version === 'v1.9.7') return
+  GP.zapping = { _version: 'v1.9.7' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -39,7 +39,7 @@
 
   let apareciendoActivo = false
   let apareceInicio = 0
-  let apareceDur = 0.15   // segundos, corto y fijo — ajustable
+  let apareceDur = 0.45   // segundos, corto y fijo — ajustable
 
   let velocidad = 1
   const VELOCIDAD_MIN = 0.25
