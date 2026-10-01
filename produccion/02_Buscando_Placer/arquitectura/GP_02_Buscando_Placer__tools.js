@@ -3,15 +3,20 @@
 // Canción 02 · Buscando Placer (Gordo y Papu)
 // Rol: panel MIDI en pantalla + grabador de audio/MIDI para ensayo
 // Standalone · Cargado por: GP_02_Buscando_Placer__loader
-// Actualizado: 2026-09-27
+// Actualizado: 2026-10-01
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
 
-  if (GP.tools && GP.tools._version === 'v0.4') return
-  GP.tools = { _version: 'v0.4' }
+  if (GP.tools && GP.tools._version === 'v0.5') {
+    if (GP.tools._panelEl && !document.body.contains(GP.tools._panelEl)) {
+      document.body.appendChild(GP.tools._panelEl)
+    }
+    return
+  }
+  GP.tools = { _version: 'v0.5' }
 
   // ---- panel MIDI en pantalla ----
   let panelEl = null
@@ -28,6 +33,7 @@
         max-width: 340px; white-space: pre; pointer-events: none;
       `
       document.body.appendChild(panelEl)
+      GP.tools._panelEl = panelEl   // expuesto para poder reinsertarlo si se desprende del DOM
     }
     return panelEl
   }
