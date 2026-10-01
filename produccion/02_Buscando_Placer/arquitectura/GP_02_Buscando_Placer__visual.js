@@ -14,8 +14,8 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v1.9.9') return
-  GP.zapping = { _version: 'v1.9.9' }
+  if (GP.zapping && GP.zapping._version === 'v2.0') return
+  GP.zapping = { _version: 'v2.0' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -50,13 +50,32 @@
   GP.zapping.velocidad = () => velocidad
 
   let imagenesPrecargadas = []
-  const precargarImagenes = (urls) => {
-    imagenesPrecargadas = urls.map(url => {
-      const img = new Image()
-      img.crossOrigin = 'anonymous'
-      img.src = url
-      return img
-    })
+
+  const crearMedio = (url, modo) => {
+    if (modo === 'video') {
+      const vid = document.createElement('video')
+      vid.crossOrigin = 'anonymous'
+      vid.muted = true
+      vid.loop = true
+      vid.playsInline = true
+      vid.src = url
+      vid.load()
+      vid.play().catch(() => {})
+      return vid
+    }
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = url
+    return img
+  }
+
+  const medioListo = (media, modo) =>
+    modo === 'video'
+      ? !!media && media.readyState >= 3
+      : !!media && media.complete && media.naturalWidth > 0
+
+  const precargarImagenes = (urls, modo) => {
+    imagenesPrecargadas = urls.map(url => crearMedio(url, modo))
   }
 
   const rect = {
@@ -148,7 +167,7 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
     faderBase = RAW_FADERS()
     faderTocado = new Array(NUM_FADERS).fill(false)
     mezclaFader = new Array(NUM_FADERS).fill(0)
-    precargarImagenes(cfg.videos)
+    precargarImagenes(cfg.videos, cfg.modo)
   }
 
   GP.zapping.update = () => {
@@ -240,27 +259,26 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
       rect.cargando = false
     }
 
-    const i = Math.floor(Math.random() * cfg.videos.length)
+        const i = Math.floor(Math.random() * cfg.videos.length)
     const precargada = imagenesPrecargadas[i]
-    if (precargada && precargada.complete && precargada.naturalWidth > 0) {
+    if (medioListo(precargada, cfg.modo)) {
+      if (cfg.modo === 'video') { try { precargada.currentTime = 0 } catch (e) {} }
       aplicar(precargada)
       return
     }
-    const img = new Image()
-    img.crossOrigin = 'anonymous'
-    img.src = cfg.videos[i]
+    const media = crearMedio(cfg.videos[i], cfg.modo)
     const timeoutId = setTimeout(() => {
-      console.warn('imagen tardó demasiado en cargar, se libera el disparo:', cfg.videos[i])
+      console.warn('medio tardó demasiado en cargar, se libera el disparo:', cfg.videos[i])
       rect.cargando = false
     }, 4000)
-    img.addEventListener('error', () => {
-      console.warn('error al cargar la imagen, se libera el disparo:', cfg.videos[i])
+    media.addEventListener('error', () => {
+      console.warn('error al cargar el medio, se libera el disparo:', cfg.videos[i])
       clearTimeout(timeoutId)
       rect.cargando = false
     }, { once: true })
-    img.addEventListener('load', () => {
+    media.addEventListener(cfg.modo === 'video' ? 'loadeddata' : 'load', () => {
       clearTimeout(timeoutId)
-      aplicar(img)
+      aplicar(media)
     }, { once: true })
   }
 

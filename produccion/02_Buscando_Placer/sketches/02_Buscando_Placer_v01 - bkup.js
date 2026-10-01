@@ -14,16 +14,9 @@ await GP.midi.start({ outputName: 'APC MINI' })
 GP.midi.buttons(['N11', 'N81', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N88'])
 GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'])
 
-const MODO_FUENTE = 'imagen'   // 'imagen' | 'video' — cambiá esto para probar
-
 const BASE_IMAGENES = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/sequence01/'
-const BASE_VIDEOS   = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/videos01/'
-
-const archivosImagen = ['01.jpg', '02.jpg', '03.jpg', '04.jpg', '05.jpg', '06.jpg'].map(n => BASE_IMAGENES + n)
-const archivosVideo  = ['01.mp4', '02.mp4', '03.mp4', '04.mp4', '05.mp4', '06.mp4'].map(n => BASE_VIDEOS + n)
-
-const videos = MODO_FUENTE === 'video' ? archivosVideo : archivosImagen
-const VIDEO_ASPECT = MODO_FUENTE === 'video' ? (720 / 1280) : 1
+const videos = ['01.jpg', '02.jpg', '03.jpg', '04.jpg', '05.jpg', '06.jpg'].map(n => BASE_IMAGENES + n)
+const VIDEO_ASPECT = 1
 const AJUSTE = 1
 
 const AKAI = /apc|akai/i
@@ -61,7 +54,6 @@ const ESTADOS = TABLA.map(fila => Object.fromEntries(CAMPOS.map((campo, i) => [c
 
 GP.zapping.init({
   videos,
-  modo: MODO_FUENTE,
   estados: ESTADOS,
   rafagaCantidad: 3,
   rafagaPoll: 30,
@@ -74,7 +66,7 @@ const DEAD = 0.5
 const limpiar = v => v < DEAD ? 0 : (v - DEAD) / (1 - DEAD)
 const VOZ = () => limpiar(Math.min(1, a.fft[0]))
 
-if (MODO_FUENTE === 'video') { s1.initVideo(videos[0]) } else { s1.initImage(videos[0]) }
+s1.initImage(videos[0])
 GP.tools.panel().textContent = 'esperando MIDI...'
 
 update = () => GP.zapping.update()
