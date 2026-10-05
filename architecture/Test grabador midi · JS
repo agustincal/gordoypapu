@@ -1,0 +1,99 @@
+// ============================================================
+// test_grabador_midi
+// Sketch mínimo de control: grabador de ensayo (audio + MIDI)
+// y monitor de entradas MIDI en pantalla.
+// Carga solo: GP_02_Buscando_Placer__tools.js
+// Actualizado: 2026-10-01
+// ============================================================
+
+const GP_SHA = 'main'   // cuando quieras fijarlo, pegá acá el hash completo
+const GP_TOOLS_URL = `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__tools.js`
+
+await loadScript(GP_TOOLS_URL)
+console.log('tools cargado:', GP.tools._version)
+
+GP.tools.panel()          // panel verde arriba a la izquierda (últimos 12 mensajes)
+GP.tools.atajosTeclado()  // Ctrl+Alt+R grabar · Ctrl+Alt+S detener · Ctrl+Alt+D descargar
+
+// ---- saber si está grabando (para mostrarlo en pantalla) ----
+const g = GP.tools.grabador
+if (!g._envuelto) {
+  const iniOriginal = g.iniciar
+  const detOriginal = g.detener
+  g.iniciar = async () => { window._gpTestGrabando = true; return iniOriginal() }
+  g.detener = () => { window._gpTestGrabando = false; return detOriginal() }
+  g._envuelto = true
+}
+
+// ---- barra de estado (abajo a la izquierda, fuera de Hydra) ----
+let estadoEl = document.getElementById('gpTestEstado')
+if (!estadoEl) {
+  estadoEl = document.createElement('div')
+  estadoEl.id = 'gpTestEstado'
+  estadoEl.style.cssText = `
+    position: fixed; bottom: 8px; left: 8px; z-index: 99999;
+    background: rgba(0,0,0,0.7); color: #fff;
+    font: 12px/1.5 monospace; padding: 6px 10px;
+    white-space: pre; pointer-events: none;
+  `
+  document.body.appendChild(estadoEl)
+}
+
+// ---- monitor MIDI ----
+let puertos = []
+let flash = 0
+let clockPulsos = 0
+let clockUltimaNegra = 0
+let clockUltimoPulso = 0
+let bpm = 0
+
+const contarClock = () => {
+  const ahora = performance.now()
+  clockUltimoPulso = ahora
+  clockPulsos++
+  if (clockPulsos % 24 === 0) {          // 24 pulsos = 1 negra
+    if (clockUltimaNegra) bpm = 60000 / (ahora - clockUltimaNegra)
+    clockUltimaNegra = ahora
+  }
+}
+
+navigator.requestMIDIAccess().then(acc => {
+  const conectar = () => {
+    puertos = []
+    acc.inputs.forEach(entrada => {
+      puertos.push(entrada.name)
+      entrada.onmidimessage = (msg) => {
+        const data = msg.data
+        GP.tools.grabador.registrar(entrada.name, data)   // se graba TODO, clock incluido
+
+        if (data[0] === 0xF8) { contarClock(); return }   // clock: no se loguea, solo se cuenta
+        if (data[0] >= 0xF0) return                       // otros mensajes de sistema: se ignoran
+
+        GP.tools.log(entrada.name, data)
+
+        const tipo = data[0] & 0xf0
+        const esNoteOn = tipo === 0x90 && data[2] > 0
+        if (esNoteOn) flash = 1
+
+        // pad del grabador en el Akai (nota 98): iniciar → detener → descargar
+        if (esNoteOn && data[1] === 98 && /apc|akai/i.test(entrada.name)) GP.tools.grabadorCiclo()
+      }
+    })
+  }
+  conectar()
+  acc.onstatechange = conectar   // si enchufás/desenchufás algo, se reconecta solo
+}).catch(err => console.warn('sin acceso MIDI:', err))
+
+// ---- visual: destello en cada nota que entra ----
+solid(() => flash * 0.4, () => flash, () => flash * 0.4).out()
+
+update = (dt) => {
+  flash = Math.max(0, flash - dt / 300)
+  if (performance.now() - clockUltimoPulso > 1000) bpm = 0   // sin clock hace 1s
+
+  estadoEl.textContent = [
+    window._gpTestGrabando ? '● GRABANDO' : '○ sin grabar',
+    `clock: ${bpm ? bpm.toFixed(1) + ' BPM' : 'sin clock'}`,
+    `entradas: ${puertos.length ? puertos.join(' · ') : 'ninguna'}`,
+  ].join('\n')
+}
