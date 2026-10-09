@@ -4,7 +4,7 @@
 // Actualizado: 2026-10-09 (Integración de canalRitmo por estado)
 // ============================================================
 
-const GP_SHA = 'b5e2f92616b0125641bc91bbdd9cdc919c4913b2'
+const GP_SHA = '81aabc361e72d1f94208493e311b8da1a7037ff4'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/arquitectura/GP_02_Buscando_Placer__loader.js`)
 await GP_cargarModulosBuscandoPlacer(GP_SHA)
@@ -13,7 +13,7 @@ await GP.midi.start({ outputName: 'APC MINI' })
 GP.midi.buttons(['N11', 'N81', 'N82', 'N83', 'N84', 'N85', 'N86', 'N87', 'N88'])
 GP.midi.faders(['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8'])
 
-const MODO_FUENTE = 'video'   // 'imagen' | 'video'
+const MODO_FUENTE = 'imagen'   // 'imagen' | 'video'
 
 const BASE_IMAGENES = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/sequence01/'
 const BASE_VIDEOS   = 'https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@main/produccion/02_Buscando_Placer/assets/videos01/'
@@ -46,19 +46,19 @@ const CAMPOS = ['nombre', 'f1', 'f2', 'f3', 'f4', 'f5', 'f6', 'f7', 'f8', 'usaIm
 
 const TABLA = [
   // Última columna (ej. 10, [2,3] o null) define qué canal MIDI manda el ritmo en este estado
-  ['estado 1',  0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.10, 0.00, true,  false,  0.00, '...X.X.X.X...X.X',    'semicorchea', true, null],
-  ['estado 2',  0.00, 0.05, 0.28, 0.00, 0.00, 0.90, 0.00, 0.00, false, false, 0.08, 'X...',                'semicorchea', true, null],
-  ['estado 3',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X.....X.X...X.X',    'semicorchea', false, null],
-  ['estado 4',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X..',                'semicorchea', false, null],
-  ['estado 5',  0.60, 0.10, 0.55, 0.40, 0.30, 0.65, 0.00, 0.00, true,  true,  0.40, '.....X.X.XXX.X..',    'semicorchea', false, null],
-  ['estado 6',  0.10, 0.05, 0.45, 0.15, 0.10, 0.10, 0.00, 0.00, true,  false, 0.45, '.X.X.X.X.X...X.X',    'semicorchea', false, null],
-  ['estado 7',  0.35, 0.10, 0.60, 0.35, 0.35, 0.15, 0.00, 0.00, true,  true,  0.52, '.....X.X.XXX.X.X',    'semicorchea', false, null],
-  ['estado 8',  0.75, 0.75, 0.65, 0.45, 0.45, 0.70, 0.00, 0.00, true,  true,  0.60, '...X.X.X.X...X.X',    'semicorchea', false, null],
-  ['estado 9',  0.10, 0.05, 0.35, 0.15, 0.10, 0.10, 0.00, 0.00, true,  false, 0.68, '...X.X.X.X.X.X.X',    'semicorchea', false, null],
-  ['estado 10', 0.00, 0.05, 0.20, 0.05, 0.00, 0.05, 0.00, 0.00, false, false, 0.75, '..X..X.......X.X',    'semicorchea', false, null],
-  ['estado 11', 0.45, 0.10, 0.55, 0.35, 0.40, 0.15, 0.00, 0.00, true,  true,  0.83, '.X.X.....X...X.X',    'semicorchea', false, null],
-  ['estado 12', 1.00, 0.75, 1.00, 0.85, 1.00, 0.80, 0.00, 0.00, true,  true,  0.90, '.....X...X.X.X..',    'semicorchea', false, null],
-  ['estado 13', 0.20, 0.05, 0.50, 0.30, 0.20, 0.10, 0.00, 0.00, true,  false, 0.97, 'X...',                'corchea', false, null],
+  ['estado 1',  0.00, 0.00, 0.00, 0.00, 0.00, 0.00, 0.10, 0.00, true,  false,  0.00, null,    'semicorchea', true, 10],
+  ['estado 2',  0.00, 0.05, 0.28, 0.00, 0.00, 0.90, 0.00, 0.00, false, false, 0.08, null,     'semicorchea', true, 10],
+  ['estado 3',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, null,     'semicorchea', false, 10],
+  ['estado 4',  0.00, 0.05, 0.36, 0.00, 0.00, 0.08, 0.00, 0.00, false, false, 0.15, '.X..',                'semicorchea', false, 10],
+  ['estado 5',  0.60, 0.10, 0.55, 0.40, 0.30, 0.65, 0.00, 0.00, true,  true,  0.40, '.....X.X.XXX.X..',    'semicorchea', false, 10],
+  ['estado 6',  0.10, 0.05, 0.45, 0.15, 0.10, 0.10, 0.00, 0.00, true,  false, 0.45, '.X.X.X.X.X...X.X',    'semicorchea', false, 10],
+  ['estado 7',  0.35, 0.10, 0.60, 0.35, 0.35, 0.15, 0.00, 0.00, true,  true,  0.52, '.....X.X.XXX.X.X',    'semicorchea', false, 10],
+  ['estado 8',  0.75, 0.75, 0.65, 0.45, 0.45, 0.70, 0.00, 0.00, true,  true,  0.60, '...X.X.X.X...X.X',    'semicorchea', false, 10],
+  ['estado 9',  0.10, 0.05, 0.35, 0.15, 0.10, 0.10, 0.00, 0.00, true,  false, 0.68, '...X.X.X.X.X.X.X',    'semicorchea', false, 10],
+  ['estado 10', 0.00, 0.05, 0.20, 0.05, 0.00, 0.05, 0.00, 0.00, false, false, 0.75, '..X..X.......X.X',    'semicorchea', false, 10],
+  ['estado 11', 0.45, 0.10, 0.55, 0.35, 0.40, 0.15, 0.00, 0.00, true,  true,  0.83, '.X.X.....X...X.X',    'semicorchea', false, 10],
+  ['estado 12', 1.00, 0.75, 1.00, 0.85, 1.00, 0.80, 0.00, 0.00, true,  true,  0.90, '.....X...X.X.X..',    'semicorchea', false, 10],
+  ['estado 13', 0.20, 0.05, 0.50, 0.30, 0.20, 0.10, 0.00, 0.00, true,  false, 0.97, 'X...',                'corchea', false, 10],
 ]
 
 const ESTADOS = TABLA.map(fila => Object.fromEntries(CAMPOS.map((campo, i) => [campo, fila[i]])))
