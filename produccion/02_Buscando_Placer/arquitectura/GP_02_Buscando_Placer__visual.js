@@ -4,18 +4,14 @@
 // Rol: motor visual — estados, ritmo por grilla de pasos, precarga de imágenes/videos,
 //      disparo de recuadros, ráfaga, barrido (distancia según nota), iman,
 //      efectos de escena en F7/F8 (mala señal, y un slot libre)
-// Faders: F1-F4 = efectos recuadro, F5-F8 = efectos escena. Cada estado define
-//         un valor 0-1 directo; tocar el fader físico lo toma en vivo (takeover,
-//         con transición suave) hasta el próximo cambio de estado.
-// Expone GP.zapping.* · Cargado por: GP_02_Buscando_Placer__loader
-// Actualizado: 2026-10-01
+// Actualizado: 2026-10-09 (v2.1 - Soporte de canal de ritmo dinámico por estado)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  if (GP.zapping && GP.zapping._version === 'v2.0') return
-  GP.zapping = { _version: 'v2.0' }
+  if (GP.zapping && GP.zapping._version === 'v2.1') return
+  GP.zapping = { _version: 'v2.1' }
 
   const FIGURAS = { redonda: 96, blanca: 48, negra: 24, corchea: 12, semicorchea: 6, fusa: 3 }
   GP.zapping.FIGURAS = FIGURAS
@@ -39,7 +35,7 @@
 
   let apareciendoActivo = false
   let apareceInicio = 0
-  let apareceDur = 0.45   // segundos, corto y fijo — ajustable
+  let apareceDur = 0.45
 
   let velocidad = 1
   const VELOCIDAD_MIN = 0.25
@@ -49,9 +45,8 @@
   }
   GP.zapping.velocidad = () => velocidad
 
-  // --- precarga de medios (imagen o video) ---
   let imagenesPrecargadas = []
-  let videoActivo = null   // referencia al <video> que está reproduciéndose ahora mismo
+  let videoActivo = null
 
   const crearMedio = (url, modo) => {
     if (modo === 'video') {
@@ -64,10 +59,6 @@
       vid.src = url
       vid.load()
       return vid
-      // nota: no se llama .play() acá a propósito — solo se reproduce el
-      // video activo (ver aplicar() en disparar), para no saturar los
-      // decoders de hardware del navegador con todo el pool reproduciendo
-      // en simultáneo
     }
     const img = new Image()
     img.crossOrigin = 'anonymous'
@@ -111,14 +102,14 @@
   const clamp01 = v => Math.max(0, Math.min(1, v))
   const RAW_FADERS = () => [F1, F2, F3, F4, F5, F6, F7, F8]
   const hslToRgb = (h, s, l) => {
-  const k = n => (n + h * 12) % 12
-  const a = s * Math.min(l, 1 - l)
-  const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
-  return [f(0), f(8), f(4)]
-}
+    const k = n => (n + h * 12) % 12
+    const a = s * Math.min(l, 1 - l)
+    const f = n => l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)))
+    return [f(0), f(8), f(4)]
+  }
 
-const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
-  [0, 1 / 3, 2 / 3].map(offset => hslToRgb((hueBase + offset) % 1, s, l))
+  const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
+    [0, 1 / 3, 2 / 3].map(offset => hslToRgb((hueBase + offset) % 1, s, l))
 
   const UMBRAL_TOQUE = 3
   const VELOCIDAD_MEZCLA = 0.08
@@ -147,6 +138,12 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
   GP.zapping.colorAlpha = () => colorPantallaActivo ? 1 : 0
   GP.zapping.colorPantalla = () => colorPantalla
   GP.zapping.estadoNombre = () => estado().nombre || `estado ${estadoActual}`
+
+  // NUEVO: expone el canal de ritmo del estado actual para el ruteo externo
+  GP.zapping.canalRitmoActual = () => {
+    const e = estado()
+    return e ? e.canalRitmo : null
+  }
 
   GP.zapping.envolventeRitmo = () => {
     if (!duracionPasoActual) return 0
@@ -280,7 +277,6 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
       apareceInicio = time
       apareciendoActivo = true
       rect.escalaAparicion = 0
-
       rect.cargando = false
     }
 
@@ -292,11 +288,9 @@ const generarTriadica = (hueBase, s = 0.8, l = 0.55) =>
     }
     const media = crearMedio(cfg.videos[i], cfg.modo)
     const timeoutId = setTimeout(() => {
-      console.warn('medio tardó demasiado en cargar, se libera el disparo:', cfg.videos[i])
       rect.cargando = false
     }, 4000)
     media.addEventListener('error', () => {
-      console.warn('error al cargar el medio, se libera el disparo:', cfg.videos[i])
       clearTimeout(timeoutId)
       rect.cargando = false
     }, { once: true })
