@@ -3,7 +3,7 @@
 // Sketch principal de Fluorescente adaptado a la nueva arquitectura
 // ============================================================
 
-const GP_SHA = 'AQUÍ_VA_TU_SHA_DE_GITHUB'
+const GP_SHA = 'eab8ea4ef65be5fd97b70c78bbd1d2a2d7022eb1'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/01_Fluorescente/arquitectura/GP_01_Fluorescente__loader.js`)
 await GP_CARGAR_MODULOS_FLUORESCENTE ? GP_cargarModulosFluorescente(GP_SHA) : await GP_cargarModulosFluorescente(GP_SHA)
