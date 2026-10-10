@@ -3,7 +3,7 @@
 // Cargador modular central para Fluorescente (Gordo y Papu)
 // ============================================================
 
-async function GP_cargarModulosFluorescente(sha) {
+window.GP_cargarModulosFluorescente = async function(sha) {
   const base = `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${sha}/produccion/01_Fluorescente/arquitectura/`
   
   await loadScript(base + 'GP_01_Fluorescente__midibase.js')
