@@ -10,9 +10,8 @@ await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/pr
 // Llamada anclada a window para evitar el error de "not defined" en Hydra
 await window.GP_cargarModulosFluorescente(GP_SHA)
 
-// Inicializamos el MIDI nativo de Hydra para capturar las notas musicales
-await midi.start({ channel: "*", input: "*" })
-midi.show()
+// Usamos tu propio módulo MIDI (GP.midi) en lugar de la librería genérica "midi"
+await GP.midi.start({ outputName: 'APC MINI' }) // Podés dejar 'APC MINI' o '' según uses
 
 // Referenciamos el estado expuesto por el motor visual de Fluorescente
 const S = GP.zapping.state
@@ -22,15 +21,32 @@ update = (dt) => {
   GP.zapping.update(dt)
 }
 
-// Escuchamos las notas MIDI entrantes y las derivamos al motor
-midi.input('*').channel('*').onNote('*', (evt) => {
-  // Opcional: logueamos el evento en tu panel de tools
-  if (GP.tools && GP.tools.log) {
-    GP.tools.log('MIDI', [evt.note, evt.velocity, evt.channel])
-  }
-  
-  // Procesamos la nota en el motor visual (ataques, colores, batería)
-  GP.zapping.onNote(evt)
+// Escuchamos las notas MIDI entrantes usando la API nativa y las derivamos al motor
+if (window._gpFluorescenteMidi) window._gpFluorescenteMidi.forEach(([inp, fn]) => inp.removeEventListener('midimessage', fn))
+window._gpFluorescenteMidi = []
+
+navigator.requestMIDIAccess().then(acc => {
+  acc.inputs.forEach(inp => {
+    const fn = m => {
+      const [st, nota, vel] = m.data
+      
+      // Opcional: logueamos el evento en tu panel de tools
+      if (GP.tools && GP.tools.log) {
+        GP.tools.log('MIDI', [nota, vel, st & 0x0F])
+      }
+
+      const tipo = st & 0xF0
+      const on = tipo === 0x90 && vel > 0
+      const canal = (st & 0x0F)
+      
+      if (on) {
+        // Procesamos la nota en el motor visual (ataques, colores, batería)
+        GP.zapping.onNote({ note: nota, velocity: vel, channel: canal })
+      }
+    }
+    inp.addEventListener('midimessage', fn)
+    window._gpFluorescenteMidi.push([inp, fn])
+  })
 })
 
 // ============================================================
