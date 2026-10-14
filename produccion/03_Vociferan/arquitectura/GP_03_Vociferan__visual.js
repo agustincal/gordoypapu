@@ -3,7 +3,7 @@
 // Canción: 03_Vociferan (Gordo y Papu)
 // Rol: motor visual — círculos de luz por nota (MIDI + micrófono + strobe)
 // Depende de / lo carga: lo carga el loader; el sketch llama GP.vociferan.*
-// Actualizado: 14/10/2026
+// Actualizado: 14/10/2026 (v1.1: disparos del Akai con velocidad y color propios)
 // ============================================================
 //
 // Qué hace: cada nota hace entrar un círculo desde un costado hasta el
@@ -16,14 +16,14 @@
 //   GP.vociferan.init(config)      una vez por evaluación
 //   GP.vociferan.update()          dentro de update = () => {...}
 //   GP.vociferan.salida(o0)        para dibujar
-// y las acciones (notaOn, notaOff, padAkai, golpePaleta, golpe,
+// y las acciones (notaOn, notaOff, disparo, golpePaleta, golpe,
 // tickClock, reiniciarClock, toggleCodigo) desde su ruteo MIDI.
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.0'
+  const VERSION = 'v1.1'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -49,12 +49,7 @@
     escapeProb: 0.12, escapeDur: 0.6, escapeDir: 1,
     // Akai
     radioAkai: 0.22,
-    padsAkai: [
-      { lado: 1 },                        // 1: entra por la derecha
-      { lado: -1 },                       // 2: entra por la izquierda
-      { escapa: true, escapeDir: -1 },    // 3: se va para abajo
-      { tipo: 'golpe' },                  // 4: gran golpe desde el centro
-    ],
+    entradas: [0.15, 0.35, 0.8],          // velocidades de llegada: rápido, medio, lento (segundos)
     // golpe central
     golpeDur: 0.4, golpeRadio: 1.3, golpeLuz: 1.8,
     // fluctuación de intensidad
@@ -76,7 +71,7 @@
   const slots = Array.from({ length: N }, () => ({
     activo: false, lado: 1, t0: -99, sostenida: false, tSuelta: 0, nivelSuelta: 0,
     vel: 1, nota: -1, radio: 0.2, escapa: false, escapeDir: 1, tipo: 'normal',
-    rgb: [1, 0.33, 0], luzMult: 1, fase: 0, jx: 0, jy: 0, jl: 1, jr: 1
+    rgb: [1, 0.33, 0], luzMult: 1, fase: 0, entrada: 0.35, jx: 0, jy: 0, jl: 1, jr: 1
   }))
   let proximo = 0
 
@@ -92,7 +87,7 @@
     return C.radioGrave + (C.radioAgudo - C.radioGrave) * t
   }
 
-  const llegada = s => s.tipo === 'golpe' ? C.golpeDur : C.entrada
+  const llegada = s => s.tipo === 'golpe' ? C.golpeDur : s.entrada
   const inicioCaida = s => Math.max(s.tSuelta, s.t0 + llegada(s)) + C.mantener
 
   const nivel = s => {
@@ -112,7 +107,7 @@
 
   const posX = s => {
     if (s.tipo === 'golpe') return 0.5
-    const t = easeOut(clamp01((time - s.t0) / C.entrada))
+    const t = easeOut(clamp01((time - s.t0) / s.entrada))
     const inicio = 0.5 + s.lado * (0.5 + C.desdeX + s.radio)
     return inicio + (0.5 - inicio) * t
   }
@@ -131,7 +126,9 @@
 
   // ---- acciones ----
 
-  // op: lado (1 derecha / -1 izquierda), escapa, escapeDir, tipo ('normal' | 'golpe'), radio
+  // op: lado (1 derecha / -1 izquierda), escapa, escapeDir, tipo ('normal' | 'golpe'),
+  //     radio, entrada (segundos en llegar), hue (tono propio en grados)
+  // Sin op (como dispara la canción): usa C.entrada y C.hue.
   V.notaOn = (nota = 60, vel = 100, op = {}) => {
     const s = slots[proximo]
     proximo = (proximo + 1) % N
@@ -146,7 +143,8 @@
     s.escapa = op.escapa ?? (s.tipo === 'normal' && Math.random() < C.escapeProb)
     s.escapeDir = op.escapeDir ?? C.escapeDir
     s.luzMult = s.tipo === 'golpe' ? C.golpeLuz : 1
-    s.rgb = hsvARgb(C.hue + (Math.random() * 2 - 1) * C.hueVar, C.sat)
+    s.entrada = op.entrada ?? C.entrada
+    s.rgb = hsvARgb((op.hue ?? C.hue) + (Math.random() * 2 - 1) * C.hueVar, C.sat)
     s.fase = Math.random() * 6.28
   }
 
@@ -162,11 +160,17 @@
     }
   }
 
-  // pad de la fila de disparo (0..7). Se suelta con notaOff(1000 + pad)
-  V.padAkai = (pad, vel = 110) => {
-    const op = C.padsAkai[pad] ?? {}
-    const base = op.tipo === 'golpe' ? {} : { radio: C.radioAkai }
-    V.notaOn(1000 + pad, vel, { ...base, ...op })
+  // disparo lateral del Akai. NO cambia la paleta de la canción: el color
+  // es sólo para este círculo. Se suelta con notaOff(id).
+  // op: lado (-1 izquierda / 1 derecha), velocidad (0 rápido, 1 medio, 2 lento),
+  //     color (índice 0..3 de C.paleta), escape (true = se escapa arriba o abajo al azar)
+  V.disparo = (id, vel = 110, op = {}) => {
+    const o = { radio: C.radioAkai }
+    if (op.lado != null) o.lado = op.lado
+    if (op.velocidad != null) o.entrada = C.entradas[op.velocidad]
+    if (op.color != null) o.hue = C.paleta[op.color]
+    if (op.escape) { o.escapa = true; o.escapeDir = Math.random() < 0.5 ? -1 : 1 }
+    V.notaOn(id, vel, o)
   }
 
   // golpe central que además cambia la paleta (indice 0..3 de C.paleta).
