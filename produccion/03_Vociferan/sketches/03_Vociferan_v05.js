@@ -9,7 +9,7 @@
 // ---- versión de la arquitectura ----
 // 'main' mientras iterás (purgar jsDelivr + recargar después de cada push).
 // Antes de un show: hash completo del commit (git rev-parse HEAD).
-const GP_SHA = 'main'
+const GP_SHA = 'b68917b939b216c66a2829665065b64bdb68ab2f'
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/03_Vociferan/arquitectura/GP_03_Vociferan__loader.js`)
 await GP_cargarModulosVociferan(GP_SHA)
