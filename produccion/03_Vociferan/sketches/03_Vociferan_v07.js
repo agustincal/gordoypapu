@@ -24,8 +24,27 @@ if (GP_SHA === 'ultimo') {
 }
 console.log('Vociferan: cargando arquitectura @' + GP_SHA)
 
-await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/03_Vociferan/arquitectura/GP_03_Vociferan__loader.js`)
-if (!window.GP_cargarModulosVociferan) throw new Error('No cargó el loader de Vociferan (@' + GP_SHA + '). Revisá el push o la conexión.')
+// baja un archivo del repo y lo ejecuta. Primero directo de GitHub (está
+// disponible apenas pusheás), si falla prueba jsDelivr. Si no llega, avisa.
+window.GP_cargar = async (ruta, sha = GP_SHA) => {
+  const urls = [
+    `https://raw.githubusercontent.com/agustincal/gordoypapu/${sha}/${ruta}`,
+    `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${sha}/${ruta}`,
+  ]
+  for (const url of urls) {
+    try {
+      const r = await fetch(url, { cache: 'no-store' })
+      if (!r.ok) continue
+      const script = document.createElement('script')
+      script.textContent = (await r.text()) + '\n//# sourceURL=' + url
+      document.head.appendChild(script)
+      return
+    } catch (e) {}
+  }
+  throw new Error('No se pudo cargar ' + ruta + ' @' + sha + ' (ni de GitHub ni de jsDelivr)')
+}
+
+await GP_cargar('produccion/03_Vociferan/arquitectura/GP_03_Vociferan__loader.js')
 await GP_cargarModulosVociferan(GP_SHA)
 
 await GP.midi.start({ outputName: 'APC MINI' })
