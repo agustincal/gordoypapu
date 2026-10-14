@@ -7,11 +7,25 @@
 // ============================================================
 
 // ---- versión de la arquitectura ----
-// 'main' mientras iterás (purgar jsDelivr + recargar después de cada push).
-// Antes de un show: hash completo del commit (git rev-parse HEAD).
-const GP_SHA = 'main'
+// 'ultimo' = carga siempre el último commit subido a GitHub. No hace falta purgar:
+//            después de cada push, recargá la página de Hydra y volvé a evaluar.
+// Antes de un show: pegá acá el hash completo del commit que probaste
+//            (GitHub Desktop → History → clic derecho → Copy SHA), así queda fijo.
+let GP_SHA = 'ultimo'
+
+if (GP_SHA === 'ultimo') {
+  if (!window._vociferanSha) {
+    try {
+      const r = await fetch('https://api.github.com/repos/agustincal/gordoypapu/commits/main', { cache: 'no-store' })
+      window._vociferanSha = (await r.json()).sha
+    } catch (e) {}
+  }
+  GP_SHA = window._vociferanSha || 'main'
+}
+console.log('Vociferan: cargando arquitectura @' + GP_SHA)
 
 await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/03_Vociferan/arquitectura/GP_03_Vociferan__loader.js`)
+if (!window.GP_cargarModulosVociferan) throw new Error('No cargó el loader de Vociferan (@' + GP_SHA + '). Revisá el push o la conexión.')
 await GP_cargarModulosVociferan(GP_SHA)
 
 await GP.midi.start({ outputName: 'APC MINI' })

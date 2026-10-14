@@ -3,7 +3,7 @@
 // Canción: 03_Vociferan (Gordo y Papu)
 // Rol: motor visual — círculos de luz por nota (MIDI + micrófono + strobe)
 // Depende de / lo carga: lo carga el loader; el sketch llama GP.vociferan.*
-// Actualizado: 14/10/2026 (v1.2: el mic deforma el contorno como una onda de audio)
+// Actualizado: 14/10/2026 (v1.3: barrido de luz + multicolor con la voz, limpieza de ruido del mic)
 // ============================================================
 //
 // Qué hace: cada nota hace entrar un círculo desde un costado hasta el
@@ -17,13 +17,13 @@
 //   GP.vociferan.update()          dentro de update = () => {...}
 //   GP.vociferan.salida(o0)        para dibujar
 // y las acciones (notaOn, notaOff, disparo, golpePaleta, golpe,
-// tickClock, reiniciarClock, toggleCodigo) desde su ruteo MIDI.
+// tickClock, reiniciarClock, toggleCodigo, calibrarMic) desde su ruteo MIDI.
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.2'
+  const VERSION = 'v1.3'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -57,9 +57,15 @@
     // micrófono
     micPos: 0.06, micLuz: 0.9, micTam: 0.25, micUmbral: 0.15,
     mostrarMic: true,
-    // micrófono: deformación del contorno (onda de audio alrededor del aro)
-    micOnda: 0.15,          // cuánto se deforma el borde con la voz (0 = nada)
-    micOndaGiro: 2,         // qué tan rápido gira la onda alrededor del círculo
+    // voz: barrido de luz (de m_ring) y multicolor (de mc_ring).
+    // Sólo existen mientras hay voz: en silencio el círculo queda liso y quieto.
+    barridoFuerza: 0.8,     // cuánto oscurece la franja que recorre el círculo (0 = nada)
+    barridoVel: 4,          // qué tan rápido corre la franja cuando hay voz
+    multicolor: 0.7,        // 0 = franja de un solo color, 1 = tres franjas separadas por canal
+    vozAtaque: 0.3,         // qué tan rápido aparece el efecto al empezar la voz (0..1)
+    vozCaida: 0.05,         // qué tan rápido se va al callarse (más chico = más lento)
+    calibrarSeg: 3,         // segundos que escucha el ambiente al calibrar
+    calibrarMargen: 1.2,    // el piso queda un 20% arriba del ruido medido
     // strobe
     strobeClock: false, strobePatron: 'X.X.X...........', strobeRes: 3,
     strobeBombo: true,
@@ -74,7 +80,7 @@
   const slots = Array.from({ length: N }, () => ({
     activo: false, lado: 1, t0: -99, sostenida: false, tSuelta: 0, nivelSuelta: 0,
     vel: 1, nota: -1, radio: 0.2, escapa: false, escapeDir: 1, tipo: 'normal',
-    rgb: [1, 0.33, 0], luzMult: 1, fase: 0, entrada: 0.35, jx: 0, jy: 0, jl: 1, jr: 1
+    rgb: [1, 0.33, 0], luzMult: 1, fase: 0, entrada: 0.35, barrido: 0, jx: 0, jy: 0, jl: 1, jr: 1
   }))
   let proximo = 0
 
@@ -149,6 +155,7 @@
     s.entrada = op.entrada ?? C.entrada
     s.rgb = hsvARgb((op.hue ?? C.hue) + (Math.random() * 2 - 1) * C.hueVar, C.sat)
     s.fase = Math.random() * 6.28
+    s.barrido = Math.random() * 6.28
   }
 
   V.notaOff = (nota = 60) => {
@@ -217,22 +224,44 @@
     return v < C.micUmbral ? 0 : (v - C.micUmbral) / (1 - C.micUmbral)
   }
 
-  // cada banda del mic (graves → agudos) por separado, con el mismo umbral
-  const banda = i => {
-    const v = Math.min(1, a.fft[i] || 0)
-    return v < C.micUmbral ? 0 : (v - C.micUmbral) / (1 - C.micUmbral)
+  // limpieza del ruido de sala: escucha el ambiente unos segundos (SIN voz)
+  // y pone el piso de cada banda del mic justo arriba de ese ruido.
+  // Hydra resta ese piso a cada banda (a.settings[i].cutoff).
+  let calibrando = false
+  V.calibrarMic = () => {
+    if (calibrando) return
+    calibrando = true
+    const max = a.bins.map(() => 0)
+    console.log('[Vociferan] calibrando mic: silencio ' + C.calibrarSeg + ' s...')
+    const id = setInterval(() => {
+      a.bins.forEach((b, i) => { if (b > max[i]) max[i] = b })
+    }, 20)
+    setTimeout(() => {
+      clearInterval(id)
+      a.settings.forEach((st, i) => { st.cutoff = max[i] * C.calibrarMargen })
+      calibrando = false
+      console.log('[Vociferan] mic calibrado. Piso por banda:', a.settings.map(st => st.cutoff.toFixed(2)).join(' / '))
+    }, C.calibrarSeg * 1000)
   }
-  // peso de cada banda en la onda: los graves deforman más que los agudos
-  const PESO_BANDA = [1, 0.7, 0.5, 0.35]
-  const onda = i => banda(i) * C.micOnda * PESO_BANDA[i]
+  V.pisoMic = () => a.settings.map(st => st.cutoff)
+
+  // envolvente de la voz: sube rápido al hablar, baja suave al callar
+  let vozEnv = 0
+  let ultimo = 0
+  const efectoVoz = () => vozEnv
 
   V.update = () => {
     const v = voz()
+    const dt = Math.min(0.1, Math.max(0, time - ultimo))
+    ultimo = time
+    vozEnv += (v - vozEnv) * (v > vozEnv ? C.vozAtaque : C.vozCaida)
     for (const s of slots) {
       s.jx = (Math.random() - 0.5) * 2 * v * C.micPos
       s.jy = (Math.random() - 0.5) * 2 * v * C.micPos
       s.jl = 1 - Math.random() * v * C.micLuz
       s.jr = 1 + (Math.random() - 0.5) * 2 * v * C.micTam
+      // la franja sólo avanza mientras hay voz
+      s.barrido += dt * C.barridoVel * v
     }
   }
 
@@ -263,31 +292,28 @@
         { type: 'float', name: 'radio', default: 0.2 },
         { type: 'float', name: 'borde', default: 0.06 },
         { type: 'float', name: 'hueco', default: 0.0 },
-        { type: 'float', name: 'm0',    default: 0.0 },
-        { type: 'float', name: 'm1',    default: 0.0 },
-        { type: 'float', name: 'm2',    default: 0.0 },
-        { type: 'float', name: 'm3',    default: 0.0 },
-        { type: 'float', name: 'giro',  default: 0.0 },
+        { type: 'float', name: 'barrido', default: 0.0 },
+        { type: 'float', name: 'sombra',  default: 0.0 },
+        { type: 'float', name: 'multi',   default: 0.0 },
       ],
       glsl: `
         float asp = resolution.x / resolution.y;
         vec2 p = vec2((_st.x - 0.5) * asp + 0.5, _st.y);
         vec2 c = vec2((cx - 0.5) * asp + 0.5, cy);
-        vec2 dv = p - c;
-        float d = length(dv);
-        // onda de audio alrededor del borde: cada banda del mic es una
-        // ondulación con distinta cantidad de lóbulos (3, 5, 8 y 13)
-        float ang = atan(dv.y, dv.x);
-        float f = 1.0
-          + m0 * sin(3.0 * ang + giro)
-          + m1 * sin(5.0 * ang - giro * 1.3)
-          + m2 * sin(8.0 * ang + giro * 1.7)
-          + m3 * sin(13.0 * ang - giro * 2.1);
-        d = d / max(f, 0.2);
+        float d = distance(p, c);
         float afuera  = smoothstep(radio - borde, radio, d);
         float adentro = smoothstep(hueco - 0.02, hueco, d);
         float v = clamp(adentro - afuera, 0.0, 1.0);
-        return vec4(vec3(v), 1.0);
+        // franja de luz que recorre el círculo de lado a lado (de m_ring),
+        // y la versión de tres franjas, una por canal (de mc_ring)
+        float u = (p.x - c.x) / max(radio, 0.01);
+        float una = 1.0 - sombra * abs(sin(u * 3.14 + barrido));
+        vec3 tres = vec3(
+          1.0 - sombra * abs(sin(u * 1.57 + barrido)),
+          1.0 - sombra * abs(sin(u * 3.14 + barrido * 1.3)),
+          1.0 - sombra * abs(sin(u * 6.28 + barrido * 1.7)));
+        vec3 k = clamp(mix(vec3(una), tres, multi), 0.0, 1.0);
+        return vec4(v * k, 1.0);
       `
     })
 
@@ -310,11 +336,9 @@
         () => radioActual(s) * s.jr,
         () => C.borde,
         () => s.radio * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001))),
-        () => onda(0),
-        () => onda(1),
-        () => onda(2),
-        () => onda(3),
-        () => time * C.micOndaGiro + s.fase
+        () => s.barrido,
+        () => C.barridoFuerza * efectoVoz(),
+        () => C.multicolor
       )
       .color(
         () => s.rgb[0] * luz(),
