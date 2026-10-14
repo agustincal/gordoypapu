@@ -117,7 +117,7 @@ const KORG = {
 //
 //              col 1    col 2    col 3    col 4   col 5    col 6    col 7    col 8
 //              izq      izq      izq      golpe   der      der      der      escape
-//              rápido   medio    lento    centro  rápido   medio    lento    arr/abajo
+//              rápido   medio    lento    centro  lento    medio    rápido   arr/abajo
 //   fila 8  →  color 1 de la paleta (rojo-naranja)
 //   fila 7  →  color 2 (verde)
 //   fila 6  →  color 3 (azul)
@@ -135,9 +135,9 @@ const AKAI = {
     2: { lado: -1, velocidad: 1 },
     3: { lado: -1, velocidad: 2 },
     4: { golpe: true },
-    5: { lado: 1, velocidad: 0 },
-    6: { lado: 1, velocidad: 1 },
-    7: { lado: 1, velocidad: 2 },
+    5: { lado: 1, velocidad: 2 },    // espejo de la izquierda: 5 lento,
+    6: { lado: 1, velocidad: 1 },    //                         6 medio,
+    7: { lado: 1, velocidad: 0 },    //                         7 rápido
     8: { escape: true, velocidad: 1 },
   },
 }
