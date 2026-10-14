@@ -3,7 +3,7 @@
 // Canción: 03_Vociferan (Gordo y Papu)
 // Rol: motor visual — círculos de luz por nota (MIDI + micrófono + strobe)
 // Depende de / lo carga: lo carga el loader; el sketch llama GP.vociferan.*
-// Actualizado: 14/10/2026 (v1.1: disparos del Akai con velocidad y color propios)
+// Actualizado: 14/10/2026 (v1.2: el mic deforma el contorno como una onda de audio)
 // ============================================================
 //
 // Qué hace: cada nota hace entrar un círculo desde un costado hasta el
@@ -23,7 +23,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.1'
+  const VERSION = 'v1.2'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -57,6 +57,9 @@
     // micrófono
     micPos: 0.06, micLuz: 0.9, micTam: 0.25, micUmbral: 0.15,
     mostrarMic: true,
+    // micrófono: deformación del contorno (onda de audio alrededor del aro)
+    micOnda: 0.15,          // cuánto se deforma el borde con la voz (0 = nada)
+    micOndaGiro: 2,         // qué tan rápido gira la onda alrededor del círculo
     // strobe
     strobeClock: false, strobePatron: 'X.X.X...........', strobeRes: 3,
     strobeBombo: true,
@@ -214,6 +217,15 @@
     return v < C.micUmbral ? 0 : (v - C.micUmbral) / (1 - C.micUmbral)
   }
 
+  // cada banda del mic (graves → agudos) por separado, con el mismo umbral
+  const banda = i => {
+    const v = Math.min(1, a.fft[i] || 0)
+    return v < C.micUmbral ? 0 : (v - C.micUmbral) / (1 - C.micUmbral)
+  }
+  // peso de cada banda en la onda: los graves deforman más que los agudos
+  const PESO_BANDA = [1, 0.7, 0.5, 0.35]
+  const onda = i => banda(i) * C.micOnda * PESO_BANDA[i]
+
   V.update = () => {
     const v = voz()
     for (const s of slots) {
@@ -251,12 +263,27 @@
         { type: 'float', name: 'radio', default: 0.2 },
         { type: 'float', name: 'borde', default: 0.06 },
         { type: 'float', name: 'hueco', default: 0.0 },
+        { type: 'float', name: 'm0',    default: 0.0 },
+        { type: 'float', name: 'm1',    default: 0.0 },
+        { type: 'float', name: 'm2',    default: 0.0 },
+        { type: 'float', name: 'm3',    default: 0.0 },
+        { type: 'float', name: 'giro',  default: 0.0 },
       ],
       glsl: `
         float asp = resolution.x / resolution.y;
         vec2 p = vec2((_st.x - 0.5) * asp + 0.5, _st.y);
         vec2 c = vec2((cx - 0.5) * asp + 0.5, cy);
-        float d = distance(p, c);
+        vec2 dv = p - c;
+        float d = length(dv);
+        // onda de audio alrededor del borde: cada banda del mic es una
+        // ondulación con distinta cantidad de lóbulos (3, 5, 8 y 13)
+        float ang = atan(dv.y, dv.x);
+        float f = 1.0
+          + m0 * sin(3.0 * ang + giro)
+          + m1 * sin(5.0 * ang - giro * 1.3)
+          + m2 * sin(8.0 * ang + giro * 1.7)
+          + m3 * sin(13.0 * ang - giro * 2.1);
+        d = d / max(f, 0.2);
         float afuera  = smoothstep(radio - borde, radio, d);
         float adentro = smoothstep(hueco - 0.02, hueco, d);
         float v = clamp(adentro - afuera, 0.0, 1.0);
@@ -282,7 +309,12 @@
         () => posY(s) + s.jy,
         () => radioActual(s) * s.jr,
         () => C.borde,
-        () => s.radio * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001)))
+        () => s.radio * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001))),
+        () => onda(0),
+        () => onda(1),
+        () => onda(2),
+        () => onda(3),
+        () => time * C.micOndaGiro + s.fase
       )
       .color(
         () => s.rgb[0] * luz(),
