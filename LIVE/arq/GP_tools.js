@@ -8,13 +8,13 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.7: panel MIDI separado por canal)
+// Actualizado: 2026-10-16 (v1.8: panel por canal + lista de notas)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.7'
+  const VERSION = 'v1.8'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -118,6 +118,15 @@
         if (fila) extra = GP.midi.muteado(fila) ? ` <span style="color:#f80">fila ${fila} MUTE</span>` : ` <span style="color:#888">fila ${fila}</span>`
       }
       filas.push(`<span style="color:${activo ? '#ff0' : '#264'}">●</span> ${corto(c.aparato)} ch${String(c.ch).padEnd(2)} ${c.ultimo}  <span style="color:#888">${String(c.n).padStart(5)}</span>${extra}`)
+      if (verNotas && c.notas.size) {
+        const lista = [...c.notas.keys()].sort((a, b) => a - b)
+        const ultimaNota = c.ultimo.startsWith('on') ? Number(c.ultimo.slice(3, 7)) : null
+        const pintadas = lista.map(n => n === ultimaNota && activo ? `<span style="color:#ff0">${n}</span>` : n)
+        for (let i = 0; i < pintadas.length; i += 12) {
+          filas.push(`<span style="color:#9cf">    ${i === 0 ? `notas (${lista.length}):` : '           '} ${pintadas.slice(i, i + 12).join(' ')}</span>`)
+        }
+        filas.push(`<span style="color:#9cf">    → rango: [${lista[0]}, ${lista[lista.length - 1]}]</span>`)
+      }
     }
     panel.innerHTML = filas.length ? filas.join('\n') : 'esperando MIDI...'
   }
@@ -147,12 +156,26 @@
     const ch = (st & 0x0f) + 1
     const tipo = st & 0xf0
     const k = `${nombre}|${ch}`
-    const c = canales.get(k) || { aparato: nombre, ch, ultimo: '', n: 0, t: 0 }
+    const c = canales.get(k) || { aparato: nombre, ch, ultimo: '', n: 0, t: 0, notas: new Map() }
     c.ultimo = describir(tipo, d1, d2)
-    if (tipo === 0x90 && d2 > 0) { c.n++; c.t = performance.now() }
+    if (tipo === 0x90 && d2 > 0) { c.n++; c.t = performance.now(); c.notas.set(d1, (c.notas.get(d1) || 0) + 1) }
     else if (tipo === 0xb0) c.t = performance.now()
     canales.set(k, c)
     pedirRender()
+  }
+  // lista de notas por canal (para configurar GP.midi.filas). Ctrl+Alt+N la prende/apaga.
+  let verNotas = false
+  T.notas = (v = !verNotas) => { verNotas = !!v; if (panelEl) { panelEl.style.maxWidth = verNotas ? '560px' : '420px'; render() } return verNotas }
+  // devuelve las notas vistas por canal y las imprime en consola listas para copiar
+  T.listaNotas = () => {
+    const out = {}
+    for (const c of canales.values()) {
+      if (!c.notas.size) continue
+      const lista = [...c.notas.keys()].sort((a, b) => a - b)
+      out[`${c.aparato} ch${c.ch}`] = { notas: lista, rango: [lista[0], lista[lista.length - 1]], veces: Object.fromEntries([...c.notas].sort((a, b) => a[0] - b[0])) }
+      console.log(`${c.aparato} ch${c.ch} → notas: [${lista.join(', ')}]  rango: [${lista[0]}, ${lista[lista.length - 1]}]`)
+    }
+    return out
   }
   T.limpiarPanel = () => { canales.clear(); clocks.clear(); if (panelEl) panelEl.textContent = 'esperando MIDI...' }
 
@@ -602,7 +625,7 @@
 
   // ============================================================
   // 5. Atajos de teclado (no escriben en el editor)
-  //    Ctrl+Alt+R grabar/detener · S detener · P mostrar/ocultar paneles
+  //    Ctrl+Alt+R grabar/detener · S detener · P mostrar/ocultar paneles · N lista de notas
   // ============================================================
   T.atajosTeclado = () => {
     if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos, true)
@@ -612,6 +635,7 @@
         r: () => T.grabadorCiclo(),     // toggle grabar / detener+guardar
         s: () => T.grabador.detener(),  // detener+guardar
         p: () => T.paneles(),
+        n: () => T.notas(),
       }
       const accion = acciones[e.key.toLowerCase()]
       if (!accion) return

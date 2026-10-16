@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-16 · GP_midi v1.4 · GP_tools v1.6
+Actualizado: 2026-10-16 · GP_midi v1.5 · GP_tools v1.8
 
 ---
 
@@ -222,9 +222,16 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 
 ## 9. Grabador y ensayo (GP_tools)
 
-- **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles.
+- **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
 - Graba MIDI + mic + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.webm`.
 - El MIDI se graba con la hora real de llegada (no se corre si el navegador se traba).
 - Reproductor (abajo a la izquierda): botones `midi` / `audio` (verde = cargado, rojo = error), ▶ ■. Limpia solos los duplicados de grabaciones viejas.
 - Requiere puertos loopMIDI `korg_Ensayo` y `akai_Ensayo` (después de crearlos, reiniciar Chrome entero).
 - `GP.tools.init({ grabarVideo: false })` para sólo MIDI + audio; `videoBitrate: 4e6` para archivos más livianos.
+
+### Panel MIDI (arriba a la izquierda)
+
+- Una línea por aparato + canal: punto amarillo = actividad, último mensaje, cantidad de notas, fila asignada y `MUTE`. El clock va aparte con su BPM.
+- **Ctrl+Alt+N** (o `GP.tools.notas()`): muestra debajo de cada canal la lista de notas que fueron entrando, ordenadas, con el `rango` sugerido. La última nota tocada se marca en amarillo.
+- `GP.tools.listaNotas()` en consola: imprime `notas: [...]` y `rango: [...]` de cada canal listos para copiar a `GP.midi.filas`.
+- `GP.tools.limpiarPanel()` vacía todo (ej: antes de empezar una canción, para juntar sólo sus notas).
