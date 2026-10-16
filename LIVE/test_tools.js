@@ -6,10 +6,24 @@
 // Actualizado: 2026-10-16
 // ============================================================
 
+// ---- carga de scripts ----
+// GP_SHA = 'main'  → ensayo: trae lo último del push directo de GitHub (sin purgar)
+// GP_SHA = '<hash completo del commit>' → show: jsDelivr fijo y rápido (sin purgar)
 const GP_SHA = 'main'
-const GP_ARQ = `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/LIVE/arq/`
 
-await loadScript(GP_ARQ + 'GP_tools.js')
+const cargarGP = async (ruta) => {
+  if (GP_SHA !== 'main') {
+    await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/${ruta}`)
+    return
+  }
+  const url = `https://raw.githubusercontent.com/agustincal/gordoypapu/main/${ruta}?t=${Date.now()}`
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`no encontré ${ruta} (${res.status})`)
+  ;(0, eval)(await res.text())
+}
+
+await cargarGP('LIVE/arq/GP_tools.js')
+console.log('GP_tools', GP.tools._version)
 GP.tools.init({ cancion: 'test_tools' })   // va en el nombre de los archivos grabados
 GP.tools.panel()
 
