@@ -5,7 +5,7 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-16 (v1.1: filas de disparo 5-8 + mute por canal)
+// Actualizado: 2026-10-16 (v1.4: FMASTER = fundido a negro · fila 'vuelta')
 // ============================================================
 //
 // Cómo funcionan los LEDs
@@ -25,6 +25,8 @@
 //                                            rojo parpadeo = lo tocás · amarillo al soltar
 //   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85) = MUTE del canal
 //     apagado = no llegó nada · prendido = recibiendo · parpadea = muteado
+//   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
+//     apagado = versión 1 · prendido = versión 2 · parpadea = versión 3
 //   89 = grabador (GP_tools)
 //
 // ============================================================
@@ -32,7 +34,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.1'
+  const VERSION = 'v1.4'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -60,7 +62,7 @@
               if (entrada.state !== 'connected') return
               entrada.onmidimessage = (msg) => {
                 for (const id in bus.oyentes) {
-                  try { bus.oyentes[id](entrada.name, msg.data) } catch (err) { console.error(`[GP bus] ${id}:`, err) }
+                  try { bus.oyentes[id](entrada.name, msg.data, msg.timeStamp) } catch (err) { console.error(`[GP bus] ${id}:`, err) }
                 }
               }
             })
@@ -98,14 +100,13 @@
   }
   // Valores que usaba la base v0.9 para los botones (no cambian, así se ve igual)
   const ESTILO_BOTON = { activo: 4, inactivo: 1 }
-  const ESTILO_FADER = 1
 
   // ============================================================
   // Mapas del Akai (igual que v0.9)
   // ============================================================
   const STORAGE_KEY = 'GP_AkaiMini_Faders_v0.9'   // misma clave: conserva los faders guardados
   const FADER_CC = { F1: 48, F2: 49, F3: 50, F4: 51, F5: 52, F6: 53, F7: 54, F8: 55, FMASTER: 56 }
-  const FADER_LED = { F1: 64, F2: 65, F3: 66, F4: 67, F5: 68, F6: 69, F7: 70, F8: 71 }
+  const BOTON_VERSION = { F1: 64, F2: 65, F3: 66, F4: 67, F5: 68, F6: 69, F7: 70, F8: 71 }
   const FADER_DEADZONE = { F7: 60 }   // 0..60 de 127 es errático en esta controladora
   const CC_TO_FADER = Object.fromEntries(Object.entries(FADER_CC).map(([n, cc]) => [cc, n]))
   // notas que se limpian al conectar: grilla, botones de abajo, de la derecha y shift
@@ -234,7 +235,8 @@
   let alDisparo = null
 
   const nuevaFila = () => ({ cfg: null, mute: false, visto: false,
-    pads: Array.from({ length: 8 }, () => ({ mano: false, korg: new Map(), hasta: 0, timer: null })) })
+    pads: Array.from({ length: 8 }, () => ({ mano: false, korg: new Map(), hasta: 0, timer: null, color: null })),
+    vuelta: { pos: -1, n: 0 } })
 
   const pintarPad = (fila, col) => {
     const f = filas[fila]
@@ -242,7 +244,7 @@
     if (!f || !f.cfg) { fijar(capaBoton, nota, null); return }
     const p = f.pads[col]
     const ahora = performance.now()
-    let v = LED_DISPARO.reposo
+    let v = p.color != null ? p.color : LED_DISPARO.reposo   // en modo 'vuelta' cada pad tiene su color
     if (p.mano) v = LED_DISPARO.mano
     else if (p.korg.size) v = LED_DISPARO.suena
     else if (ahora < p.hasta) v = LED_DISPARO.recien
@@ -303,6 +305,17 @@
     const f = filas[fila]
     if (!f.visto) { f.visto = true; pintarMute(fila) }
     if (f.mute) return                                  // muteado: ni luz ni disparo
+    if (f.cfg.pulso === 'vuelta') {
+      // cada nota avanza un pad; una vuelta pinta de rojo, la siguiente de verde
+      if (!on) return
+      const vu = f.vuelta
+      vu.pos = (vu.pos + 1) % 8
+      if (vu.pos === 0) vu.n++
+      f.pads[vu.pos].color = vu.n % 2 ? COLOR.rojo : COLOR.verde
+      pintarPad(fila, vu.pos)
+      emitir({ fila, columna: vu.pos, nota, vel, on, origen: 'canal' })
+      return
+    }
     const cols = columnasDe(f.cfg, nota)
     for (const col of cols) {
       const p = f.pads[col]
@@ -332,6 +345,75 @@
     console.info(`[GP MIDI] fila ${fila} (canal ${f.cfg.canal}) ${f.mute ? 'MUTEADA' : 'activa'}`)
   }
 
+  // ============================================================
+  // Versiones por fader (botones 64-71)
+  // ============================================================
+  const VERS_KEY = 'GP_LIVE_Versiones'
+  const LED_VERSION = [0, 1, 2]                       // apagado / prendido / parpadeo
+  const versiones = { cuantas: {}, actual: {} }       // F1 → 3 · F1 → 0..2
+  let alVersion = null
+  try { Object.assign(versiones.actual, JSON.parse(localStorage.getItem(VERS_KEY) || '{}')) } catch (_) {}
+  const guardarVersiones = () => { try { localStorage.setItem(VERS_KEY, JSON.stringify(versiones.actual)) } catch (_) {} }
+  const versionDe = f => {
+    const n = versiones.cuantas[f]
+    if (!n) return 0
+    return Math.min(versiones.actual[f] || 0, n - 1)
+  }
+  const pintarVersiones = () => {
+    for (const [f, nota] of Object.entries(BOTON_VERSION)) {
+      fijar(capaBoton, nota, versiones.cuantas[f] ? LED_VERSION[versionDe(f)] : null)
+    }
+  }
+  const ponerVersion = (f, v, origen) => {
+    const n = versiones.cuantas[f]
+    if (!n) return
+    const nueva = ((v % n) + n) % n
+    if (nueva === versionDe(f)) { pintarVersiones(); return }
+    versiones.actual[f] = nueva
+    guardarVersiones()
+    pintarVersiones()
+    if (alVersion) try { alVersion(f, nueva, origen) } catch (err) { console.error('[GP MIDI] alVersion:', err) }
+  }
+
+  // ============================================================
+  // FMASTER = fundido a negro (en todos los sketches, sin tocar Hydra)
+  // ============================================================
+  // Una capa negra encima del canvas de Hydra; su opacidad sigue al FMASTER.
+  // Arriba = imagen completa · abajo = negro. No toca la cadena de Hydra ni los
+  // feedbacks, y no cuesta nada de GPU.
+  // Seguridad: hasta que no movés el FMASTER en esta sesión, la imagen se ve completa
+  // (así un valor viejo guardado en 0 no te deja la pantalla en negro al arrancar).
+  const fundido = { activo: true, movido: false, curva: 2, el: null }
+  const capaNegra = () => {
+    if (fundido.el && document.body.contains(fundido.el)) return fundido.el
+    let el = document.getElementById('gpFundido')
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'gpFundido'
+      el.style.cssText = 'position:fixed; inset:0; background:#000; opacity:0; pointer-events:none;'
+    }
+    // se pone justo después del canvas de Hydra: tapa la imagen pero NO el editor de código
+    // ni los paneles (que van por encima)
+    const canvas = [...document.querySelectorAll('canvas')].sort((x, y) => y.width * y.height - x.width * x.height)[0]
+    if (canvas && canvas.parentNode) {
+      const z = getComputedStyle(canvas).zIndex
+      el.style.zIndex = z === 'auto' ? 'auto' : z
+      canvas.parentNode.insertBefore(el, canvas.nextSibling)
+    } else {
+      document.body.appendChild(el)
+    }
+    fundido.el = el
+    return el
+  }
+  const aplicarFundido = () => {
+    if (typeof document === 'undefined') return
+    const el = capaNegra()
+    if (!fundido.activo || !fundido.movido) { el.style.opacity = 0; return }
+    const v = state.faderValues[FADER_CC.FMASTER] / 127                // 0..1
+    const brillo = v >= 0.98 ? 1 : v <= 0.02 ? 0 : Math.pow(v, fundido.curva)
+    el.style.opacity = (1 - brillo).toFixed(3)
+  }
+
   let alMensaje = null
 
   const procesar = (nombre, data) => {
@@ -348,6 +430,7 @@
         const limpio = limpiarFader(CC_TO_FADER[d1], d2)
         state.faderValues[d1] = limpio
         saveFader(d1, limpio)
+        if (d1 === FADER_CC.FMASTER) { fundido.movido = true; aplicarFundido() }
         for (const fn of state.faderHandlers[d1] || []) fn(limpio)
       }
       if (esOn || esOff) {
@@ -356,6 +439,8 @@
         if (d1 <= 63 && filas[fila] && filas[fila].cfg) padDeMano(fila, d1 % 8, d2, esOn)
         // botón de mute (82..85)
         else if (esOn && d1 >= 82 && d1 <= 85) alternarMute(90 - d1)
+        // botón de versión arriba de cada fader (64..71)
+        else if (esOn && d1 >= 64 && d1 <= 71) { const f = `F${d1 - 63}`; ponerVersion(f, versionDe(f) + 1, 'akai') }
         // botón de la grilla (toggle, filas 1-4 o donde el sketch los habilite)
         else if (esOn && d1 <= 63 && state.activeButtons.includes(d1)) {
           state.buttonState[d1] = !state.buttonState[d1]
@@ -402,6 +487,9 @@
     for (const name of Object.keys(FADER_CC)) {
       Object.defineProperty(window, name, { configurable: true, get: () => state.faderValues[FADER_CC[name]] ?? 0 })
     }
+    for (let i = 1; i <= 8; i++) {
+      Object.defineProperty(window, `V${i}`, { configurable: true, get: () => versionDe(`F${i}`) })
+    }
     for (let r = 1; r <= 8; r++) for (let c = 1; c <= 8; c++) {
       const name = `N${r}${c}`
       Object.defineProperty(window, name, { configurable: true, get: () => !!state.buttonState[buttonToNote(name)] })
@@ -422,6 +510,8 @@
 
   M.start = async function ({ outputName } = {}) {
     state.outputNameExacto = outputName || null
+    state.faderHandlers = {}   // cada evaluación registra sus onFader de nuevo: no se acumulan
+    aplicarFundido()
     bus.escuchar('midi', procesar)
     bus.puertos('midi', alCambiarPuertos)
     try {
@@ -450,7 +540,8 @@
       const antes = f.cfg
       f.cfg = c ? { puerto: /korg|padkontrol/i, ...c } : null
       if (!antes || !f.cfg || antes.canal !== f.cfg.canal) { f.mute = false; f.visto = false }
-      for (const p of f.pads) { p.mano = false; p.korg.clear() }
+      for (const p of f.pads) { p.mano = false; p.korg.clear(); p.color = null }
+      f.vuelta = { pos: -1, n: 0 }
       pintarFila(fila)
       pintarMute(fila)
     }
@@ -469,7 +560,7 @@
     state.buttonState = {}
     state.buttonHandlers = {}
     for (const n of notas) { state.buttonState[n] = false; state.buttonHandlers[n] = []; pintarBoton(n) }
-    for (const name of state.activeFaders) if (FADER_LED[name] !== undefined) fijar(capaBoton, FADER_LED[name], ESTILO_FADER)
+    pintarVersiones()
     for (const fila of FILAS_DISPARO) { pintarFila(fila); pintarMute(fila) }   // no borrar las filas de disparo
     return M
   }
@@ -491,16 +582,34 @@
     return M
   }
 
+  // compatibilidad: ya no publica faders ni prende LEDs. Los faders se usan o no.
+  // (sólo limpia los onFader de esos faders para que no se acumulen al reevaluar)
   M.faders = function (names = []) {
-    for (const name of state.activeFaders) if (FADER_LED[name] !== undefined) fijar(capaBoton, FADER_LED[name], null)
-    const normalized = [...new Set(names.map(n => String(n).trim().toUpperCase()))]
-    state.activeFaders = normalized
-    for (const name of normalized) {
-      state.faderHandlers[faderToCC(name)] = []
-      if (FADER_LED[name] !== undefined) fijar(capaBoton, FADER_LED[name], ESTILO_FADER)
-    }
+    for (const name of names) state.faderHandlers[faderToCC(name)] = []
     return M
   }
+
+  // versiones: cuántas tiene cada fader (máx. 3). Los que no se nombran quedan sin uso y apagados.
+  // La versión elegida se guarda y se recupera al recargar (el LED la muestra al conectar).
+  M.versiones = function (config = {}) {
+    versiones.cuantas = {}
+    for (const [k, n] of Object.entries(config)) {
+      const f = String(k).trim().toUpperCase()
+      faderToCC(f)   // valida el nombre
+      versiones.cuantas[f] = Math.max(1, Math.min(3, n | 0))
+    }
+    pintarVersiones()
+    return M
+  }
+  M.versionDe = f => versionDe(String(f).toUpperCase())                   // 0, 1 o 2
+  // fijar desde código (ej: al entrar a un estado). objeto { F1: 0, F3: 2 } o (fader, v)
+  M.fijarVersion = (f, v) => {
+    if (typeof f === 'object') { for (const [k, x] of Object.entries(f)) ponerVersion(k.toUpperCase(), x, 'codigo') }
+    else ponerVersion(String(f).toUpperCase(), v, 'codigo')
+    return M
+  }
+  // fn(fader, version, origen: 'akai' | 'codigo')
+  M.alVersion = (fn) => { alVersion = fn; return M }
 
   M.fader = name => state.faderValues[faderToCC(name)] ?? 0
 
@@ -540,6 +649,10 @@
       outputs: [...bus.acc.outputs.values()].map(d => d.name),
     }
   }
+
+  // FMASTER fundido a negro. GP.midi.fundido(false) lo apaga para un sketch que use FMASTER para otra cosa.
+  M.fundido = (activo = true) => { fundido.activo = !!activo; aplicarFundido(); return M }
+  M.fundidoCurva = (c = 2) => { fundido.curva = c; aplicarFundido(); return M }   // 1 = lineal · 2 = más suave cerca del negro
 
   M.isReady = () => state.status === 'ready'
 

@@ -8,13 +8,13 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.5: grabador en el pad 89)
+// Actualizado: 2026-10-16 (v1.6: tiempo MIDI exacto + limpia duplicados al cargar)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.5'
+  const VERSION = 'v1.6'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -102,8 +102,8 @@
   }
 
   // atajo para el sketch: graba todo y muestra lo que no es clock/sistema
-  T.midi = (nombre, data) => {
-    T.grabador.registrar(nombre, data)
+  T.midi = (nombre, data, ts) => {
+    T.grabador.registrar(nombre, data, ts)
     if (data[0] < 0xf0) T.log(nombre, data)
   }
 
@@ -122,7 +122,7 @@
               if (entrada.state !== 'connected') return
               entrada.onmidimessage = (msg) => {
                 for (const id in bus.oyentes) {
-                  try { bus.oyentes[id](entrada.name, msg.data) } catch (err) { console.error(`[GP bus] ${id}:`, err) }
+                  try { bus.oyentes[id](entrada.name, msg.data, msg.timeStamp) } catch (err) { console.error(`[GP bus] ${id}:`, err) }
                 }
               }
             })
@@ -145,8 +145,8 @@
   T.accesoMidi = () => bus.conectar()
 
   // graba + panel + pad del grabador. Siempre activo apenas se carga tools.
-  bus.escuchar('tools', (nombre, data) => {
-    T.midi(nombre, data)
+  bus.escuchar('tools', (nombre, data, ts) => {
+    T.midi(nombre, data, ts)
     const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
     if (esNoteOn && data[1] === cfg.padGrabador && /apc|akai/i.test(nombre)) T.grabadorCiclo()
   })
@@ -344,8 +344,12 @@
       return guardar()   // detener incluye guardar
     },
 
-    registrar(nombre, data) {
-      if (estado === 'grabando') grabacion.push([performance.now() - inicio, nombre, [...data]])
+    // ts = momento en que llegó el mensaje (msg.timeStamp). Si el navegador se traba un
+    // instante, el mensaje se procesa tarde pero se graba con su hora real de llegada.
+    registrar(nombre, data, ts) {
+      if (estado !== 'grabando') return
+      const t = (typeof ts === 'number' && ts > 0) ? ts : performance.now()
+      grabacion.push([Math.max(0, t - inicio), nombre, [...data]])
     },
 
     descargar() { return T.grabador.detener() },   // compatibilidad: igual que detener
@@ -435,7 +439,16 @@
     const reader = new FileReader()
     reader.onload = () => {
       try {
-        midiEnsayo = JSON.parse(reader.result)
+        const crudo = JSON.parse(reader.result)
+        // las grabaciones viejas tienen mensajes duplicados (bug de reevaluar): se limpian
+        const vistos = new Set()
+        midiEnsayo = crudo.filter(([ms, n, b]) => {
+          const k = `${Math.round(ms * 10)}|${n}|${b.join(',')}`
+          if (vistos.has(k)) return false
+          vistos.add(k); return true
+        })
+        const quitados = crudo.length - midiEnsayo.length
+        if (quitados) console.info(`GP.tools: ${quitados} mensajes duplicados quitados de ${file.name}`)
         marcar(botonMidi, 'ok', file.name)
         setEnsayo(resumenEnsayo())
       } catch (err) {

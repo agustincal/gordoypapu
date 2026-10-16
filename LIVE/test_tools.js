@@ -32,12 +32,15 @@ GP.tools.panel()
 // LED del pad 89: prendido = listo · parpadea = grabando · apagado = guardando
 
 await GP.midi.start()
-GP.midi.buttons(['N11', 'N12']).faders(['F1', 'F2'])
+GP.midi.buttons(['N11', 'N12'])
+
+// versiones por fader (botones 64-71): F1 con 3 versiones, F2 con 2
+GP.midi.versiones({ F1: 3, F2: 2 })
 
 // ---- filas de disparo (5-8): una fila por canal ----
 // botón derecho de cada fila = mute (8→82, 7→83, 6→84, 5→85)
 GP.midi.filas({
-  8: { canal: 10, pulso: true },        // batería: pulso en toda la fila
+  8: { canal: 10, pulso: 'vuelta' },    // pulso que da vueltas (rojo / verde). pulso: true = toda la fila
   7: { canal: 1,  rango: [25, 48] },    // línea principal
   6: { canal: 2,  rango: [57, 86] },    // melodía aguda
   5: null,                              // reservada para el canal que va a venir
@@ -52,7 +55,8 @@ GP.midi.alDisparo(({ fila, columna, nota, on, origen }) => {
 
 // algo que se mueva, para ver que el video graba
 var flash = 0
-osc(20, 0.05, 1).rotate(() => time * 0.1).scale(() => 1 + F1 / 127)
+const ROT = [0.1, 0.5, -1]   // F1: velocidad de giro según versión (V1 = 0, 1, 2)
+osc(20, 0.05, 1).rotate(() => time * ROT[V1]).scale(() => 1 + F1 / 127)
   .mult(solid(1, 1, 1).add(solid(0, 1, 0), () => flash))
   .out()
 
