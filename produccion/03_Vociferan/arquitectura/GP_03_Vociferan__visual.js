@@ -3,7 +3,7 @@
 // Canción: 03_Vociferan (Gordo y Papu)
 // Rol: motor visual — círculos de luz por nota (MIDI + micrófono + strobe)
 // Depende de / lo carga: lo carga el loader; el sketch llama GP.vociferan.*
-// Actualizado: 14/10/2026 (v1.3: barrido de luz + multicolor con la voz, limpieza de ruido del mic)
+// Actualizado: 15/10/2026 (v1.4: faders de tamaño y de dirección de entrada)
 // ============================================================
 //
 // Qué hace: cada nota hace entrar un círculo desde un costado hasta el
@@ -23,7 +23,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.3'
+  const VERSION = 'v1.4'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -64,6 +64,11 @@
     multicolor: 0.7,        // 0 = franja de un solo color, 1 = tres franjas separadas por canal
     vozAtaque: 0.3,         // qué tan rápido aparece el efecto al empezar la voz (0..1)
     vozCaida: 0.05,         // qué tan rápido se va al callarse (más chico = más lento)
+    // faders (F1 tamaño, F2 dirección). Hasta que movés el fader físico
+    // no hacen nada: los círculos quedan como siempre.
+    tamanoMax: 1.15,        // radio con el fader de tamaño arriba de todo (1.15 = tapa la pantalla)
+    giroMax: 180,           // grados que gira la dirección de entrada con el fader al tope
+    suavizadoFader: 0.15,   // más chico = el fader responde más suave/lento
     calibrarSeg: 3,         // segundos que escucha el ambiente al calibrar
     calibrarMargen: 1.2,    // el piso queda un 20% arriba del ruido medido
     // strobe
@@ -80,8 +85,26 @@
   const slots = Array.from({ length: N }, () => ({
     activo: false, lado: 1, t0: -99, sostenida: false, tSuelta: 0, nivelSuelta: 0,
     vel: 1, nota: -1, radio: 0.2, escapa: false, escapeDir: 1, tipo: 'normal',
-    rgb: [1, 0.33, 0], luzMult: 1, fase: 0, entrada: 0.35, barrido: 0, jx: 0, jy: 0, jl: 1, jr: 1
+    rgb: [1, 0.33, 0], luzMult: 1, fase: 0, entrada: 0.35, barrido: 0, angulo: 0, jx: 0, jy: 0, jl: 1, jr: 1
   }))
+
+  // ---- faders ----
+  // null = todavía no se tocó el fader físico → valor neutro (no cambia nada)
+  const fader = { tamano: null, giro: null }
+  const faderSuave = { tamano: 0.5, giro: 0 }
+  V.faderTamano = v01 => { fader.tamano = v01 }
+  V.faderGiro = v01 => { fader.giro = v01 }
+
+  // tamaño: fader en 0 = círculo de tamaño 0, en el medio = tamaño normal,
+  // arriba = cada círculo crece hasta tapar la pantalla
+  const tamano = r => {
+    const t = faderSuave.tamano
+    if (t <= 0.5) return r * (t / 0.5)
+    const k = (t - 0.5) / 0.5
+    return r + (Math.max(r, C.tamanoMax) - r) * k * k
+  }
+  // dirección de entrada en radianes (0 = horizontal, como siempre)
+  const anguloActual = () => faderSuave.giro * C.giroMax * Math.PI / 180
   let proximo = 0
 
   const hsvARgb = (h, sat) => {
@@ -114,22 +137,36 @@
     return n
   }
 
-  const posX = s => {
-    if (s.tipo === 'golpe') return 0.5
-    const t = easeOut(clamp01((time - s.t0) / s.entrada))
-    const inicio = 0.5 + s.lado * (0.5 + C.desdeX + s.radio)
-    return inicio + (0.5 - inicio) * t
+  // posición: entra desde afuera de la pantalla hasta el centro, en la
+  // dirección del círculo (horizontal, o girada con el fader de dirección).
+  // La cuenta se hace en el espacio corregido por el ancho de pantalla.
+  const asp = () => (typeof width !== 'undefined' && height) ? width / height : 16 / 9
+  const viaje = s => {
+    if (s.tipo === 'golpe') return 0
+    const e = easeOut(clamp01((time - s.t0) / s.entrada))
+    return 1 - e
   }
-
+  const distanciaEntrada = s => {
+    const c = Math.abs(Math.cos(s.angulo)), sn = Math.abs(Math.sin(s.angulo))
+    return 0.5 * asp() * c + 0.5 * sn + C.desdeX + tamano(s.radio)
+  }
+  const posX = s => {
+    const o = s.lado * distanciaEntrada(s) * viaje(s)
+    return 0.5 + o * Math.cos(s.angulo) / asp()
+  }
   const posY = s => {
-    if (!s.escapa || s.sostenida) return 0.5
-    const t = clamp01((time - inicioCaida(s)) / C.escapeDur)
-    return 0.5 + s.escapeDir * easeIn(t) * (0.6 + s.radio)
+    const o = s.lado * distanciaEntrada(s) * viaje(s)
+    let y = 0.5 + o * Math.sin(s.angulo)
+    if (s.escapa && !s.sostenida) {
+      const t = clamp01((time - inicioCaida(s)) / C.escapeDur)
+      y += s.escapeDir * easeIn(t) * (0.6 + tamano(s.radio))
+    }
+    return y
   }
 
   const radioActual = s => s.tipo === 'golpe'
     ? s.radio * easeOut(clamp01((time - s.t0) / C.golpeDur))
-    : s.radio
+    : tamano(s.radio)
 
   const fluct = s => 1 - C.fluct * (0.5 + 0.5 * Math.sin(time * C.fluctVel + s.fase) * Math.sin(time * C.fluctVel * 0.37 + s.fase * 2))
 
@@ -156,6 +193,7 @@
     s.rgb = hsvARgb((op.hue ?? C.hue) + (Math.random() * 2 - 1) * C.hueVar, C.sat)
     s.fase = Math.random() * 6.28
     s.barrido = Math.random() * 6.28
+    s.angulo = anguloActual()     // la dirección queda fija para este círculo
   }
 
   V.notaOff = (nota = 60) => {
@@ -255,6 +293,10 @@
     const dt = Math.min(0.1, Math.max(0, time - ultimo))
     ultimo = time
     vozEnv += (v - vozEnv) * (v > vozEnv ? C.vozAtaque : C.vozCaida)
+    const objTam = fader.tamano ?? 0.5
+    const objGiro = fader.giro ?? 0
+    faderSuave.tamano += (objTam - faderSuave.tamano) * C.suavizadoFader
+    faderSuave.giro += (objGiro - faderSuave.giro) * C.suavizadoFader
     for (const s of slots) {
       s.jx = (Math.random() - 0.5) * 2 * v * C.micPos
       s.jy = (Math.random() - 0.5) * 2 * v * C.micPos
@@ -335,7 +377,7 @@
         () => posY(s) + s.jy,
         () => radioActual(s) * s.jr,
         () => C.borde,
-        () => s.radio * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001))),
+        () => radioActual(s) * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001))),
         () => s.barrido,
         () => C.barridoFuerza * efectoVoz(),
         () => C.multicolor
