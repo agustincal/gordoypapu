@@ -5,7 +5,7 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-16 (v1.4: FMASTER = fundido a negro · fila 'vuelta')
+// Actualizado: 2026-10-16 (v1.5: FMASTER fundido · fila 'vuelta' · filaDelCanal para el panel)
 // ============================================================
 //
 // Cómo funcionan los LEDs
@@ -34,7 +34,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.4'
+  const VERSION = 'v1.5'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -551,6 +551,7 @@
   M.alDisparo = (fn) => { alDisparo = fn; return M }
   M.mute = (fila, valor) => { alternarMute(fila, valor); return M }
   M.muteado = fila => !!(filas[fila] && filas[fila].mute)
+  M.filaDelCanal = (nombre, canal0) => filaDelCanal(nombre, canal0)   // canal 0..15 → fila o null
   M.tiempos = tiempos
 
   M.buttons = function (names = []) {

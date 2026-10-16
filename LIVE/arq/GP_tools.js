@@ -8,13 +8,13 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.6: tiempo MIDI exacto + limpia duplicados al cargar)
+// Actualizado: 2026-10-16 (v1.7: panel MIDI separado por canal)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.6'
+  const VERSION = 'v1.7'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -73,13 +73,19 @@
   // ============================================================
   // 1. Panel MIDI (arriba a la izquierda)
   // ============================================================
+  // Una línea por aparato + canal: último mensaje, cantidad, y un punto que se
+  // prende con la actividad. El clock va aparte, con su BPM.
+  // Si GP_midi está cargado, muestra a qué fila va el canal y si está muteado.
   let panelEl = null
-  let lineas = []
+  const canales = new Map()        // 'aparato|ch' → { aparato, ch, ultimo, n, t }
+  const clocks = new Map()         // aparato → { pulsos, ultimaNegra, bpm, t }
+  let renderPendiente = false
+  const ACTIVO_MS = 180
 
   T.panel = () => {
     if (!panelEl) {
       panelEl = crearCaja('gpMidiPanel', `
-        top: 8px; left: 8px; color: #0f0; max-width: 340px;
+        top: 8px; left: 8px; color: #0f0; min-width: 300px; max-width: 420px;
         white-space: pre; pointer-events: none;
       `)
       panelEl.textContent = 'esperando MIDI...'
@@ -87,24 +93,73 @@
     return panelEl
   }
 
-  T.log = (nombre, data) => {
+  const corto = n => n.replace(/\s*\d+\s*$/,'').slice(0, 12).padEnd(12)
+  const describir = (tipo, d1, d2) =>
+    (tipo === 0x90 && d2 > 0) ? `on  ${String(d1).padStart(3)} v${String(d2).padStart(3)}`
+    : (tipo === 0x80 || tipo === 0x90) ? `off ${String(d1).padStart(3)}     `
+    : tipo === 0xb0 ? `cc  ${String(d1).padStart(3)} =${String(d2).padStart(3)}`
+    : `0x${tipo.toString(16)} ${d1} ${d2}`
+
+  const render = () => {
+    renderPendiente = false
     const panel = T.panel()
-    const [st, d1, d2] = data
-    const canal = (st & 0x0f) + 1
-    const tipo = st & 0xf0
-    const nombreTipo = (tipo === 0x90 && d2 > 0) ? 'on'
-      : (tipo === 0x80 || (tipo === 0x90 && d2 === 0)) ? 'off'
-      : tipo === 0xb0 ? 'cc'
-      : `0x${tipo.toString(16)}`
-    lineas.push(`${nombre} · ch${canal} · ${nombreTipo} · ${d1} · ${d2}`)
-    if (lineas.length > 12) lineas.shift()
-    panel.textContent = lineas.join('\n')
+    const ahora = performance.now()
+    const filas = []
+    for (const [ap, c] of clocks) {
+      const vivo = ahora - c.t < 1000
+      filas.push(`<span style="color:${vivo ? '#0f0' : '#555'}">${vivo ? '♩' : '·'}</span> ${corto(ap)} clock  ${vivo && c.bpm ? c.bpm.toFixed(1) + ' BPM' : 'detenido'}`)
+    }
+    const orden = [...canales.values()].sort((a, b) => a.aparato.localeCompare(b.aparato) || a.ch - b.ch)
+    for (const c of orden) {
+      const activo = ahora - c.t < ACTIVO_MS
+      let extra = ''
+      if (GP.midi && GP.midi.filaDelCanal) {
+        const fila = GP.midi.filaDelCanal(c.aparato, c.ch - 1)
+        if (fila) extra = GP.midi.muteado(fila) ? ` <span style="color:#f80">fila ${fila} MUTE</span>` : ` <span style="color:#888">fila ${fila}</span>`
+      }
+      filas.push(`<span style="color:${activo ? '#ff0' : '#264'}">●</span> ${corto(c.aparato)} ch${String(c.ch).padEnd(2)} ${c.ultimo}  <span style="color:#888">${String(c.n).padStart(5)}</span>${extra}`)
+    }
+    panel.innerHTML = filas.length ? filas.join('\n') : 'esperando MIDI...'
   }
+  const pedirRender = () => {
+    if (renderPendiente) return
+    renderPendiente = true
+    setTimeout(render, 60)        // como mucho ~16 veces por segundo
+  }
+  // apaga los puntos de actividad aunque no lleguen más mensajes
+  if (window._gpPanelReloj) clearInterval(window._gpPanelReloj)
+  window._gpPanelReloj = setInterval(() => { if (panelEl && (canales.size || clocks.size)) render() }, 250)
+
+  T.log = (nombre, data) => {
+    const [st, d1, d2] = data
+    if (st === 0xf8) {
+      const c = clocks.get(nombre) || { pulsos: 0, ultimaNegra: 0, bpm: 0, t: 0 }
+      const ahora = performance.now()
+      c.t = ahora
+      if (++c.pulsos % 24 === 0) {
+        if (c.ultimaNegra) c.bpm = 60000 / (ahora - c.ultimaNegra)
+        c.ultimaNegra = ahora
+      }
+      clocks.set(nombre, c)
+      return
+    }
+    if (st >= 0xf0) return
+    const ch = (st & 0x0f) + 1
+    const tipo = st & 0xf0
+    const k = `${nombre}|${ch}`
+    const c = canales.get(k) || { aparato: nombre, ch, ultimo: '', n: 0, t: 0 }
+    c.ultimo = describir(tipo, d1, d2)
+    if (tipo === 0x90 && d2 > 0) { c.n++; c.t = performance.now() }
+    else if (tipo === 0xb0) c.t = performance.now()
+    canales.set(k, c)
+    pedirRender()
+  }
+  T.limpiarPanel = () => { canales.clear(); clocks.clear(); if (panelEl) panelEl.textContent = 'esperando MIDI...' }
 
   // atajo para el sketch: graba todo y muestra lo que no es clock/sistema
   T.midi = (nombre, data, ts) => {
     T.grabador.registrar(nombre, data, ts)
-    if (data[0] < 0xf0) T.log(nombre, data)
+    if (data[0] < 0xf0 || data[0] === 0xf8) T.log(nombre, data)
   }
 
   // ---- conexión MIDI única (bus compartido con GP_midi.js) ----
