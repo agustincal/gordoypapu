@@ -4,15 +4,16 @@
 // Rol: panel MIDI + grabador (MIDI + mic + video de Hydra) + reproductor de ensayo
 // Reemplaza a __tools.js + __ensayo.js · Sólo para ensayo: no se carga en el show
 // Uso:  GP.tools.init({ cancion: '03_Vociferan' })
-//       GP.tools.led.salida = <MIDIOutput del Akai>   (LED del pad del grabador)
+//       GP.tools.conectarMidi({ alMensaje: (nombre, data) => { ... } })
+//       (graba, muestra en el panel, maneja el pad 98 y su LED; seguro al reevaluar)
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.2: carga de midi y audio por separado)
+// Actualizado: 2026-10-16 (v1.3: una sola conexión MIDI aunque se reevalúe el sketch)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.2'
+  const VERSION = 'v1.3'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -28,10 +29,12 @@
     grabarVideo: true,      // false = sólo MIDI + audio
     fps: 30,                // cuadros por segundo del video
     videoBitrate: 6e6,      // 6 Mbps · subilo si se ve pixelado, bajalo si pesa mucho
+    padGrabador: 98,        // nota del Akai que hace grabar / detener+guardar (null = ninguno)
   }
   T.config = cfg
   T.init = (opciones = {}) => {
     Object.assign(cfg, opciones)
+    if (cfg.padGrabador != null) T.led.nota = cfg.padGrabador
     console.log(`GP.tools ${VERSION} · canción: ${cfg.cancion}`)
     return T
   }
@@ -103,6 +106,40 @@
     if (data[0] < 0xf0) T.log(nombre, data)
   }
 
+  // ---- conexión MIDI única ----
+  // El MIDIAccess se pide UNA vez por página y se guarda en window. Al reevaluar el
+  // sketch sólo se reemplaza la función alMensaje: nunca se acumulan handlers
+  // (antes, cada reevaluación sumaba otra conexión → mensajes y pad 98 duplicados).
+  const esAkaiReal = n => /apc|akai/i.test(n) && !/ensayo/i.test(n)
+  T.accesoMidi = () => {
+    if (!window._gpMidiAcc) window._gpMidiAcc = navigator.requestMIDIAccess()
+    return window._gpMidiAcc
+  }
+  T.conectarMidi = async ({ alMensaje = null, alConectar = null } = {}) => {
+    T._alMensaje = alMensaje
+    T._alConectar = alConectar
+    const acc = await T.accesoMidi()
+    const conectar = () => {
+      acc.inputs.forEach(entrada => {
+        if (entrada.state !== 'connected') return
+        entrada.onmidimessage = (msg) => {
+          const data = msg.data
+          T.midi(entrada.name, data)
+          const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
+          if (esNoteOn && data[1] === cfg.padGrabador && /apc|akai/i.test(entrada.name)) T.grabadorCiclo()
+          if (T._alMensaje) T._alMensaje(entrada.name, data)
+        }
+      })
+      T.led.salida = null
+      acc.outputs.forEach(o => { if (o.state === 'connected' && esAkaiReal(o.name)) T.led.salida = o })
+      T.led.pintar()
+      if (T._alConectar) T._alConectar(acc)
+    }
+    acc.onstatechange = conectar
+    conectar()
+    return acc
+  }
+
   // ============================================================
   // 2. Grabador: MIDI + micrófono + video de Hydra (abajo a la derecha)
   // ============================================================
@@ -128,6 +165,7 @@
   const ESTILOS = {
     listo:     { fondo: 'rgba(0,0,0,0.7)', texto: '○ REC listo' },
     grabando:  { fondo: 'rgba(200,0,0,0.85)', texto: '● GRABANDO' },
+    iniciando: { fondo: 'rgba(200,0,0,0.5)', texto: '● iniciando…' },
     guardando: { fondo: 'rgba(170,150,0,0.85)', texto: '… GUARDANDO' },
     guardado:  { fondo: 'rgba(0,140,0,0.85)', texto: '✓ GUARDADO' },
   }
@@ -220,7 +258,8 @@
     get estado() { return estado },
 
     async iniciar() {
-      if (estado === 'grabando' || estado === 'guardando') return
+      if (estado !== 'listo' && estado !== 'guardado') return
+      setEstado('iniciando')   // marca ya, para que un segundo toque no arranque otra grabación
       chunksAudio = []
       chunksVideo = []
       recAudio = recVideo = null
@@ -394,7 +433,7 @@
   })
 
   const buscarSalidas = async () => {
-    const acc = await navigator.requestMIDIAccess()
+    const acc = await T.accesoMidi()
     salidaKorg = salidaAkai = null
     acc.outputs.forEach(o => {
       if (o.state !== 'connected') return

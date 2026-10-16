@@ -24,36 +24,22 @@ const cargarGP = async (ruta) => {
 
 await cargarGP('LIVE/arq/GP_tools.js')
 console.log('GP_tools', GP.tools._version)
-GP.tools.init({ cancion: 'test_tools' })   // va en el nombre de los archivos grabados
+
+GP.tools.init({ cancion: 'test_tools', padGrabador: 98 })
 GP.tools.panel()
 
-// LED del pad 98: prendido = listo · parpadea = grabando · apagado = guardando
-// (lo maneja GP_tools; si los valores no coinciden con tu Akai, cambialos acá)
-GP.tools.led.nota = 98
+// LED del pad: prendido = listo · parpadea = grabando · apagado = guardando
 GP.tools.led.on = 4
 GP.tools.led.off = 1
 
-navigator.requestMIDIAccess().then(acc => {
-  const conectar = () => {
-    acc.inputs.forEach(entrada => {
-      if (entrada.state !== 'connected') return
-      entrada.onmidimessage = (msg) => {
-        const data = msg.data
-        GP.tools.midi(entrada.name, data)   // graba todo + muestra en el panel
-
-        const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
-        if (esNoteOn) flash = 1
-        if (esNoteOn && data[1] === 98 && /apc|akai/i.test(entrada.name)) GP.tools.grabadorCiclo()
-      }
-    })
-    GP.tools.led.salida = null
-    acc.outputs.forEach(o => {
-      if (o.state === 'connected' && /apc|akai/i.test(o.name) && !/ensayo/i.test(o.name)) GP.tools.led.salida = o
-    })
-    GP.tools.led.pintar()   // pinta el LED al conectar
+// MIDI: una sola conexión aunque reevalúes el sketch.
+// GP_tools ya graba, muestra en el panel y maneja el pad 98;
+// acá va sólo lo propio del sketch.
+GP.tools.conectarMidi({
+  alMensaje: (nombre, data) => {
+    const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
+    if (esNoteOn) flash = 1
   }
-  conectar()
-  acc.onstatechange = conectar
 })
 
 // algo que se mueva, para ver que el video graba
