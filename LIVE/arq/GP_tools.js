@@ -6,13 +6,13 @@
 // Uso:  GP.tools.init({ cancion: '03_Vociferan' })
 //       GP.tools.led.salida = <MIDIOutput del Akai>   (LED del pad del grabador)
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.1: toggle grabar/detener+guardar, LED del pad)
+// Actualizado: 2026-10-16 (v1.2: carga de midi y audio por separado)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.1'
+  const VERSION = 'v1.2'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -327,53 +327,70 @@
   const ensayoEl = crearCaja('gpEnsayoPanel', `
     bottom: 8px; left: 8px; display: flex; align-items: center; gap: 6px;
   `)
+  // botones midi / audio: gris = vacío · verde = cargado
+  const BOTON = `cursor:pointer; border:1px solid #888; border-radius:3px; padding:1px 6px;`
   ensayoEl.innerHTML = `
-    <label style="cursor:pointer; border:1px solid #888; border-radius:3px; padding:1px 6px;">
-      cargar<input type="file" multiple accept=".json,.webm,audio/*,video/*" style="display:none">
+    <label data-carga="midi" style="${BOTON}" title="cargar .json de MIDI">
+      midi<input type="file" accept=".json" style="display:none">
+    </label>
+    <label data-carga="audio" style="${BOTON}" title="cargar audio (.webm / .mp3 / .wav)">
+      audio<input type="file" accept=".webm,audio/*,video/webm" style="display:none">
     </label>
     <button data-accion="play" style="font:inherit; padding:0 6px;">▶</button>
     <button data-accion="stop" style="font:inherit; padding:0 6px;">■</button>
-    <span data-estado>sin ensayo</span>
+    <span data-estado></span>
   `
   const estadoEnsayo = ensayoEl.querySelector('[data-estado]')
   const setEnsayo = t => { estadoEnsayo.textContent = t }
+  const botonMidi = ensayoEl.querySelector('[data-carga="midi"]')
+  const botonAudio = ensayoEl.querySelector('[data-carga="audio"]')
+
+  const marcar = (boton, estadoCarga, nombreArchivo = '') => {
+    const colores = {
+      vacio:  { fondo: 'transparent', borde: '#888', texto: '#fff' },
+      ok:     { fondo: '#0a0',        borde: '#0c0', texto: '#000' },
+      error:  { fondo: '#b00',        borde: '#e00', texto: '#fff' },
+    }[estadoCarga]
+    boton.style.background = colores.fondo
+    boton.style.borderColor = colores.borde
+    boton.style.color = colores.texto
+    if (nombreArchivo) boton.title = nombreArchivo   // pasando el mouse se ve qué archivo es
+  }
 
   const duracion = ms => {
     const s = Math.round(ms / 1000)
     return `${Math.floor(s / 60)}:${dosDigitos(s % 60)}`
   }
-  const resumenEnsayo = () => [
-    midiEnsayo ? `midi ${duracion(midiEnsayo[midiEnsayo.length - 1][0])}` : 'falta midi',
-    audioEl ? 'audio ✓' : 'sin audio',
-  ].join(' · ')
+  const resumenEnsayo = () => midiEnsayo ? duracion(midiEnsayo[midiEnsayo.length - 1][0]) : ''
 
-  // un solo botón para elegir los dos archivos juntos (.json + .webm)
-  ensayoEl.querySelector('input').addEventListener('change', (e) => {
-    const archivos = [...e.target.files]
-    const json = archivos.find(f => /\.json$/i.test(f.name))
-    const medios = archivos.filter(f => !/\.json$/i.test(f.name))
-    const audio = medios.find(f => /audio/i.test(f.name)) || medios[0]
-
-    if (audio) {
-      if (audioEl) audioEl.pause()
-      audioEl = new Audio(URL.createObjectURL(audio))   // sin barra: lo maneja ▶/■
-      audioEl.onended = () => setEnsayo(`fin · ${resumenEnsayo()}`)
-    }
-    if (json) {
-      const reader = new FileReader()
-      reader.onload = () => {
-        try {
-          midiEnsayo = JSON.parse(reader.result)
-          setEnsayo(resumenEnsayo())
-        } catch (err) {
-          setEnsayo('el .json no se pudo leer')
-        }
+  botonMidi.querySelector('input').addEventListener('change', (e) => {
+    const file = e.target.files[0]
+    e.target.value = ''   // permite volver a elegir el mismo archivo
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        midiEnsayo = JSON.parse(reader.result)
+        marcar(botonMidi, 'ok', file.name)
+        setEnsayo(resumenEnsayo())
+      } catch (err) {
+        midiEnsayo = null
+        marcar(botonMidi, 'error', file.name)
+        setEnsayo('json inválido')
       }
-      reader.readAsText(json)
-    } else {
-      setEnsayo(resumenEnsayo())
     }
-    e.target.value = ''   // permite volver a elegir los mismos archivos
+    reader.readAsText(file)
+  })
+
+  botonAudio.querySelector('input').addEventListener('change', (e) => {
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    if (audioEl) audioEl.pause()
+    audioEl = new Audio(URL.createObjectURL(file))   // sin barra: lo maneja ▶/■
+    audioEl.onended = () => setEnsayo(`fin ${resumenEnsayo()}`)
+    audioEl.onerror = () => { audioEl = null; marcar(botonAudio, 'error', file.name) }
+    marcar(botonAudio, 'ok', file.name)
   })
 
   const buscarSalidas = async () => {
@@ -399,7 +416,7 @@
 
   ensayoEl.querySelector('[data-accion="play"]').addEventListener('click', async () => {
     try {
-      if (!midiEnsayo) { setEnsayo('falta cargar el .json'); return }
+      if (!midiEnsayo) { setEnsayo('falta midi'); return }
       if (!(await buscarSalidas())) { setEnsayo('sin puertos loopMIDI'); return }
 
       detenerEnsayo()   // nunca se suman dos reproducciones
@@ -411,7 +428,7 @@
         enviados++
       })
       if (audioEl) audioEl.play()
-      setEnsayo(`▶ ${enviados} msjs · ${resumenEnsayo()}`)
+      setEnsayo(`▶ ${resumenEnsayo()}`)
     } catch (err) {
       setEnsayo(`error: ${err.message}`)
       console.error('GP.tools ensayo:', err)
