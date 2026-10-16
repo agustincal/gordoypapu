@@ -4,16 +4,17 @@
 // Rol: panel MIDI + grabador (MIDI + mic + video de Hydra) + reproductor de ensayo
 // Reemplaza a __tools.js + __ensayo.js · Sólo para ensayo: no se carga en el show
 // Uso:  GP.tools.init({ cancion: '03_Vociferan' })
-//       GP.tools.conectarMidi({ alMensaje: (nombre, data) => { ... } })
-//       (graba, muestra en el panel, maneja el pad 98 y su LED; seguro al reevaluar)
+//       Graba, muestra y maneja el pad 98 solo, apenas se carga.
+//       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
+//       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.3: una sola conexión MIDI aunque se reevalúe el sketch)
+// Actualizado: 2026-10-16 (v1.4: bus MIDI compartido con GP_midi, LED por GP_midi)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.3'
+  const VERSION = 'v1.4'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -106,38 +107,60 @@
     if (data[0] < 0xf0) T.log(nombre, data)
   }
 
-  // ---- conexión MIDI única ----
-  // El MIDIAccess se pide UNA vez por página y se guarda en window. Al reevaluar el
-  // sketch sólo se reemplaza la función alMensaje: nunca se acumulan handlers
-  // (antes, cada reevaluación sumaba otra conexión → mensajes y pad 98 duplicados).
-  const esAkaiReal = n => /apc|akai/i.test(n) && !/ensayo/i.test(n)
-  T.accesoMidi = () => {
-    if (!window._gpMidiAcc) window._gpMidiAcc = navigator.requestMIDIAccess()
-    return window._gpMidiAcc
-  }
-  T.conectarMidi = async ({ alMensaje = null, alConectar = null } = {}) => {
-    T._alMensaje = alMensaje
-    T._alConectar = alConectar
-    const acc = await T.accesoMidi()
-    const conectar = () => {
-      acc.inputs.forEach(entrada => {
-        if (entrada.state !== 'connected') return
-        entrada.onmidimessage = (msg) => {
-          const data = msg.data
-          T.midi(entrada.name, data)
-          const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
-          if (esNoteOn && data[1] === cfg.padGrabador && /apc|akai/i.test(entrada.name)) T.grabadorCiclo()
-          if (T._alMensaje) T._alMensaje(entrada.name, data)
-        }
-      })
-      T.led.salida = null
-      acc.outputs.forEach(o => { if (o.state === 'connected' && esAkaiReal(o.name)) T.led.salida = o })
-      T.led.pintar()
-      if (T._alConectar) T._alConectar(acc)
+  // ---- conexión MIDI única (bus compartido con GP_midi.js) ----
+  // Una sola conexión por página; al reevaluar, cada id reemplaza al anterior.
+  const bus = window._gpMidiBus || (window._gpMidiBus = { oyentes: {}, alCambiarPuertos: {}, acc: null, listo: null })
+  if (!bus.conectar) {
+    bus.escuchar = (id, fn) => { if (fn) bus.oyentes[id] = fn; else delete bus.oyentes[id] }
+    bus.puertos = (id, fn) => { if (fn) bus.alCambiarPuertos[id] = fn; else delete bus.alCambiarPuertos[id] }
+    bus.conectar = () => {
+      if (!bus.listo) {
+        bus.listo = navigator.requestMIDIAccess().then(acc => {
+          bus.acc = acc
+          const enganchar = () => {
+            acc.inputs.forEach(entrada => {
+              if (entrada.state !== 'connected') return
+              entrada.onmidimessage = (msg) => {
+                for (const id in bus.oyentes) {
+                  try { bus.oyentes[id](entrada.name, msg.data) } catch (err) { console.error(`[GP bus] ${id}:`, err) }
+                }
+              }
+            })
+            for (const id in bus.alCambiarPuertos) {
+              try { bus.alCambiarPuertos[id](acc) } catch (err) { console.error(`[GP bus] ${id}:`, err) }
+            }
+          }
+          bus.enganchar = enganchar
+          acc.onstatechange = enganchar
+          enganchar()
+          return acc
+        })
+      }
+      return bus.listo
     }
-    acc.onstatechange = conectar
-    conectar()
-    return acc
+  }
+
+
+  const esAkaiReal = n => /apc|akai/i.test(n) && !/ensayo/i.test(n)
+  T.accesoMidi = () => bus.conectar()
+
+  // graba + panel + pad del grabador. Siempre activo apenas se carga tools.
+  bus.escuchar('tools', (nombre, data) => {
+    T.midi(nombre, data)
+    const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
+    if (esNoteOn && data[1] === cfg.padGrabador && /apc|akai/i.test(nombre)) T.grabadorCiclo()
+  })
+  bus.puertos('tools', (acc) => {
+    T.led.salida = null
+    acc.outputs.forEach(o => { if (o.state === 'connected' && esAkaiReal(o.name)) T.led.salida = o })
+    T.led.pintar()
+  })
+
+  // Para sketches SIN GP_midi. Si el sketch usa GP_midi, usá GP.midi.alMensaje en su lugar.
+  T.conectarMidi = async ({ alMensaje = null } = {}) => {
+    if (GP.midi && GP.midi.alMensaje) GP.midi.alMensaje(alMensaje)
+    else bus.escuchar('sketch', alMensaje)
+    return bus.conectar()
   }
 
   // ============================================================
@@ -196,9 +219,12 @@
   }
   let ledPrendido = null
   const mandarLed = (prender) => {
-    if (!T.led.salida || ledPrendido === prender) return
+    if ((!T.led.salida && !(GP.midi && GP.midi.ledSistema)) || ledPrendido === prender) return
     ledPrendido = prender
-    try { T.led.salida.send([0x90, T.led.nota, prender ? T.led.on : T.led.off]) } catch (e) {}
+    const valor = prender ? T.led.on : T.led.off
+    // si está GP_midi, el LED pasa por su motor (un solo dueño de los LEDs)
+    if (GP.midi && GP.midi.ledSistema) { GP.midi.ledSistema(T.led.nota, valor); return }
+    try { T.led.salida.send([0x90, T.led.nota, valor]) } catch (e) {}
   }
   const pintarLed = () => {
     ledPrendido = null   // fuerza reenvío (por si se reconectó el Akai)
@@ -528,4 +554,8 @@
     window.addEventListener('keydown', window._gpToolsAtajos, true)
   }
   T.atajosTeclado()
+
+  // conecta MIDI apenas se carga (graba y muestra aunque el sketch no haga nada)
+  bus.conectar().then(acc => { if (bus.alCambiarPuertos.tools) bus.alCambiarPuertos.tools(acc) })
+    .catch(err => console.warn('GP.tools: sin acceso MIDI', err))
 })()
