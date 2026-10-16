@@ -5,7 +5,7 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-16
+// Actualizado: 2026-10-16 (v1.1: filas de disparo 5-8 + mute por canal)
 // ============================================================
 //
 // Cómo funcionan los LEDs
@@ -18,12 +18,21 @@
 // Sólo se manda una nota cuando su valor cambia, y en tandas chicas,
 // para no saturar la controladora.
 //
+// Zonas de la grilla (igual en todos los sketches)
+// ------------------------------------------------
+//   filas 1-4 → TOGGLE   (GP.midi.buttons)  verde = habilitado · rojo parpadeo = prendido
+//   filas 5-8 → DISPARO  (GP.midi.filas)    verde = en reposo · amarillo = suena el canal
+//                                            rojo parpadeo = lo tocás · amarillo al soltar
+//   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85) = MUTE del canal
+//     apagado = no llegó nada · prendido = recibiendo · parpadea = muteado
+//   89 = grabador (GP_tools)
+//
 // ============================================================
 
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.0'
+  const VERSION = 'v1.1'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -210,30 +219,164 @@
   // ============================================================
   // Entrada MIDI (sólo lo que viene del Akai: real o puerto de ensayo)
   // ============================================================
+  // ============================================================
+  // Filas de disparo (5-8) y mute por canal
+  // ============================================================
+  const FILAS_DISPARO = [5, 6, 7, 8]
+  const notaDe = (fila, col) => (fila - 1) * 8 + col          // fila 1..8, col 0..7
+  const botonMute = fila => 90 - fila                          // 8→82 ... 5→85
+  const LED_DISPARO = { reposo: COLOR.verde, suena: COLOR.amarillo, mano: COLOR.rojoParpadeo, recien: COLOR.amarillo }
+  const LED_MUTE = { nada: 0, recibe: 1, muteado: 2 }          // botones redondos: 0 / 1 / 2 parpadeo
+  const tiempos = { recienMs: 300, minSuenaMs: 90 }
+
+  // persistente entre reevaluaciones: mute y "ya llegó" por fila
+  const filas = {}        // fila → { cfg, mute, visto, pads: [ {mano, korg:Set, hasta, timer} x8 ] }
+  let alDisparo = null
+
+  const nuevaFila = () => ({ cfg: null, mute: false, visto: false,
+    pads: Array.from({ length: 8 }, () => ({ mano: false, korg: new Map(), hasta: 0, timer: null })) })
+
+  const pintarPad = (fila, col) => {
+    const f = filas[fila]
+    const nota = notaDe(fila, col)
+    if (!f || !f.cfg) { fijar(capaBoton, nota, null); return }
+    const p = f.pads[col]
+    const ahora = performance.now()
+    let v = LED_DISPARO.reposo
+    if (p.mano) v = LED_DISPARO.mano
+    else if (p.korg.size) v = LED_DISPARO.suena
+    else if (ahora < p.hasta) v = LED_DISPARO.recien
+    fijar(capaBoton, nota, v)
+  }
+  const pintarFila = (fila) => { for (let c = 0; c < 8; c++) pintarPad(fila, c) }
+  const pintarMute = (fila) => {
+    const f = filas[fila]
+    const n = botonMute(fila)
+    if (!f || !f.cfg) { fijar(capaBoton, n, null); return }
+    fijar(capaBoton, n, f.mute ? LED_MUTE.muteado : f.visto ? LED_MUTE.recibe : LED_MUTE.nada)
+  }
+
+  // amarillo "recién tocado / recién sonó": vuelve a verde solo
+  const amarilloHasta = (fila, col, ms) => {
+    const p = filas[fila].pads[col]
+    p.hasta = Math.max(p.hasta, performance.now() + ms)
+    clearTimeout(p.timer)
+    p.timer = setTimeout(() => pintarPad(fila, col), p.hasta - performance.now() + 5)
+  }
+
+  // nota del canal → columna(s)
+  const columnasDe = (c, nota) => {
+    if (c.pulso) return [0, 1, 2, 3, 4, 5, 6, 7]
+    if (c.notas) {
+      const i = c.notas.indexOf(nota)
+      if (i >= 0) return [i % 8]
+    }
+    if (c.rango) {
+      const [min, max] = c.rango
+      const col = Math.floor((nota - min) * 8 / (max - min + 1))
+      return [Math.max(0, Math.min(7, col))]
+    }
+    return [nota % 8]
+  }
+  // columna → nota representativa (para los disparos a mano)
+  const notaDeColumna = (c, col) => {
+    if (c.notas && c.notas[col] != null) return c.notas[col]
+    if (c.notas && c.notas.length) return c.notas[0]
+    if (c.rango) { const [min, max] = c.rango; return Math.round(min + (col + 0.5) * (max - min + 1) / 8 - 0.5) }
+    return null
+  }
+
+  const emitir = (ev) => { if (alDisparo) try { alDisparo(ev) } catch (err) { console.error('[GP MIDI] alDisparo:', err) } }
+
+  // ¿este mensaje es de un canal asignado a una fila? → devuelve la fila
+  const filaDelCanal = (nombre, canal) => {
+    for (const fila of FILAS_DISPARO) {
+      const f = filas[fila]
+      if (!f || !f.cfg || f.cfg.canal == null) continue
+      if (f.cfg.canal - 1 === canal && f.cfg.puerto.test(nombre)) return fila
+    }
+    return null
+  }
+
+  // nota que entra desde el aparato de un canal (korg u otro)
+  const notaDeCanal = (fila, nota, vel, on) => {
+    const f = filas[fila]
+    if (!f.visto) { f.visto = true; pintarMute(fila) }
+    if (f.mute) return                                  // muteado: ni luz ni disparo
+    const cols = columnasDe(f.cfg, nota)
+    for (const col of cols) {
+      const p = f.pads[col]
+      if (on) { p.korg.set(nota, performance.now()); amarilloHasta(fila, col, tiempos.minSuenaMs) }
+      else p.korg.delete(nota)
+      pintarPad(fila, col)
+    }
+    emitir({ fila, columna: cols.length === 1 ? cols[0] : null, nota, vel, on, origen: 'canal' })
+  }
+
+  // pad de disparo tocado a mano en el Akai
+  const padDeMano = (fila, col, vel, on) => {
+    const f = filas[fila]
+    const p = f.pads[col]
+    p.mano = on
+    if (!on) amarilloHasta(fila, col, tiempos.recienMs)
+    pintarPad(fila, col)
+    emitir({ fila, columna: col, nota: notaDeColumna(f.cfg, col), vel, on, origen: 'akai' })
+  }
+
+  const alternarMute = (fila, valor) => {
+    const f = filas[fila]
+    if (!f || !f.cfg) return
+    f.mute = valor == null ? !f.mute : !!valor
+    if (f.mute) for (let c = 0; c < 8; c++) { f.pads[c].korg.clear(); pintarPad(fila, c) }   // suelta lo que estaba sonando
+    pintarMute(fila)
+    console.info(`[GP MIDI] fila ${fila} (canal ${f.cfg.canal}) ${f.mute ? 'MUTEADA' : 'activa'}`)
+  }
+
   let alMensaje = null
 
   const procesar = (nombre, data) => {
-    if (cfg.akai.test(nombre)) {
-      const [st, d1, d2] = data
-      const tipo = st & 0xf0
-      const canal = st & 0x0f
-      if (canal === cfg.canal) {
-        // fader
-        if (tipo === 0xb0 && d1 >= 48 && d1 <= 56) {
-          const limpio = limpiarFader(CC_TO_FADER[d1], d2)
-          state.faderValues[d1] = limpio
-          saveFader(d1, limpio)
-          for (const fn of state.faderHandlers[d1] || []) fn(limpio)
-        }
-        // botón de la grilla (toggle)
-        if (tipo === 0x90 && d2 > 0 && d1 <= 63 && state.activeButtons.includes(d1)) {
+    const [st, d1, d2] = data
+    const tipo = st & 0xf0
+    const canal = st & 0x0f
+    const esOn = tipo === 0x90 && d2 > 0
+    const esOff = tipo === 0x80 || (tipo === 0x90 && d2 === 0)
+    let muteado = false
+
+    if (st < 0xf0 && cfg.akai.test(nombre) && canal === cfg.canal) {
+      // fader
+      if (tipo === 0xb0 && d1 >= 48 && d1 <= 56) {
+        const limpio = limpiarFader(CC_TO_FADER[d1], d2)
+        state.faderValues[d1] = limpio
+        saveFader(d1, limpio)
+        for (const fn of state.faderHandlers[d1] || []) fn(limpio)
+      }
+      if (esOn || esOff) {
+        const fila = Math.floor(d1 / 8) + 1
+        // pad de una fila de disparo configurada
+        if (d1 <= 63 && filas[fila] && filas[fila].cfg) padDeMano(fila, d1 % 8, d2, esOn)
+        // botón de mute (82..85)
+        else if (esOn && d1 >= 82 && d1 <= 85) alternarMute(90 - d1)
+        // botón de la grilla (toggle, filas 1-4 o donde el sketch los habilite)
+        else if (esOn && d1 <= 63 && state.activeButtons.includes(d1)) {
           state.buttonState[d1] = !state.buttonState[d1]
           pintarBoton(d1)
           for (const fn of state.buttonHandlers[d1] || []) fn({ note: d1, active: state.buttonState[d1], data })
         }
       }
+    } else if (st < 0xf0 && (esOn || esOff)) {
+      // nota de otro aparato: ¿pertenece a un canal asignado a una fila?
+      const fila = filaDelCanal(nombre, canal)
+      if (fila) {
+        muteado = filas[fila].mute
+        notaDeCanal(fila, d1, d2, esOn)
+      }
+    } else if (st < 0xf0) {
+      const fila = filaDelCanal(nombre, canal)
+      if (fila) muteado = filas[fila].mute
     }
-    if (alMensaje) alMensaje(nombre, data)   // el sketch recibe TODO (korg incluido)
+
+    // el sketch recibe TODO (korg incluido); info.muteado avisa si ese canal está muteado
+    if (alMensaje) alMensaje(nombre, data, { muteado })
   }
 
   const alCambiarPuertos = (acc) => {
@@ -297,6 +440,28 @@
   // Llamala en cada evaluación: reemplaza a la anterior, no se acumula.
   M.alMensaje = (fn) => { alMensaje = fn; return M }
 
+  // filas de disparo 5-8. Cada fila: { puerto, canal (1-16), notas | rango | pulso }
+  //   null = fila apagada · {} sin canal = sólo disparo a mano
+  // El mute y el "ya llegó" se conservan al reevaluar.
+  M.filas = function (config = {}) {
+    for (const fila of FILAS_DISPARO) {
+      const c = config[fila]
+      const f = filas[fila] || (filas[fila] = nuevaFila())
+      const antes = f.cfg
+      f.cfg = c ? { puerto: /korg|padkontrol/i, ...c } : null
+      if (!antes || !f.cfg || antes.canal !== f.cfg.canal) { f.mute = false; f.visto = false }
+      for (const p of f.pads) { p.mano = false; p.korg.clear() }
+      pintarFila(fila)
+      pintarMute(fila)
+    }
+    return M
+  }
+  // fn({ fila, columna, nota, vel, on, origen: 'canal' | 'akai' })
+  M.alDisparo = (fn) => { alDisparo = fn; return M }
+  M.mute = (fila, valor) => { alternarMute(fila, valor); return M }
+  M.muteado = fila => !!(filas[fila] && filas[fila].mute)
+  M.tiempos = tiempos
+
   M.buttons = function (names = []) {
     limpiarCapaBoton()
     const notas = [...new Set(names.map(n => String(n).trim().toUpperCase()))].map(buttonToNote)
@@ -305,6 +470,7 @@
     state.buttonHandlers = {}
     for (const n of notas) { state.buttonState[n] = false; state.buttonHandlers[n] = []; pintarBoton(n) }
     for (const name of state.activeFaders) if (FADER_LED[name] !== undefined) fijar(capaBoton, FADER_LED[name], ESTILO_FADER)
+    for (const fila of FILAS_DISPARO) { pintarFila(fila); pintarMute(fila) }   // no borrar las filas de disparo
     return M
   }
 
@@ -359,6 +525,7 @@
   }
 
   M.reset = function () {
+    M.filas({})
     limpiarCapaBoton()
     M.apagarLuces()
     state.activeButtons = []; state.activeFaders = []

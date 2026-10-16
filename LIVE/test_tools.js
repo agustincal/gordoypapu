@@ -1,8 +1,8 @@
 // ============================================================
 // test_tools
 // Sketch mínimo para probar LIVE/arq/GP_midi.js + GP_tools.js
-// (botones, faders, LEDs, korg→akai, grabador, ensayo)
-// Pad 98 o Ctrl+Alt+R: grabar / detener+guardar
+// (botones, faders, LEDs, filas de disparo + mute, grabador, ensayo)
+// Pad 89 o Ctrl+Alt+R: grabar / detener+guardar
 // Actualizado: 2026-10-16
 // ============================================================
 
@@ -26,30 +26,28 @@ await cargarGP('LIVE/arq/GP_midi.js')    // Akai: botones, faders y TODOS los LE
 await cargarGP('LIVE/arq/GP_tools.js')   // ensayo: grabador, panel, reproductor
 console.log(GP.midi.version, '· GP_tools', GP.tools._version)
 
-GP.tools.init({ cancion: 'test_tools', padGrabador: 98 })
+GP.tools.init({ cancion: 'test_tools' })   // grabador en el pad 89 (default)
 GP.tools.panel()
 
-// LED del pad del grabador: prendido = listo · parpadea = grabando · apagado = guardando
-GP.tools.led.on = 4
-GP.tools.led.off = 1
+// LED del pad 89: prendido = listo · parpadea = grabando · apagado = guardando
 
 await GP.midi.start()
 GP.midi.buttons(['N11', 'N12']).faders(['F1', 'F2'])
 
-// prueba de luces: el Korg prende pads del Akai mientras suena (lo de ayer, ahora a propósito)
-const KORG_A_AKAI = true
+// ---- filas de disparo (5-8): una fila por canal ----
+// botón derecho de cada fila = mute (8→82, 7→83, 6→84, 5→85)
+GP.midi.filas({
+  8: { canal: 10, pulso: true },        // batería: pulso en toda la fila
+  7: { canal: 1,  rango: [25, 48] },    // línea principal
+  6: { canal: 2,  rango: [57, 86] },    // melodía aguda
+  5: null,                              // reservada para el canal que va a venir
+})
 
-GP.midi.alMensaje((nombre, data) => {
-  const tipo = data[0] & 0xf0
-  const esNoteOn = tipo === 0x90 && data[2] > 0
-  const esNoteOff = tipo === 0x80 || (tipo === 0x90 && data[2] === 0)
-  if (esNoteOn) flash = 1
-
-  if (KORG_A_AKAI && /korg|padkontrol/i.test(nombre)) {
-    const pad = data[1] % 64          // cualquier nota del Korg cae en un pad de la grilla
-    if (esNoteOn) GP.midi.luz(pad, GP.midi.COLOR.verde)
-    if (esNoteOff) GP.midi.luz(pad, 0)
-  }
+// un solo evento para todo disparo, venga del Korg o de tu mano
+GP.midi.alDisparo(({ fila, columna, nota, on, origen }) => {
+  if (!on) return
+  flash = 1
+  // console.log('disparo', fila, columna, nota, origen)
 })
 
 // algo que se mueva, para ver que el video graba

@@ -4,17 +4,17 @@
 // Rol: panel MIDI + grabador (MIDI + mic + video de Hydra) + reproductor de ensayo
 // Reemplaza a __tools.js + __ensayo.js · Sólo para ensayo: no se carga en el show
 // Uso:  GP.tools.init({ cancion: '03_Vociferan' })
-//       Graba, muestra y maneja el pad 98 solo, apenas se carga.
+//       Graba, muestra y maneja el pad 89 solo, apenas se carga.
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.4: bus MIDI compartido con GP_midi, LED por GP_midi)
+// Actualizado: 2026-10-16 (v1.5: grabador en el pad 89)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.4'
+  const VERSION = 'v1.5'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -30,7 +30,7 @@
     grabarVideo: true,      // false = sólo MIDI + audio
     fps: 30,                // cuadros por segundo del video
     videoBitrate: 6e6,      // 6 Mbps · subilo si se ve pixelado, bajalo si pesa mucho
-    padGrabador: 98,        // nota del Akai que hace grabar / detener+guardar (null = ninguno)
+    padGrabador: 89,        // nota del Akai que hace grabar / detener+guardar (null = ninguno)
   }
   T.config = cfg
   T.init = (opciones = {}) => {
@@ -212,9 +212,9 @@
   // el parpadeo lo hace el script (no depende del modo blink del Akai)
   T.led = {
     salida: null,      // MIDIOutput del Akai — lo asigna el sketch
-    nota: 98,
-    on: 4,             // mismo esquema que midibase: 4 = prendido
-    off: 1,            //                             1 = apagado
+    nota: 89,          // último botón redondo de la columna derecha (el Shift 98 no tiene LED)
+    on: 1,             // botones redondos: 1 = prendido
+    off: 0,            //                   0 = apagado
     parpadeoMs: 400,
   }
   let ledPrendido = null
