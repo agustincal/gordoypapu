@@ -8,7 +8,8 @@
 // Actualizado: 17/10/2026 (v03: fusión por umbral — círculos y escenas se recortan
 //              entre sí con bordes duros; el mic deforma el contorno; puerta de ruido.
 //              Formas con paleta propia cyan/celeste/azul; F7 voz en la forma;
-//              F8 tono de las formas; grilla de lente cuadrado → triángulo → círculo)
+//              F8 tono de las formas; grilla de lente cuadrado → triángulo → círculo;
+//              botón V1 = contorno: lleno / anillo grueso / anillo fino)
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -89,6 +90,9 @@ V.init({
   fusion: 'xor',                     // 'xor' se recortan · 'union' se funden · 'encima' como la v02
   suavidad: 0.004,                   // borde del umbral (0.004 = duro)
   desplazar: 0.25,                   // cuánto empujan los círculos a la escena
+  contorno: 0,                       // V1 · 0 = lleno · 1 = anillo grueso · 2 = anillo fino
+  anilloCirculos: [99, 0.62, 0.545], // umbral interior de los círculos en cada modo
+  anilloFormas: [0, 0.022, 0.008],   // grosor del borde de las formas en cada modo
 
   // ---- escenas nuevas ----
   cambio: 'bombo',                   // quién pasa a la forma siguiente: 'bombo' | 'caja' | 'melodia' | 'ninguna'
@@ -122,6 +126,7 @@ const CONTROLES = {
   circulos:  'F6',
   vozForma:  'F7',
   tonoFormas: 'F8',
+  contorno:  'V1',     // botón de abajo de F1: lleno → anillo grueso → anillo fino
   strobe:    'N11',
   quieto:    'N12',
 }
@@ -169,12 +174,14 @@ const ESTADOS = [
 //            col 8 = pasa a la forma siguiente
 //   F1 tamaño · F2 dirección · F3 tiempo · F4 giro · F5 latido · F6 tamaño de los círculos en las escenas
 //   F7 voz en la forma (cuánto deforma el contorno) · F8 tono de las formas (gira la paleta)
+//   V1 (botón de abajo de F1) = contorno: lleno → anillo grueso → anillo fino (LED: apagado / prendido / parpadeo)
 //   N11 strobe · N12 quieto (congela las formas)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   88 = calibrar mic (3 s de silencio, ¡sin voz!) · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12'])
+GP.midi.versiones({ F1: 3 })   // botón V1 (abajo de F1): 3 posiciones de contorno
 GP.midi.filas({
   8: { canal: 1, rango: [V.C.notaGrave, V.C.notaAguda] },
   7: { canal: 10, pulso: 'vuelta' },

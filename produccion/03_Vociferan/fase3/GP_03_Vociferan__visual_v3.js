@@ -12,6 +12,7 @@
 //              (v3.2: paleta propia de las formas — cyan/celeste/azul, avanza en cada
 //              cambio de escena; F7 voz en la forma; F8 tono de las formas;
 //              grilla de lente que pasa de cuadrado a triángulo a círculo)
+//              (v3.3: contorno — lleno / anillo grueso / anillo fino, en círculos y formas)
 // ============================================================
 //
 // Escenas (C.escena):
@@ -51,7 +52,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.2'
+  const VERSION = 'v3.3'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -121,6 +122,11 @@
     fusion: 'xor',          // 'xor' | 'union' | 'encima'
     suavidad: 0.004,        // borde del umbral (0.004 = duro · 0.05 = algo blando)
     desplazar: 0.25,        // cuánto empujan los círculos a la escena (0 = nada)
+    // contorno: 0 = lleno · 1 = anillo grueso · 2 = anillo fino (botón V1 del Akai)
+    contorno: 0,
+    anilloCirculos: [99, 0.62, 0.545],  // umbral interior de los círculos (99 = sin hueco)
+    anilloFormas: [0, 0.022, 0.008],    // grosor del borde de las formas (fracción de pantalla)
+    bufferContorno: 'o3',   // buffer libre donde se dibuja la escena para sacarle el contorno
     luzFormas: 1,           // brillo de las formas
     // morfo
     tamMorfo: 0.42, durMorfo: 0.6, giroMorfo: 90, popMorfo: 0.12,
@@ -559,7 +565,7 @@
   }
 
   let salidaOut = null
-  let armada = null, armadaFusion = null
+  let armada = null, armadaFusion = null, armadoContorno = 0
   let pendiente = null, tPendiente = 0
   // tono de las formas: un lugar de la paleta que avanza en cada cambio de escena
   let iPaleta = 0
@@ -596,9 +602,18 @@
   // la voz deforma el contorno ANTES del umbral
   const vozBorde = () => vozEnv * clamp01(C.vozForma) * C.micBordeMax
   const temblor = () => noise(() => C.micRuido, 0.8)
-  const mascaraCirculos = () => campoCirculos()
+  const modoContorno = () => Math.max(0, Math.min(2, Math.round(C.contorno || 0)))
+  const mascaraLlena = () => campoCirculos()
     .modulate(temblor(), vozBorde)
     .thresh(0.5, () => C.suavidad)
+  // anillo: lo que queda entre dos umbrales del mismo campo. Si dos círculos se
+  // acercan, sus anillos se funden en un solo contorno.
+  const mascaraCirculos = () => {
+    if (modoContorno() === 0) return mascaraLlena()
+    return mascaraLlena().diff(campoCirculos()
+      .modulate(temblor(), vozBorde)
+      .thresh(() => C.anilloCirculos[modoContorno()] ?? 99, () => C.suavidad))
+  }
   // color de los círculos: cada uno en su tono (con el barrido de la voz), en un
   // disco del doble de su radio para que la deformación de la voz no salga de la
   // pintura; la máscara recorta la forma. Donde dos se pisan, la luz se suma.
@@ -627,15 +642,31 @@
     }
     return img
   }
-  const escena = () => ARMAR[C.escena]()
-    .scrollX(() => J.x).scrollY(() => J.y)
+  const escenaLlena = (dx = 0, dy = 0) => ARMAR[C.escena]()
+    .scrollX(() => J.x + dx()).scrollY(() => J.y + dy())
     .scale(() => J.r)
     .modulate(empujeCirculos(), () => -C.desplazar)
     .modulate(temblor(), vozBorde)
     .thresh(0.5, () => C.suavidad)
+  // contorno de las formas: la escena se dibuja UNA vez en un buffer aparte y se
+  // compara con dos copias corridas (en X y en Y); lo que no coincide es el borde.
+  // Leer un buffer es barato: así el contorno no multiplica el costo de la escena.
+  const buffer = () => window[C.bufferContorno] || window.o3
+  const escena = () => {
+    const cero = () => 0
+    if (modoContorno() === 0) return escenaLlena(cero, cero)
+    const b = buffer()
+    escenaLlena(cero, cero).out(b)
+    const g = () => (C.anilloFormas[modoContorno()] || 0.01)
+    const gx = () => g() * ASP()
+    return src(b).diff(src(b).scrollX(gx))
+      .add(src(b).diff(src(b).scrollY(g)))
+      .thresh(0.5, 0.001)
+  }
 
   const armar = () => {
     if (!salidaOut) return
+    if (modoContorno() === 0 || !ARMAR[C.escena]) { const b = buffer(); if (b) solid(0, 0, 0).out(b) }
     let img
     const conEscena = !!ARMAR[C.escena]
     if (C.fusion === 'encima') {
@@ -661,8 +692,8 @@
       // (mezcla explícita base·(1−m) + círculos·m: sumar capas en Hydra también suma
       //  el alpha, y con .layer eso desborda el color)
       img = solid(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
-        .mult(mascaraCirculos().invert())
-        .add(colorCirculos().mult(mascaraCirculos()))
+        .mult(mascaraLlena().invert())
+        .add(colorCirculos().mult(mascaraLlena()))
         .mult(forma)
       img = golpes(img)
     }
@@ -671,6 +702,7 @@
       .out(salidaOut)
     armada = C.escena
     armadaFusion = C.fusion
+    armadoContorno = modoContorno()
   }
 
   V.salida = (out) => { salidaOut = out; armar() }
@@ -711,6 +743,17 @@
     if (pendiente !== null && t() >= tPendiente) { pendiente = null; armar() }
     // cambiar C.fusion en vivo re-arma la imagen
     if (pendiente === null && armada !== null && C.fusion !== armadaFusion) armar()
+    // cambiar el contorno re-arma detrás de un golpe (como un cambio de escena,
+    // pero sin pasar al color siguiente)
+    if (pendiente === null && armada !== null && C.escena === armada && modoContorno() !== armadoContorno) {
+      if (C.golpeAlCambiar) {
+        pendiente = C.escena
+        tPendiente = t() + C.golpeDur * 0.7
+        armadoContorno = modoContorno()
+        V.notaOn(2998, 110, { tipo: 'golpe', hue: hueFormas() })
+        setTimeout(() => V.notaOff(2998), 150)
+      } else armar()
+    }
   }
 
   // ---- demo sin hardware (~103 BPM) ----
