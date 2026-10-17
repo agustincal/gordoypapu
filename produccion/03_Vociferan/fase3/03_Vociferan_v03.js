@@ -6,7 +6,9 @@
 //      produccion/03_Vociferan/fase3/GP_03_Vociferan__visual_v3.js (círculos + escenas).
 //      La versión de LIVE (03_Vociferan_v01 + visual v2.0) no se toca.
 // Actualizado: 17/10/2026 (v03: fusión por umbral — círculos y escenas se recortan
-//              entre sí con bordes duros; el mic deforma el contorno; puerta de ruido)
+//              entre sí con bordes duros; el mic deforma el contorno; puerta de ruido.
+//              Formas con paleta propia cyan/celeste/azul; F7 voz en la forma;
+//              F8 tono de las formas; grilla de lente cuadrado → triángulo → círculo)
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -63,6 +65,9 @@ V.init({
   borde: 0.07,
   hue: 20, hueVar: 8, sat: 1,
   paleta: [20, 110, 200, 290],       // golpes de paleta: rojo-naranja, verde, azul, violeta
+  paletaFormas: [185, 200, 215, 230], // color de las formas: pasa al siguiente en cada cambio de escena (cyan → azul)
+  tonoFormas: 0,                     // F8 · gira la paleta de las formas por la rueda de color
+  satFormas: 1,
   entrada: 0.35, entradas: [0.15, 0.35, 0.8], radioAkai: 0.22,
   mantener: 0.5, release: 1.2, huecoAlIrse: 0.8,
   escapeProb: 0.12, escapeDir: 1,
@@ -70,7 +75,8 @@ V.init({
   fluct: 0.25, fluctVel: 3,
   micPos: 0.06, micLuz: 0.9, micTam: 0.25,   // el mic sólo vibra
   micUmbral: 0.15, micRodilla: 0.1,  // puerta de ruido: sonidos bajos no hacen nada (subilo si vibra con la sala)
-  micBorde: 0.05, micRuido: 4,       // la voz deforma el contorno de las formas, antes del umbral
+  vozForma: 0.35,                    // F7 · cuánto deforma la voz el contorno (antes del umbral)
+  micBordeMax: 0.15, micRuido: 4,    // deformación con F7 arriba · tamaño de las ondas
   barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
   mostrarMic: true,
   tamano: 0.35,                      // F1 · círculos y formas (0.5 = normal)
@@ -95,7 +101,9 @@ V.init({
   circulos: 0.5,                     // F6 · tamaño de los círculos del canal 1 en las escenas nuevas (0 = no · 0.5 = normal)
   quieto: false,                     // N12 · congela las formas
   golpeAlCambiar: true,              // un golpe central tapa cada cambio de escena
-  derivaLente: 0.015, formaGrilla: 'circulo',
+  derivaLente: 0.015,
+  formaGrilla: 'morfo',               // grilla de lente: 'morfo' (cuadrado → triángulo → círculo) | 'cuadrado' | 'circulo'
+  velGrilla: 0.25, tamGrilla: 0.42,
 
   demo: false,                       // true = notas falsas para probar sin MIDI
 })
@@ -112,6 +120,8 @@ const CONTROLES = {
   giro:      'F4',
   latido:    'F5',
   circulos:  'F6',
+  vozForma:  'F7',
+  tonoFormas: 'F8',
   strobe:    'N11',
   quieto:    'N12',
 }
@@ -157,7 +167,8 @@ const ESTADOS = [
 //   fila 5 → col 1-4 = golpe de paleta (rojo-naranja, verde, azul, violeta)
 //            col 5 = vuelve a círculos · col 6 / 7 = escena anterior / siguiente
 //            col 8 = pasa a la forma siguiente
-//   F1 tamaño · F2 dirección · F3 tiempo · F4 giro · F5 latido · F6 círculos sobre las escenas
+//   F1 tamaño · F2 dirección · F3 tiempo · F4 giro · F5 latido · F6 tamaño de los círculos en las escenas
+//   F7 voz en la forma (cuánto deforma el contorno) · F8 tono de las formas (gira la paleta)
 //   N11 strobe · N12 quieto (congela las formas)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   88 = calibrar mic (3 s de silencio, ¡sin voz!) · 98 (Shift) = ocultar código y paneles
