@@ -6,7 +6,9 @@
 //      el color de la canción, con la vibración del mic y el strobe del bombo.
 // Lo carga el sketch de desarrollo (produccion/03_Vociferan/fase3/03_Vociferan_v02.js).
 // La versión de LIVE (LIVE/arq/GP_03_Vociferan__visual.js v2.0) queda intacta.
-// Actualizado: 17/10/2026 (v3.0: escenas tomadas de James v02, adaptadas a Vociferan)
+// Actualizado: 17/10/2026 (v3.1: fusión por umbral — círculos y escenas en un solo
+//              campo de bordes duros; el mic deforma el contorno antes del umbral;
+//              puerta de ruido del mic)
 // ============================================================
 //
 // Escenas (C.escena):
@@ -16,8 +18,14 @@
 //   'corte'     la forma se corta en franjas que se separan y vuelve como la siguiente
 //   'anidado'   formas una adentro de otra; cada cambio hace zoom un nivel
 //   'lente'     una lente con forma agranda una grilla que se mueve
-// En las escenas nuevas, los círculos del canal 1 pueden seguir entrando por
-// encima (C.circulos, de 0 a 1). Los golpes de paleta se ven siempre.
+// Fusión (C.fusion):
+//   'xor'     (por defecto) círculos y escena se recortan entre sí: donde se cruzan
+//             queda un hueco. Los círculos además empujan la escena (C.desplazar).
+//   'union'   círculos y escena se funden en una sola mancha
+//   'encima'  como la v3.0: círculos difusos sumados encima de la escena (para comparar)
+// Los círculos son un campo que pasa por un umbral: bordes duros, y dos círculos
+// cercanos se funden como gotas. C.circulos (F6) es su tamaño en las escenas
+// nuevas: 0 = no se ven, 0.5 = normal, 1 = el doble. Los golpes van siempre encima.
 // Al cambiar de escena se dispara un golpe central que tapa el corte.
 //
 // Música → escenas (cada estado elige):
@@ -40,7 +48,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.0'
+  const VERSION = 'v3.1'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -75,14 +83,18 @@
     entradas: [0.15, 0.35, 0.8],
     golpeDur: 0.4, golpeRadio: 1.3, golpeLuz: 1.8,
     fluct: 0.25, fluctVel: 3,
-    micPos: 0.06, micLuz: 0.9, micTam: 0.25, micUmbral: 0.15,
+    micPos: 0.06, micLuz: 0.9, micTam: 0.25,
+    micUmbral: 0.15,        // puerta de ruido: por debajo de esto el mic no hace nada
+    micRodilla: 0.1,        // transición suave arriba del umbral
+    micBorde: 0.05,         // cuánto deforma la voz el contorno (antes del umbral)
+    micRuido: 4,            // escala de esa deformación (más alto = ondas más chicas)
     mostrarMic: true,
     barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
     vozAtaque: 0.3, vozCaida: 0.05,
-    calibrarSeg: 3, calibrarMargen: 1.2,
+    calibrarSeg: 3, calibrarMargen: 1.3,
     tamano: 0.5,            // F1 · círculos y formas · 0 = nada · 0.5 = normal · 1 = enormes
     direccion: 0,           // F2 · de dónde entran los círculos
-    tamanoMax: 1.15, giroMax: 180,
+    tamanoMax: 1.15, giroMax: 90,
     strobe: true,
     flashDur: 0.045, flashColor: [1, 0, 0], flashFuerza: 1,
 
@@ -94,9 +106,13 @@
     tiempo: 0.5,            // F3 · duración de las transiciones (0 = seco · 1 = el doble)
     giro: 0.5,              // F4 · cuánto giran las formas en cada cambio
     latido: 0.5,            // F5 · cuánto laten con el golpe
-    circulos: 0,            // F6 · círculos del canal 1 por encima de las escenas nuevas (0 a 1)
+    circulos: 0.5,          // F6 · tamaño de los círculos del canal 1 en las escenas nuevas (0.5 = normal)
     quieto: false,          // N12 · congela las formas
     golpeAlCambiar: true,   // golpe central al cambiar de escena (tapa el corte)
+    // fusión círculos + escena
+    fusion: 'xor',          // 'xor' | 'union' | 'encima'
+    suavidad: 0.004,        // borde del umbral (0.004 = duro · 0.05 = algo blando)
+    desplazar: 0.25,        // cuánto empujan los círculos a la escena (0 = nada)
     luzFormas: 1,           // brillo de las formas
     // morfo
     tamMorfo: 0.42, durMorfo: 0.6, giroMorfo: 90, popMorfo: 0.12,
@@ -251,27 +267,36 @@
     else a.hide()
   }
 
-  // ---- micrófono ----
+  // ---- micrófono: puerta de ruido ----
+  // Por debajo del piso no pasa nada; por encima, el sonido pasa ENTERO.
+  // Sin calibrar, el piso es C.micUmbral para todas las bandas.
+  let pisos = null
+  const suaveStep = (a0, a1, x) => { const k = clamp01((x - a0) / (a1 - a0)); return k * k * (3 - 2 * k) }
   const voz = () => {
     if (typeof a === 'undefined' || !a.fft) return 0
-    const v = Math.min(1, Math.max(...a.fft))
-    return v < C.micUmbral ? 0 : (v - C.micUmbral) / (1 - C.micUmbral)
+    let max = 0
+    a.fft.forEach((v, i) => {
+      const piso = pisos ? pisos[i] : C.micUmbral
+      max = Math.max(max, v * suaveStep(piso, piso + C.micRodilla, v))
+    })
+    return Math.min(1, max)
   }
   let calibrando = false
   V.calibrarMic = () => {
-    if (calibrando) return
+    if (calibrando || typeof a === 'undefined') return
     calibrando = true
-    const max = a.bins.map(() => 0)
+    const max = a.fft.map(() => 0)
     console.log('[Vociferan] calibrando mic: silencio ' + C.calibrarSeg + ' s...')
-    const id = setInterval(() => { a.bins.forEach((b, i) => { if (b > max[i]) max[i] = b }) }, 20)
+    const id = setInterval(() => { a.fft.forEach((v, i) => { if (v > max[i]) max[i] = v }) }, 20)
     setTimeout(() => {
       clearInterval(id)
-      a.settings.forEach((st, i) => { st.cutoff = max[i] * C.calibrarMargen })
+      pisos = max.map(m => Math.max(0.02, m * C.calibrarMargen))
       calibrando = false
-      console.log('[Vociferan] mic calibrado. Piso por banda:', a.settings.map(st => st.cutoff.toFixed(2)).join(' / '))
+      console.log('[Vociferan] mic calibrado. Piso por banda:', pisos.map(p => p.toFixed(2)).join(' / '))
     }, C.calibrarSeg * 1000)
   }
-  V.pisoMic = () => a.settings.map(st => st.cutoff)
+  V.pisoMic = () => pisos ? pisos.slice() : (typeof a !== 'undefined' ? a.fft.map(() => C.micUmbral) : [])
+  V.resetMic = () => { pisos = null }
   let vozEnv = 0
   let ultimo = 0
 
@@ -442,9 +467,56 @@
     `
   })
 
+  // campo: intensidad que vale `fuerza` en el centro y fuerza/2 justo en el radio,
+  // y se apaga afuera. Sumados y pasados por un umbral de 0.5 dan círculos de borde
+  // duro que se funden entre sí cuando se acercan.
+  const definirCampo = () => setFunction({
+    name: 'campo',
+    type: 'src',
+    inputs: [
+      { type: 'float', name: 'cx', default: 0.5 },
+      { type: 'float', name: 'cy', default: 0.5 },
+      { type: 'float', name: 'radio', default: 0.2 },
+      { type: 'float', name: 'hueco', default: 0.0 },
+      { type: 'float', name: 'fuerza', default: 1.0 },
+    ],
+    glsl: `
+      float asp = resolution.x / resolution.y;
+      vec2 p = vec2((_st.x - 0.5) * asp + 0.5, _st.y);
+      vec2 c = vec2((cx - 0.5) * asp + 0.5, cy);
+      float d = distance(p, c);
+      float r = max(radio, 0.0001);
+      float f = fuerza * (1.0 - smoothstep(0.0, 2.0 * r, d));
+      if (hueco > 0.001) f *= smoothstep(hueco * 0.8, hueco, d);
+      return vec4(vec3(f), 1.0);
+    `
+  })
+  // empuje: vector que aleja del centro del círculo (para desplazar la escena)
+  const definirEmpuje = () => setFunction({
+    name: 'empuje',
+    type: 'src',
+    inputs: [
+      { type: 'float', name: 'cx', default: 0.5 },
+      { type: 'float', name: 'cy', default: 0.5 },
+      { type: 'float', name: 'radio', default: 0.2 },
+      { type: 'float', name: 'fuerza', default: 1.0 },
+    ],
+    glsl: `
+      float asp = resolution.x / resolution.y;
+      vec2 p = vec2((_st.x - 0.5) * asp + 0.5, _st.y);
+      vec2 c = vec2((cx - 0.5) * asp + 0.5, cy);
+      vec2 dv = p - c;
+      float r = max(radio, 0.0001);
+      float w = fuerza * exp(-pow(length(dv) / (1.5 * r), 2.0));
+      return vec4(dv.x / asp * w, dv.y * w, 0.0, 1.0);
+    `
+  })
+
   // en la escena de círculos se ven todos; en las otras, los de la canción
   // según C.circulos y los golpes siempre
   const capaCirculos = s => (C.escena === 'circulos' || s.tipo === 'golpe') ? 1 : clamp01(C.circulos)
+  // tamaño de los círculos en la fusión (F6: 0.5 = normal)
+  const escalaFusion = s => (C.escena === 'circulos' || !ARMAR[C.escena]) ? 1 : 2 * clamp01(C.circulos)
 
   const circulo = i => {
     const s = slots[i]
@@ -468,28 +540,111 @@
   }
 
   let salidaOut = null
-  let armada = null
+  let armada = null, armadaFusion = null
   let pendiente = null, tPendiente = 0
   const colorFormas = () => hsvARgb(C.hue, C.sat)
+
+  // ---- piezas de la fusión (cada llamada arma una cadena nueva: en Hydra
+  //      las cadenas no se pueden reusar) ----
+  const esNormal = s => s.activo && s.tipo !== 'golpe'
+  const radioFusion = s => radioActual(s) * s.jr * escalaFusion(s)
+  const fuerzaCampo = s => esNormal(s) ? clamp01(nivel(s) / Math.max(s.vel, 0.01)) : 0
+  const huecoDe = s => radioFusion(s) * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001)))
+
+  const campoCirculos = () => {
+    let img = solid(0, 0, 0)
+    for (let i = 0; i < N; i++) {
+      const s = slots[i]
+      img = img.add(campo(() => posX(s) + s.jx, () => posY(s) + s.jy, () => radioFusion(s), () => huecoDe(s), () => fuerzaCampo(s)))
+    }
+    return img
+  }
+  const empujeCirculos = () => {
+    let img = solid(0, 0, 0)
+    for (let i = 0; i < N; i++) {
+      const s = slots[i]
+      img = img.add(empuje(() => posX(s) + s.jx, () => posY(s) + s.jy, () => radioFusion(s), () => fuerzaCampo(s)))
+    }
+    return img
+  }
+  // la voz deforma el contorno ANTES del umbral
+  const vozBorde = () => vozEnv * C.micBorde
+  const temblor = () => noise(() => C.micRuido, 0.8)
+  const mascaraCirculos = () => campoCirculos()
+    .modulate(temblor(), vozBorde)
+    .thresh(0.5, () => C.suavidad)
+  // color de los círculos: cada uno en su tono (con el barrido de la voz), en un
+  // disco del doble de su radio para que la deformación de la voz no salga de la
+  // pintura; la máscara recorta la forma. Donde dos se pisan, la luz se suma.
+  const colorCirculos = () => {
+    let img = solid(0, 0, 0)
+    for (let i = 0; i < N; i++) {
+      const s = slots[i]
+      const luz = () => esNormal(s) ? s.jl * fluct(s) : 0
+      img = img.add(aro(
+          () => posX(s) + s.jx, () => posY(s) + s.jy,
+          () => radioFusion(s) * 2, () => radioFusion(s) * 0.15, 0,
+          () => s.barrido, () => C.barridoFuerza * vozEnv, () => C.multicolor)
+        .color(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz()))
+    }
+    return img
+  }
+  // golpes: telón duro encima de todo (tapa los cambios de escena)
+  const golpes = (img) => {
+    for (let i = 0; i < N; i++) {
+      const s = slots[i]
+      const es = () => s.activo && s.tipo === 'golpe'
+      const r = () => es() ? radioActual(s) : 0
+      const luz = () => es() ? nivel(s) * s.luzMult : 0
+      const forma = () => aro(() => posX(s), () => posY(s), r, () => Math.max(0.002, C.suavidad), 0)
+      img = img.layer(solid(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz()).mask(forma()))
+    }
+    return img
+  }
+  const escena = () => ARMAR[C.escena]()
+    .scrollX(() => J.x).scrollY(() => J.y)
+    .scale(() => J.r)
+    .modulate(empujeCirculos(), () => -C.desplazar)
+    .modulate(temblor(), vozBorde)
+    .thresh(0.5, () => C.suavidad)
 
   const armar = () => {
     if (!salidaOut) return
     let img
-    if (ARMAR[C.escena]) {
-      // forma blanco/negro → color de la canción, con la vibración del mic
-      const luz = () => C.luzFormas * J.l
-      img = ARMAR[C.escena]()
-        .scrollX(() => J.x).scrollY(() => J.y)
-        .scale(() => J.r)
-        .color(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
-        .add(todosLosCirculos())
+    const conEscena = !!ARMAR[C.escena]
+    if (C.fusion === 'encima') {
+      // como la v3.0
+      if (conEscena) {
+        const luz = () => C.luzFormas * J.l
+        img = ARMAR[C.escena]()
+          .scrollX(() => J.x).scrollY(() => J.y)
+          .scale(() => J.r)
+          .color(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
+          .add(todosLosCirculos())
+      } else img = todosLosCirculos()
     } else {
-      img = todosLosCirculos()
+      // forma final: círculos y escena combinados por umbral
+      let forma = mascaraCirculos()
+      if (conEscena) {
+        forma = C.fusion === 'union'
+          ? forma.add(escena()).thresh(0.5, 0.001)
+          : forma.diff(escena())
+      }
+      // pintura: la escena en el color de la canción, los círculos en el suyo
+      const luz = () => C.luzFormas * J.l
+      // (mezcla explícita base·(1−m) + círculos·m: sumar capas en Hydra también suma
+      //  el alpha, y con .layer eso desborda el color)
+      img = solid(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
+        .mult(mascaraCirculos().invert())
+        .add(colorCirculos().mult(mascaraCirculos()))
+        .mult(forma)
+      img = golpes(img)
     }
     img
       .add(solid(() => C.flashColor[0], () => C.flashColor[1], () => C.flashColor[2]), flash)
       .out(salidaOut)
     armada = C.escena
+    armadaFusion = C.fusion
   }
 
   V.salida = (out) => { salidaOut = out; armar() }
@@ -527,6 +682,8 @@
       } else armar()
     }
     if (pendiente !== null && t() >= tPendiente) { pendiente = null; armar() }
+    // cambiar C.fusion en vivo re-arma la imagen
+    if (pendiente === null && armada !== null && C.fusion !== armadaFusion) armar()
   }
 
   // ---- demo sin hardware (~103 BPM) ----
@@ -548,6 +705,8 @@
     for (const k of Object.keys(C)) if (!(k in limpio)) delete C[k]
     Object.assign(C, limpio, config)
     definirAro()
+    definirCampo()
+    definirEmpuje()
     if (typeof a !== 'undefined' && a.setBins) {
       a.setBins(4)
       a.setSmooth(0.4)
