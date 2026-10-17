@@ -9,6 +9,9 @@
 // Actualizado: 17/10/2026 (v3.1: fusión por umbral — círculos y escenas en un solo
 //              campo de bordes duros; el mic deforma el contorno antes del umbral;
 //              puerta de ruido del mic)
+//              (v3.2: paleta propia de las formas — cyan/celeste/azul, avanza en cada
+//              cambio de escena; F7 voz en la forma; F8 tono de las formas;
+//              grilla de lente que pasa de cuadrado a triángulo a círculo)
 // ============================================================
 //
 // Escenas (C.escena):
@@ -48,7 +51,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.1'
+  const VERSION = 'v3.2'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -75,6 +78,10 @@
     borde: 0.07,
     hue: 20, hueVar: 8, sat: 1,
     paleta: [20, 110, 200, 290],
+    // color de las formas (escenas nuevas): cada cambio de escena pasa al tono siguiente
+    paletaFormas: [185, 200, 215, 230],   // cyan → celeste → azul
+    tonoFormas: 0,          // F8 · gira toda la paleta de las formas (0 = como está · 1 = vuelta entera)
+    satFormas: 1,
     entrada: 0.35, desdeX: 0.35,
     ataque: 0.02, mantener: 0.5, release: 1.2,
     huecoAlIrse: 0.8,
@@ -86,7 +93,8 @@
     micPos: 0.06, micLuz: 0.9, micTam: 0.25,
     micUmbral: 0.15,        // puerta de ruido: por debajo de esto el mic no hace nada
     micRodilla: 0.1,        // transición suave arriba del umbral
-    micBorde: 0.05,         // cuánto deforma la voz el contorno (antes del umbral)
+    vozForma: 0.35,         // F7 · cuánto deforma la voz el contorno (0 = nada · 1 = mucho)
+    micBordeMax: 0.15,      // deformación con F7 arriba de todo
     micRuido: 4,            // escala de esa deformación (más alto = ondas más chicas)
     mostrarMic: true,
     barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
@@ -125,7 +133,9 @@
     // lente
     tamLente: 0.38, durLente: 0.6, lupa: 1.2, popLente: 1.5, columnas: 16, filasLente: 9,
     derivaLente: 0.015,     // la grilla se desliza despacio (por pantalla por segundo)
-    formaGrilla: 'circulo', // 'circulo' | 'cuadrado'
+    formaGrilla: 'morfo',   // 'morfo' (cuadrado → triángulo → círculo, sin parar) | 'cuadrado' | 'circulo'
+    velGrilla: 0.25,        // formas por segundo en la grilla 'morfo'
+    tamGrilla: 0.42,        // tamaño de cada forma de la grilla (0.5 = se tocan)
     posLente: [[0.5, 0.5], [0.33, 0.58], [0.66, 0.42], [0.45, 0.38]],
 
     demo: false,
@@ -420,7 +430,16 @@
     const campo = d => () => 2 * C.tamLente * f2(C.tamano) * peso(Math.floor(p()) + d) + 1e-4
     const campoLente = () => shape(ld(0), 0, campo(0)).blend(shape(ld(1), 0, campo(1)), () => frac(p())).scale(1, ASP, 1)
     const borde = campoLente().thresh(0.5, 0.004).scrollX(dx).scrollY(dy)
-    return shape(() => C.formaGrilla === 'cuadrado' ? 4 : 100, 0.5, 0.03)
+    // grilla: cuadrados, círculos, o una forma que pasa sin parar de
+    // cuadrado a triángulo a círculo (campos mezclados + umbral, como morfo)
+    const SEC = [4, 3, 100], PES = [0.89, 0.78, 1]
+    const g = () => C.formaGrilla === 'morfo' ? t() * C.velGrilla : (C.formaGrilla === 'cuadrado' ? 0 : 2)
+    const ladosG = d => () => SEC[mod(Math.floor(g()) + d, 3)]
+    const campoG = d => () => 2 * C.tamGrilla * PES[mod(Math.floor(g()) + d, 3)] + 1e-4
+    const celda = shape(ladosG(0), 0, campoG(0))
+      .blend(shape(ladosG(1), 0, campoG(1)), () => C.formaGrilla === 'morfo' ? suave(frac(g())) : 0)
+      .thresh(0.5, 0.004)
+    return celda
       .repeat(() => C.columnas, () => C.filasLente)
       .scrollX(() => t() * C.derivaLente, 0)                     // la grilla se desliza
       .scrollX(() => -dx()).scrollY(() => -dy())
@@ -542,7 +561,14 @@
   let salidaOut = null
   let armada = null, armadaFusion = null
   let pendiente = null, tPendiente = 0
-  const colorFormas = () => hsvARgb(C.hue, C.sat)
+  // tono de las formas: un lugar de la paleta que avanza en cada cambio de escena
+  let iPaleta = 0
+  const hueFormas = (i = iPaleta) => {
+    const P = (C.paletaFormas && C.paletaFormas.length) ? C.paletaFormas : [C.hue]
+    return P[mod(i, P.length)] + clamp01(C.tonoFormas) * 360
+  }
+  const colorFormas = () => hsvARgb(hueFormas(), C.satFormas)
+  V.hueFormas = () => hueFormas()
 
   // ---- piezas de la fusión (cada llamada arma una cadena nueva: en Hydra
   //      las cadenas no se pueden reusar) ----
@@ -568,7 +594,7 @@
     return img
   }
   // la voz deforma el contorno ANTES del umbral
-  const vozBorde = () => vozEnv * C.micBorde
+  const vozBorde = () => vozEnv * clamp01(C.vozForma) * C.micBordeMax
   const temblor = () => noise(() => C.micRuido, 0.8)
   const mascaraCirculos = () => campoCirculos()
     .modulate(temblor(), vozBorde)
@@ -677,9 +703,10 @@
       if (armada !== null && C.golpeAlCambiar) {
         pendiente = C.escena
         tPendiente = t() + C.golpeDur * 0.7
-        V.notaOn(2999, 110, { tipo: 'golpe' })
+        iPaleta++
+        V.notaOn(2999, 110, { tipo: 'golpe', hue: hueFormas() })
         setTimeout(() => V.notaOff(2999), 150)
-      } else armar()
+      } else { if (armada !== null) iPaleta++; armar() }
     }
     if (pendiente !== null && t() >= tPendiente) { pendiente = null; armar() }
     // cambiar C.fusion en vivo re-arma la imagen
@@ -721,6 +748,7 @@
   }
 
   V.reiniciar = () => {
+    iPaleta = 0
     Object.assign(S, { n: 1, t0: -99, tg: -99, capas: [], fondoIris: 0,
       corte: { t0: -99, de: 0, a: 0, vertical: false } })
   }
