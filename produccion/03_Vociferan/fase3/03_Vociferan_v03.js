@@ -9,7 +9,8 @@
 //              entre sí con bordes duros; el mic deforma el contorno; puerta de ruido.
 //              Formas con paleta propia cyan/celeste/azul; F7 voz en la forma;
 //              F8 tono de las formas; grilla de lente cuadrado → triángulo → círculo;
-//              botón V1 = contorno: lleno / anillo grueso / anillo fino)
+//              v3.4: color por familias (F8 elige por zonas); anillos sueltos
+//              (V1: ninguno / algunos / muchos); F7 = vibración general del mic)
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -65,19 +66,22 @@ V.init({
   radioGrave: 0.32, radioAgudo: 0.07,
   borde: 0.07,
   hue: 20, hueVar: 8, sat: 1,
-  paleta: [20, 110, 200, 290],       // golpes de paleta: rojo-naranja, verde, azul, violeta
-  paletaFormas: [185, 200, 215, 230], // color de las formas: pasa al siguiente en cada cambio de escena (cyan → azul)
-  tonoFormas: 0,                     // F8 · gira la paleta de las formas por la rueda de color
+  // ---- color por familias: un tono principal (formas) + dos vecinos (círculos) ----
+  familias: [20, 195, 340, 215, 40, 180],   // naranja, celeste, rosa, azul, ámbar, cyan
+  vecinos: 25,                       // grados entre el tono principal y sus dos vecinos
+  familia: 0,                        // familia de arranque; cada cambio de escena pasa a la siguiente
+  tonoFormas: 0,                     // F8 · elige la familia por zonas (6 tramos = 6 familias)
   satFormas: 1,
   entrada: 0.35, entradas: [0.15, 0.35, 0.8], radioAkai: 0.22,
   mantener: 0.5, release: 1.2, huecoAlIrse: 0.8,
   escapeProb: 0.12, escapeDir: 1,
   golpeDur: 0.4, golpeRadio: 1.3, golpeLuz: 1.8,
   fluct: 0.25, fluctVel: 3,
-  micPos: 0.06, micLuz: 0.9, micTam: 0.25,   // el mic sólo vibra
+  vibracion: 0.5,                    // F7 · volumen de toda la vibración del mic (0 = nada · 0.5 = normal · 1 = mucho)
+  micPos: 0.06, micLuz: 0.5, micTam: 0.25,   // sacudón, parpadeo y latido (a vibración 0.5)
+  vibSuave: 0.35,                    // temblor suavizado (más chico = más orgánico · 1 = crudo)
   micUmbral: 0.15, micRodilla: 0.1,  // puerta de ruido: sonidos bajos no hacen nada (subilo si vibra con la sala)
-  vozForma: 0.35,                    // F7 · cuánto deforma la voz el contorno (antes del umbral)
-  micBordeMax: 0.15, micRuido: 4,    // deformación con F7 arriba · tamaño de las ondas
+  micBorde: 0.05, micRuido: 4,       // deformación del contorno (a vibración 0.5) · tamaño de las ondas
   barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
   mostrarMic: true,
   tamano: 0.35,                      // F1 · círculos y formas (0.5 = normal)
@@ -90,9 +94,9 @@ V.init({
   fusion: 'xor',                     // 'xor' se recortan · 'union' se funden · 'encima' como la v02
   suavidad: 0.004,                   // borde del umbral (0.004 = duro)
   desplazar: 0.25,                   // cuánto empujan los círculos a la escena
-  contorno: 0,                       // V1 · 0 = lleno · 1 = anillo grueso · 2 = anillo fino
-  anilloCirculos: [99, 0.62, 0.545], // umbral interior de los círculos en cada modo
-  anilloFormas: [0, 0.022, 0.008],   // grosor del borde de las formas en cada modo
+  contorno: 0,                       // V1 · anillos sueltos: 0 = ninguno · 1 = algunos · 2 = muchos
+  probAnillos: [0, 0.35, 0.7],       // qué parte de las formas y círculos nace como anillo
+  grosorAnillo: 0.7,                 // hueco del anillo (0.7 = anillo mediano · 0.85 = fino)
 
   // ---- escenas nuevas ----
   cambio: 'bombo',                   // quién pasa a la forma siguiente: 'bombo' | 'caja' | 'melodia' | 'ninguna'
@@ -124,9 +128,9 @@ const CONTROLES = {
   giro:      'F4',
   latido:    'F5',
   circulos:  'F6',
-  vozForma:  'F7',
+  vibracion: 'F7',
   tonoFormas: 'F8',
-  contorno:  'V1',     // botón de abajo de F1: lleno → anillo grueso → anillo fino
+  contorno:  'V1',     // botón de abajo de F1: anillos ninguno → algunos → muchos
   strobe:    'N11',
   quieto:    'N12',
 }
@@ -147,11 +151,11 @@ const ESTADOS = [
   /*  3 · 0:33 */ { nombre: 'anillos',           escena: 'anidado', formas: 'circulo', tamano: 0.5 },
   /*  4 · 0:42 */ { nombre: 'formas',            escena: 'morfo', cambio: 'caja', tamano: 0.55, circulos: 0.4 },
   /*  5 · 1:04 */ { nombre: 'iris',              escena: 'iris', strobe: true },
-  /*  6 · 1:20 */ { nombre: 'corte azul',        escena: 'corte', cambio: 'caja', hue: 200, tamano: 0.5 },
+  /*  6 · 1:20 */ { nombre: 'corte azul',        escena: 'corte', cambio: 'caja', familiaFija: 3, tamano: 0.5 },
   /*  7 · 1:39 */ { nombre: 'lente',             escena: 'lente', tamano: 0.5, latido: 0.7 },
   /*  8 · 1:51 */ { nombre: 'anidado',           escena: 'anidado', tamano: 0.55, latido: 0.8, strobe: true },
-  /*  9 · 2:17 */ { nombre: 'quiebre',           tamano: 0.35, release: 2.5, hue: 200, fluct: 0.5, fundido: 1.5 },   // sin bombo
-  /* 10 · 2:26 */ { nombre: 'crece',             escena: 'morfo', formas: 'circulo', cambio: 'caja', tiempo: 0.8, hue: 200, tamano: 0.5, circulos: 0.6 },
+  /*  9 · 2:17 */ { nombre: 'quiebre',           tamano: 0.35, release: 2.5, familiaFija: 3, fluct: 0.5, fundido: 1.5 },   // sin bombo
+  /* 10 · 2:26 */ { nombre: 'crece',             escena: 'morfo', formas: 'circulo', cambio: 'caja', tiempo: 0.8, familiaFija: 1, tamano: 0.5, circulos: 0.6 },
   /* 11 · 2:45 */ { nombre: 'iris caja',         escena: 'iris', cambio: 'caja', giro: 0.7 },
   /* 12 · 3:08 */ { nombre: 'pico',              escena: 'anidado', tamano: 0.6, tiempo: 0.35, latido: 0.9, strobe: true, circulos: 0.7 },
   /* 13 · 3:22 */ { nombre: 'final',             tamano: 0.2, release: 2.5, fundido: 6 },
@@ -169,19 +173,19 @@ const ESTADOS = [
 //            col 4     = golpe central
 //            col 5 6 7 = entra por la derecha lento / medio / rápido
 //            col 8     = se escapa arriba o abajo al soltar
-//   fila 5 → col 1-4 = golpe de paleta (rojo-naranja, verde, azul, violeta)
+//   fila 5 → col 1-4 = golpe de paleta: salta a la familia 1-4 (naranja, celeste, rosa, azul)
 //            col 5 = vuelve a círculos · col 6 / 7 = escena anterior / siguiente
 //            col 8 = pasa a la forma siguiente
 //   F1 tamaño · F2 dirección · F3 tiempo · F4 giro · F5 latido · F6 tamaño de los círculos en las escenas
-//   F7 voz en la forma (cuánto deforma el contorno) · F8 tono de las formas (gira la paleta)
-//   V1 (botón de abajo de F1) = contorno: lleno → anillo grueso → anillo fino (LED: apagado / prendido / parpadeo)
+//   F7 vibración del mic (todo junto) · F8 familia de color (por zonas)
+//   V1 (botón de abajo de F1) = anillos sueltos: ninguno → algunos → muchos (LED: apagado / prendido / parpadeo)
 //   N11 strobe · N12 quieto (congela las formas)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   88 = calibrar mic (3 s de silencio, ¡sin voz!) · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12'])
-GP.midi.versiones({ F1: 3 })   // botón V1 (abajo de F1): 3 posiciones de contorno
+GP.midi.versiones({ F1: 3 })   // botón V1 (abajo de F1): anillos ninguno / algunos / muchos
 GP.midi.filas({
   8: { canal: 1, rango: [V.C.notaGrave, V.C.notaAguda] },
   7: { canal: 10, pulso: 'vuelta' },

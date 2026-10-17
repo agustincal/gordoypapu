@@ -12,7 +12,9 @@
 //              (v3.2: paleta propia de las formas — cyan/celeste/azul, avanza en cada
 //              cambio de escena; F7 voz en la forma; F8 tono de las formas;
 //              grilla de lente que pasa de cuadrado a triángulo a círculo)
-//              (v3.3: contorno — lleno / anillo grueso / anillo fino, en círculos y formas)
+//              (v3.4: color por FAMILIAS — cada escena un tono + dos vecinos, F8 elige
+//              la familia por zonas; anillos por objeto (V1: ninguno/algunos/muchos);
+//              F7 = vibración general, suavizada)
 // ============================================================
 //
 // Escenas (C.escena):
@@ -52,7 +54,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.3'
+  const VERSION = 'v3.4'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -79,9 +81,13 @@
     borde: 0.07,
     hue: 20, hueVar: 8, sat: 1,
     paleta: [20, 110, 200, 290],
-    // color de las formas (escenas nuevas): cada cambio de escena pasa al tono siguiente
-    paletaFormas: [185, 200, 215, 230],   // cyan → celeste → azul
-    tonoFormas: 0,          // F8 · gira toda la paleta de las formas (0 = como está · 1 = vuelta entera)
+    // color por FAMILIAS: cada familia es un tono principal (las formas) y dos
+    // vecinos (los círculos). Cada cambio de escena pasa a la familia siguiente.
+    familias: [20, 195, 340, 215, 40, 180],   // naranja, celeste, rosa, azul, ámbar, cyan
+    vecinos: 25,            // grados de distancia de los dos tonos vecinos
+    familia: 0,             // familia de arranque
+    familiaFija: -1,        // un estado puede fijar una familia exacta (0, 1, 2...); -1 = avanza sola
+    tonoFormas: 0,          // F8 · elige la familia por zonas (cada tramo del fader = una familia)
     satFormas: 1,
     entrada: 0.35, desdeX: 0.35,
     ataque: 0.02, mantener: 0.5, release: 1.2,
@@ -91,11 +97,13 @@
     entradas: [0.15, 0.35, 0.8],
     golpeDur: 0.4, golpeRadio: 1.3, golpeLuz: 1.8,
     fluct: 0.25, fluctVel: 3,
-    micPos: 0.06, micLuz: 0.9, micTam: 0.25,
+    // vibración del mic: F7 (vibracion) es el volumen de TODO esto junto
+    vibracion: 0.5,         // F7 · 0 = nada · 0.5 = normal · 1 = mucho
+    micPos: 0.06, micLuz: 0.5, micTam: 0.25,   // sacudón, parpadeo de luz y latido de tamaño (a vibración 0.5)
+    vibSuave: 0.35,         // suavizado del temblor (más chico = más lento y orgánico · 1 = crudo)
     micUmbral: 0.15,        // puerta de ruido: por debajo de esto el mic no hace nada
     micRodilla: 0.1,        // transición suave arriba del umbral
-    vozForma: 0.35,         // F7 · cuánto deforma la voz el contorno (0 = nada · 1 = mucho)
-    micBordeMax: 0.15,      // deformación con F7 arriba de todo
+    micBorde: 0.05,         // deformación del contorno (a vibración 0.5)
     micRuido: 4,            // escala de esa deformación (más alto = ondas más chicas)
     mostrarMic: true,
     barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
@@ -122,11 +130,10 @@
     fusion: 'xor',          // 'xor' | 'union' | 'encima'
     suavidad: 0.004,        // borde del umbral (0.004 = duro · 0.05 = algo blando)
     desplazar: 0.25,        // cuánto empujan los círculos a la escena (0 = nada)
-    // contorno: 0 = lleno · 1 = anillo grueso · 2 = anillo fino (botón V1 del Akai)
-    contorno: 0,
-    anilloCirculos: [99, 0.62, 0.545],  // umbral interior de los círculos (99 = sin hueco)
-    anilloFormas: [0, 0.022, 0.008],    // grosor del borde de las formas (fracción de pantalla)
-    bufferContorno: 'o3',   // buffer libre donde se dibuja la escena para sacarle el contorno
+    // anillos: algunas formas y algunos círculos nacen como anillo (no toda la imagen)
+    contorno: 0,            // V1 · 0 = ningún anillo · 1 = algunos · 2 = muchos
+    probAnillos: [0, 0.35, 0.7],
+    grosorAnillo: 0.7,      // hueco del anillo (fracción del radio: 0.7 = anillo fino-mediano)
     luzFormas: 1,           // brillo de las formas
     // morfo
     tamMorfo: 0.42, durMorfo: 0.6, giroMorfo: 90, popMorfo: 0.12,
@@ -171,6 +178,10 @@
     vel: 1, nota: -1, radio: 0.2, escapa: false, escapeDir: 1, tipo: 'normal',
     rgb: [1, 0.33, 0], luzMult: 1, fase: 0, entrada: 0.35, barrido: 0, angulo: 0, jx: 0, jy: 0, jl: 1, jr: 1
   }))
+  // anillos por objeto: ¿la forma/círculo n es anillo? (decidido por un sorteo fijo por n)
+  const probAnillo = () => (C.probAnillos || [0])[Math.max(0, Math.min(2, Math.round(C.contorno || 0)))] || 0
+  const azar = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x) }
+  const esAnillo = n => azar(n) < probAnillo()
   const tamano = r => {
     const k0 = clamp01(C.tamano)
     if (k0 <= 0.5) return r * (k0 / 0.5)
@@ -235,10 +246,11 @@
     s.escapeDir = op.escapeDir ?? C.escapeDir
     s.luzMult = s.tipo === 'golpe' ? C.golpeLuz : 1
     s.entrada = op.entrada ?? C.entrada
-    s.rgb = hsvARgb((op.hue ?? C.hue) + (Math.random() * 2 - 1) * C.hueVar, C.sat)
+    s.rgb = hsvARgb(op.hue ?? hueCirculo(), C.sat)
     s.fase = Math.random() * 6.28
     s.barrido = Math.random() * 6.28
     s.angulo = anguloActual()
+    s.anillo = s.tipo !== 'golpe' && Math.random() < probAnillo()
   }
   V.notaOff = (nota = 60) => {
     for (let k = 1; k <= N; k++) {
@@ -255,13 +267,15 @@
     const o = { radio: C.radioAkai }
     if (op.lado != null) o.lado = op.lado
     if (op.velocidad != null) o.entrada = C.entradas[op.velocidad]
-    if (op.color != null) o.hue = C.paleta[op.color]
+    if (op.color != null && C.familias && C.familias.length) o.hue = C.familias[mod(op.color, C.familias.length)] + (Math.random() < 0.5 ? -1 : 1) * C.vecinos
     if (op.escape) { o.escapa = true; o.escapeDir = Math.random() < 0.5 ? -1 : 1 }
     V.notaOn(id, vel, o)
   }
+  // golpe de paleta: salta a la familia `indice` (0, 1, 2, 3...)
   V.golpePaleta = (indice, vel = 110) => {
-    C.hue = C.paleta[indice]
-    V.notaOn(2000 + indice, vel, { tipo: 'golpe' })
+    if (Math.round(C.familiaFija ?? -1) >= 0) C.familiaFija = mod(indice - zonaF8(), nFamilias())
+    else iPaleta += mod(indice - indiceFamilia(), nFamilias())
+    V.notaOn(2000 + indice, vel, { tipo: 'golpe', hue: hueFormas() })
   }
 
   // ---- strobe ----
@@ -318,6 +332,10 @@
 
   // vibración global para las escenas nuevas (la misma idea que en cada círculo)
   const J = { x: 0, y: 0, l: 1, r: 1 }
+  // F7: 0 = nada · 0.5 = los valores de micPos/micLuz/micTam/micBorde · 1 = 2.5 veces
+  const cuantoVibra = () => { const v = clamp01(C.vibracion); return v <= 0.5 ? v * 2 : 1 + (v - 0.5) * 3 }
+  // temblor suavizado: cada cuadro se acerca a un valor al azar en vez de saltar
+  const hacia = (actual, objetivo) => actual + (objetivo - actual) * C.vibSuave
 
   // ============================================================
   // ESCENAS NUEVAS (de James v02, en el color de Vociferan)
@@ -368,9 +386,15 @@
     const p = () => paso(C.durMorfo)
     const ld = k => () => lados(Math.floor(p()) + k)
     const campo = k => () => 2 * C.tamMorfo * f2(C.tamano) * peso(Math.floor(p()) + k) + 1e-4
+    // anillo: la misma forma más chica, restada (sólo en las formas que salen anillo)
+    const hueco = k => () => esAnillo(Math.floor(p()) + k) ? C.grosorAnillo : 0.0001
+    const dentro = k => () => campo(k)() * hueco(k)()
     return shape(ld(0), 0, campo(0))
       .blend(shape(ld(1), 0, campo(1)), () => frac(p()))
       .thresh(0.5, 0.004)
+      .diff(shape(ld(0), 0, dentro(0))
+        .blend(shape(ld(1), 0, dentro(1)), () => frac(p()))
+        .thresh(0.5, 0.004))
       .rotate(() => p() * C.giroMorfo * f2(C.giro) * GRADOS)
       .scale(() => 1 + C.popMorfo * f2(C.latido) * latido(0.12))
       .scale(1, ASP, 1)
@@ -381,11 +405,11 @@
     for (let k = 0; k < MAX_CAPAS; k++) {
       const c = () => S.capas[k]
       const prog = () => c() ? Math.max(0, (t() - c().t0) / durIris()) : 0
+      const radio = () => c() ? Math.pow(prog(), 1.4) * C.finalIris * peso(c().i) : -1
+      const radioHueco = () => (c() && esAnillo(c().i)) ? radio() * C.grosorAnillo : -1
       img = img.diff(
-        shape(
-          () => c() ? lados(c().i) : 3,
-          () => c() ? Math.pow(prog(), 1.4) * C.finalIris * peso(c().i) : -1,
-          0.004)
+        shape(() => c() ? lados(c().i) : 3, radio, 0.004)
+          .diff(shape(() => c() ? lados(c().i) : 3, radioHueco, 0.004))
           .rotate(() => c() ? prog() * C.giroIris * f2(C.giro) * GRADOS * c().dir : 0)
           .scale(1, ASP, 1))
     }
@@ -399,7 +423,9 @@
     const cual = () => x() < 0.5 ? c.de : c.a
     const franjasH = shape(2, 0.5, 0.001).repeat(1, () => C.franjas).brightness(-0.5)
     const franjasV = shape(2, 0.5, 0.001).rotate(Math.PI / 2).repeat(() => C.franjas, 1).brightness(-0.5)
-    return shape(() => lados(cual()), () => C.tamCorte * f2(C.tamano) * peso(cual()), 0.004)
+    const radioC = () => C.tamCorte * f2(C.tamano) * peso(cual())
+    return shape(() => lados(cual()), radioC, 0.004)
+      .diff(shape(() => lados(cual()), () => esAnillo(cual() + 1000) ? radioC() * C.grosorAnillo : -1, 0.004))
       .scale(() => 1 + C.popCorte * f2(C.latido) * latido(0.12))
       .scale(1, ASP, 1)
       .modulateScrollX(franjasH, () => c.vertical ? 0 : 2 * C.separa * abre())
@@ -565,14 +591,21 @@
   }
 
   let salidaOut = null
-  let armada = null, armadaFusion = null, armadoContorno = 0
+  let armada = null, armadaFusion = null
   let pendiente = null, tPendiente = 0
-  // tono de las formas: un lugar de la paleta que avanza en cada cambio de escena
+  // ---- familias de color ----
+  // índice de familia = arranque (C.familia) + cambios de escena + zona de F8
   let iPaleta = 0
-  const hueFormas = (i = iPaleta) => {
-    const P = (C.paletaFormas && C.paletaFormas.length) ? C.paletaFormas : [C.hue]
-    return P[mod(i, P.length)] + clamp01(C.tonoFormas) * 360
+  const nFamilias = () => (C.familias && C.familias.length) ? C.familias.length : 1
+  const zonaF8 = () => Math.min(nFamilias() - 1, Math.floor(clamp01(C.tonoFormas) * nFamilias()))
+  const indiceFamilia = () => {
+    const fija = Math.round(C.familiaFija ?? -1)
+    const base = fija >= 0 ? fija : Math.round(C.familia || 0) + iPaleta
+    return mod(base + zonaF8(), nFamilias())
   }
+  const hueFormas = () => (C.familias && C.familias.length) ? C.familias[indiceFamilia()] : C.hue
+  // círculos: uno de los dos vecinos de la familia (más una pizca de variación)
+  const hueCirculo = () => hueFormas() + (Math.random() < 0.5 ? -1 : 1) * C.vecinos + (Math.random() * 2 - 1) * C.hueVar * 0.5
   const colorFormas = () => hsvARgb(hueFormas(), C.satFormas)
   V.hueFormas = () => hueFormas()
 
@@ -581,7 +614,9 @@
   const esNormal = s => s.activo && s.tipo !== 'golpe'
   const radioFusion = s => radioActual(s) * s.jr * escalaFusion(s)
   const fuerzaCampo = s => esNormal(s) ? clamp01(nivel(s) / Math.max(s.vel, 0.01)) : 0
-  const huecoDe = s => radioFusion(s) * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001)))
+  const huecoDe = s => Math.max(
+    s.anillo ? radioFusion(s) * C.grosorAnillo : 0,
+    radioFusion(s) * C.huecoAlIrse * (s.sostenida ? 0 : clamp01(1 - nivel(s) / Math.max(s.nivelSuelta, 0.001))))
 
   const campoCirculos = () => {
     let img = solid(0, 0, 0)
@@ -600,33 +635,28 @@
     return img
   }
   // la voz deforma el contorno ANTES del umbral
-  const vozBorde = () => vozEnv * clamp01(C.vozForma) * C.micBordeMax
+  const vozBorde = () => vozEnv * C.micBorde * cuantoVibra()
   const temblor = () => noise(() => C.micRuido, 0.8)
-  const modoContorno = () => Math.max(0, Math.min(2, Math.round(C.contorno || 0)))
-  const mascaraLlena = () => campoCirculos()
+  const mascaraCirculos = () => campoCirculos()
     .modulate(temblor(), vozBorde)
     .thresh(0.5, () => C.suavidad)
-  // anillo: lo que queda entre dos umbrales del mismo campo. Si dos círculos se
-  // acercan, sus anillos se funden en un solo contorno.
-  const mascaraCirculos = () => {
-    if (modoContorno() === 0) return mascaraLlena()
-    return mascaraLlena().diff(campoCirculos()
-      .modulate(temblor(), vozBorde)
-      .thresh(() => C.anilloCirculos[modoContorno()] ?? 99, () => C.suavidad))
-  }
   // color de los círculos: cada uno en su tono (con el barrido de la voz), en un
-  // disco del doble de su radio para que la deformación de la voz no salga de la
-  // pintura; la máscara recorta la forma. Donde dos se pisan, la luz se suma.
+  // disco del doble de su radio para que la deformación no salga de la pintura.
+  // Donde se pisan se ve el de arriba (sin sumar luz: así no se va al amarillo
+  // y queda dentro de la familia de color). La máscara recorta la forma.
   const colorCirculos = () => {
-    let img = solid(0, 0, 0)
+    let img = solid(() => colorFormas()[0], () => colorFormas()[1], () => colorFormas()[2])
     for (let i = 0; i < N; i++) {
       const s = slots[i]
       const luz = () => esNormal(s) ? s.jl * fluct(s) : 0
-      img = img.add(aro(
+      const r2 = () => esNormal(s) ? radioFusion(s) * 2 : 0
+      const disco = aro(() => posX(s) + s.jx, () => posY(s) + s.jy, r2, () => radioFusion(s) * 0.15, 0)
+      img = img.layer(aro(
           () => posX(s) + s.jx, () => posY(s) + s.jy,
-          () => radioFusion(s) * 2, () => radioFusion(s) * 0.15, 0,
+          r2, () => radioFusion(s) * 0.15, 0,
           () => s.barrido, () => C.barridoFuerza * vozEnv, () => C.multicolor)
-        .color(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz()))
+        .color(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz())
+        .mask(disco))
     }
     return img
   }
@@ -642,31 +672,15 @@
     }
     return img
   }
-  const escenaLlena = (dx = 0, dy = 0) => ARMAR[C.escena]()
-    .scrollX(() => J.x + dx()).scrollY(() => J.y + dy())
+  const escena = () => ARMAR[C.escena]()
+    .scrollX(() => J.x).scrollY(() => J.y)
     .scale(() => J.r)
     .modulate(empujeCirculos(), () => -C.desplazar)
     .modulate(temblor(), vozBorde)
     .thresh(0.5, () => C.suavidad)
-  // contorno de las formas: la escena se dibuja UNA vez en un buffer aparte y se
-  // compara con dos copias corridas (en X y en Y); lo que no coincide es el borde.
-  // Leer un buffer es barato: así el contorno no multiplica el costo de la escena.
-  const buffer = () => window[C.bufferContorno] || window.o3
-  const escena = () => {
-    const cero = () => 0
-    if (modoContorno() === 0) return escenaLlena(cero, cero)
-    const b = buffer()
-    escenaLlena(cero, cero).out(b)
-    const g = () => (C.anilloFormas[modoContorno()] || 0.01)
-    const gx = () => g() * ASP()
-    return src(b).diff(src(b).scrollX(gx))
-      .add(src(b).diff(src(b).scrollY(g)))
-      .thresh(0.5, 0.001)
-  }
 
   const armar = () => {
     if (!salidaOut) return
-    if (modoContorno() === 0 || !ARMAR[C.escena]) { const b = buffer(); if (b) solid(0, 0, 0).out(b) }
     let img
     const conEscena = !!ARMAR[C.escena]
     if (C.fusion === 'encima') {
@@ -692,8 +706,8 @@
       // (mezcla explícita base·(1−m) + círculos·m: sumar capas en Hydra también suma
       //  el alpha, y con .layer eso desborda el color)
       img = solid(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
-        .mult(mascaraLlena().invert())
-        .add(colorCirculos().mult(mascaraLlena()))
+        .mult(mascaraCirculos().invert())
+        .add(colorCirculos().mult(mascaraCirculos()))
         .mult(forma)
       img = golpes(img)
     }
@@ -702,7 +716,6 @@
       .out(salidaOut)
     armada = C.escena
     armadaFusion = C.fusion
-    armadoContorno = modoContorno()
   }
 
   V.salida = (out) => { salidaOut = out; armar() }
@@ -713,16 +726,18 @@
     ultimo = t()
     vozEnv += (v - vozEnv) * (v > vozEnv ? C.vozAtaque : C.vozCaida)
     for (const s of slots) {
-      s.jx = (Math.random() - 0.5) * 2 * v * C.micPos
-      s.jy = (Math.random() - 0.5) * 2 * v * C.micPos
-      s.jl = 1 - Math.random() * v * C.micLuz
-      s.jr = 1 + (Math.random() - 0.5) * 2 * v * C.micTam
+      const k = v * cuantoVibra()
+      s.jx = hacia(s.jx, (Math.random() - 0.5) * 2 * k * C.micPos)
+      s.jy = hacia(s.jy, (Math.random() - 0.5) * 2 * k * C.micPos)
+      s.jl = hacia(s.jl, 1 - Math.random() * Math.min(1, k * C.micLuz))
+      s.jr = hacia(s.jr, 1 + (Math.random() - 0.5) * 2 * k * C.micTam)
       s.barrido += dt * C.barridoVel * v
     }
-    J.x = (Math.random() - 0.5) * 2 * v * C.micPos * 0.5
-    J.y = (Math.random() - 0.5) * 2 * v * C.micPos * 0.5
-    J.l = 1 - Math.random() * v * C.micLuz * 0.6
-    J.r = 1 + (Math.random() - 0.5) * 2 * v * C.micTam * 0.4
+    const kj = v * cuantoVibra()
+    J.x = hacia(J.x, (Math.random() - 0.5) * 2 * kj * C.micPos * 0.5)
+    J.y = hacia(J.y, (Math.random() - 0.5) * 2 * kj * C.micPos * 0.5)
+    J.l = hacia(J.l, 1 - Math.random() * Math.min(1, kj * C.micLuz * 0.6))
+    J.r = hacia(J.r, 1 + (Math.random() - 0.5) * 2 * kj * C.micTam * 0.4)
 
     // iris: las formas que ya taparon la pantalla pasan al fondo
     const d = durIris()
@@ -743,17 +758,6 @@
     if (pendiente !== null && t() >= tPendiente) { pendiente = null; armar() }
     // cambiar C.fusion en vivo re-arma la imagen
     if (pendiente === null && armada !== null && C.fusion !== armadaFusion) armar()
-    // cambiar el contorno re-arma detrás de un golpe (como un cambio de escena,
-    // pero sin pasar al color siguiente)
-    if (pendiente === null && armada !== null && C.escena === armada && modoContorno() !== armadoContorno) {
-      if (C.golpeAlCambiar) {
-        pendiente = C.escena
-        tPendiente = t() + C.golpeDur * 0.7
-        armadoContorno = modoContorno()
-        V.notaOn(2998, 110, { tipo: 'golpe', hue: hueFormas() })
-        setTimeout(() => V.notaOff(2998), 150)
-      } else armar()
-    }
   }
 
   // ---- demo sin hardware (~103 BPM) ----
