@@ -2,8 +2,15 @@
 // 04_James_v01.js  ·  LIVE/sketches/
 // Canción: 04_James (Gordo y Papu) · Fase 3
 // Rol: sketch de la canción — sólo configuración, estados y ruteo.
-//      El motor vive en LIVE/arq/GP_04_James__visual.js
-// Actualizado: 17/10/2026 (v01: primer boceto, sin ensayo — probar con V.C.demo = true)
+//      El motor vive en LIVE/arq/GP_04_James__visual_v01.js (muro de monitores, v1.0)
+// Actualizado: 17/10/2026 (v01: muro de monitores con los 13 estados del análisis del audio,
+//              y los rangos de notas reales de James)
+// ============================================================
+//
+// Ensayo sin músicos: en el panel de GP_tools cargá
+//   midi  → produccion/04_James/ensayo/04_James_ensayo_interpretado_midi.json
+//   audio → James_-_MST_V3.mp3
+// y antes de dar ▶: GP.estados.reiniciar() en la consola.
 // ============================================================
 //
 // Referencia: muro de monitores de tubo en una sala oscura. Blanco y negro puro.
@@ -31,7 +38,7 @@ const cargarGP = async (ruta) => {
 await cargarGP('LIVE/arq/GP_midi.js')               // Akai: faders, botones, filas, LEDs, FMASTER fundido
 await cargarGP('LIVE/arq/GP_tools.js')              // SÓLO ENSAYO: grabador (89), panel, reproductor → en el show, borrá esta línea
 await cargarGP('LIVE/arq/GP_estados.js')            // estados: cada nota del canal 16 pasa al siguiente
-await cargarGP('LIVE/arq/GP_04_James__visual.js')   // motor del muro de monitores
+await cargarGP('LIVE/arq/GP_04_James__visual_v01.js')   // motor del muro de monitores (v1.0)
 
 if (GP.tools) { GP.tools.init({ cancion: '04_James' }); GP.tools.panel() }
 await GP.midi.start()
@@ -46,8 +53,8 @@ const V = GP.james
 // ============================================================
 V.init({
   // ---- el muro ----
-  grilla: 0.3,            // F2 · 0 = un monitor · 0.25 = 2x2 · 0.5 = 3x3 · 0.75 = 4x4
-  escala: 0.6,            // F3 · 1 = el muro ocupa toda la pantalla · más chico = muro en la sala
+  grilla: 0,              // F2 · 0 = un monitor · 0.25 = 2x2 · 0.5 = 3x3 · 0.75 = 4x4
+  escala: 0.4,            // F3 · 1 = el muro ocupa toda la pantalla · más chico = muro en la sala
   formato: 4 / 3,         // forma de cada monitor (4/3 = tubo · 0 = forma de la pantalla)
   muroY: 0.58,            // altura del muro (0.5 = centrado)
   marco: 0.06, curva: 0.06, esquinas: 0.06, vineta: 0.25,
@@ -70,13 +77,13 @@ V.init({
   formaCirculo: 0,        // arriba de F6 · 0 = disco · 1 = aro · 2 = elipse que gira
 
   // ---- monitores (canal 1) ----
-  reposo: 0.35,           // F8 · brillo de los monitores sin nota (0 = apagados · 1 = todos prendidos)
+  reposo: 0,              // F8 · brillo de los monitores sin nota (0 = apagados · 1 = todos prendidos)
   invertirNota: false,    // N14 · la nota pone su monitor en negativo en vez de prenderlo
-  rangoMonitores: [25, 48],   // sin ensayo todavía: el canal 1 de las otras canciones anduvo por acá
+  rangoMonitores: [31, 37],   // el bajo de James (casi todo 35 y 36: caen en monitores vecinos)
   apagado: 0.12,          // segundos en apagarse al soltar la nota (0 = corte seco)
 
   // ---- agujas (canal 2) ----
-  rangoAgujas: [57, 86],
+  rangoAgujas: [64, 88],      // la melodía de James
   caidaAguja: 0.12, subeAguja: 0.2,
 
   // ---- pulso (canal 10) ----
@@ -86,7 +93,7 @@ V.init({
   invertir: false,        // N13 · todo en negativo
 
   demo: false,            // true = notas falsas a demoBpm para probar sin MIDI
-  demoBpm: 120,
+  demoBpm: 136,
 })
 
 
@@ -115,25 +122,34 @@ const CONTROLES = {
 
 // ============================================================
 // ESTADOS — cada nota del canal 16 pasa al siguiente.
+// Salen del análisis del audio (cambios de sección), con el tiempo en que
+// llegan en el ensayo interpretado. 136 BPM.
+// BASE = inicio: un monitor apagado (pantalla negra hasta que arranca el tema).
 // Cada estado anota sólo lo que cambia respecto de la BASE.
 //   como: N   → arranca del estado N y le cambia lo que anota
 //   fundido   → segundos que tarda en llegar (en James, 0 = corte seco)
-// ⚠ EJEMPLO para probar el sistema: hay que curarlos con la canción.
 // ============================================================
 const ESTADOS = [
-  /* 1 */ { nombre: 'un monitor',  grilla: 0, escala: 0.4, reposo: 0 },
-  /* 2 */ { nombre: 'muro',        modoAguja: 1 },
-  /* 3 */ { nombre: 'persiana',    reposo: 1, invertirNota: true, persiana: 1, formaPersiana: 1 },
-  /* 4 */ { nombre: 'sol',         horizonte: 0.3, aguja: 0, circulo: 0.5, formaCirculo: 2, alternar: true },
-  /* 5 */ { nombre: 'muro grande', grilla: 0.8, escala: 1, reposo: 0, modoAguja: 2, persiana: 0.6, formaPersiana: 2 },
-  /* 6 */ { nombre: 'pico',        como: 5, strobe: true, invertirNota: true, circulo: 0.7, formaCirculo: 1 },
+  /*  1 · 0:03 */ { nombre: 'arranca',        apagado: 0.4 },                                   // un monitor: lo prende el bajo
+  /*  2 · 0:10 */ { nombre: 'muro',           grilla: 0.3, escala: 0.6, reposo: 0.2, modoAguja: 1 },
+  /*  3 · 0:33 */ { nombre: 'persiana',       grilla: 0.3, escala: 0.6, reposo: 1, invertirNota: true, persiana: 1, formaPersiana: 1 },
+  /*  4 · 0:47 */ { nombre: 'sol',            grilla: 0.3, escala: 0.6, reposo: 1, horizonte: 0.3, aguja: 0, circulo: 0.5, formaCirculo: 2, alternar: true },
+  /*  5 · 1:02 */ { nombre: 'muro 3x3',       grilla: 0.55, escala: 0.8, reposo: 0.15, modoAguja: 2 },
+  /*  6 · 1:23 */ { nombre: 'persiana fina',  como: 5, reposo: 0.5, persiana: 0.6, formaPersiana: 2, alternar: true },
+  /*  7 · 1:37 */ { nombre: 'muro grande',    grilla: 0.8, escala: 1, modoAguja: 2, persiana: 0.6, formaPersiana: 2 },
+  /*  8 · 1:59 */ { nombre: 'respira',        grilla: 0.3, escala: 0.5, reposo: 0.6, horizonte: 0.2, circulo: 0.35, formaCirculo: 1, apagado: 0.6 },   // sin bombo
+  /*  9 · 2:18 */ { nombre: 'pico',           grilla: 0.8, escala: 1, invertirNota: true, circulo: 0.7, formaCirculo: 1, modoAguja: 1, strobe: true },  // ojo strobe
+  /* 10 · 2:52 */ { nombre: 'quiebre',        escala: 0.5, reposo: 0.5, horizonte: 0.25, apagado: 0.8 },   // un monitor: las agujas de la melodía
+  /* 11 · 3:10 */ { nombre: 'quiebre muro',   grilla: 0.3, escala: 0.6, reposo: 0.4, horizonte: 0.25, circulo: 0.3, formaCirculo: 2 },
+  /* 12 · 3:24 */ { nombre: 'caja',           grilla: 0.55, escala: 0.8, reposo: 1, persiana: 1, formaPersiana: 1, alternar: true },
+  /* 13 · 3:38 */ { nombre: 'final',          escala: 0.3, reposo: 0.25, apagado: 1, fundido: 6 },
 ]
 
 
 // ============================================================
 // AKAI — mapa LIVE (mismo orden de canales que las otras canciones)
 //   fila 8 → canal 1, monitores. Tocás un pad = prende su monitor (grave a la izquierda). Mute: 82
-//   fila 7 → canal 10, pulso. Tocás un pad = un pulso. Mute: 83
+//   fila 7 → canal 10, batería (bombo 36 y caja 38: los dos son pulso). Tocás un pad = un pulso. Mute: 83
 //   fila 6 → canal 2, agujas. Tocás un pad = cae una aguja en esa posición. Mute: 84
 //   fila 5 → a mano, mientras apretás:
 //            col 1 = barrido      col 2 = cae la aguja    col 3 = círculo crece
