@@ -11,6 +11,8 @@
 //              F8 tono de las formas; grilla de lente cuadrado → triángulo → círculo;
 //              v3.4: color por familias (F8 elige por zonas); anillos sueltos
 //              (V1: ninguno / algunos / muchos); F7 = vibración general del mic)
+//              v3.5: degradado de una franja en círculos y formas; anillos sólo en
+//              las formas de James (los círculos vuelven a su hueco original))
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -82,7 +84,9 @@ V.init({
   vibSuave: 0.35,                    // temblor suavizado (más chico = más orgánico · 1 = crudo)
   micUmbral: 0.15, micRodilla: 0.1,  // puerta de ruido: sonidos bajos no hacen nada (subilo si vibra con la sala)
   micBorde: 0.05, micRuido: 4,       // deformación del contorno (a vibración 0.5) · tamaño de las ondas
-  barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
+  barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,   // la voz hace correr la franja · multicolor: cuánto se separan los tonos en la franja (0.2 = casi monocromo)
+  degradado: 0.6,                    // franja de degradado en los círculos, siempre (0 = color plano)
+  degradadoFormas: 0.6,              // lo mismo en las formas de las escenas
   mostrarMic: true,
   tamano: 0.35,                      // F1 · círculos y formas (0.5 = normal)
   direccion: 0,                      // F2 · de dónde entran los círculos
@@ -94,9 +98,9 @@ V.init({
   fusion: 'xor',                     // 'xor' se recortan · 'union' se funden · 'encima' como la v02
   suavidad: 0.004,                   // borde del umbral (0.004 = duro)
   desplazar: 0.25,                   // cuánto empujan los círculos a la escena
-  contorno: 0,                       // V1 · anillos sueltos: 0 = ninguno · 1 = algunos · 2 = muchos
-  probAnillos: [0, 0.35, 0.7],       // qué parte de las formas y círculos nace como anillo
-  grosorAnillo: 0.7,                 // hueco del anillo (0.7 = anillo mediano · 0.85 = fino)
+  contorno: 1,                       // V1 · anillos en las formas de James: 0 = ninguno · 1 = algunos · 2 = muchos
+  probAnillos: [0, 0.35, 0.7],       // qué parte de las formas nace como anillo
+  grosorAnillo: 0.6,                 // hueco del anillo (0.6 = grueso · 0.8 = fino)
 
   // ---- escenas nuevas ----
   cambio: 'bombo',                   // quién pasa a la forma siguiente: 'bombo' | 'caja' | 'melodia' | 'ninguna'

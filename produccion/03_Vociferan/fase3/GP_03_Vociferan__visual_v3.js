@@ -15,6 +15,9 @@
 //              (v3.4: color por FAMILIAS — cada escena un tono + dos vecinos, F8 elige
 //              la familia por zonas; anillos por objeto (V1: ninguno/algunos/muchos);
 //              F7 = vibración general, suavizada)
+//              (v3.5: degradado de UNA franja como estética de color, en círculos y
+//              formas, siempre presente y la voz lo hace correr; anillos sólo en las
+//              formas de James, más gruesos)
 // ============================================================
 //
 // Escenas (C.escena):
@@ -54,7 +57,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.4'
+  const VERSION = 'v3.5'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -107,6 +110,8 @@
     micRuido: 4,            // escala de esa deformación (más alto = ondas más chicas)
     mostrarMic: true,
     barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
+    degradado: 0.6,         // franja de degradado siempre presente (0 = color plano · 1 = de luz a negro)
+    degradadoFormas: 0.6,   // lo mismo en las formas de las escenas (una franja de lado a lado)
     vozAtaque: 0.3, vozCaida: 0.05,
     calibrarSeg: 3, calibrarMargen: 1.3,
     tamano: 0.5,            // F1 · círculos y formas · 0 = nada · 0.5 = normal · 1 = enormes
@@ -133,7 +138,7 @@
     // anillos: algunas formas y algunos círculos nacen como anillo (no toda la imagen)
     contorno: 0,            // V1 · 0 = ningún anillo · 1 = algunos · 2 = muchos
     probAnillos: [0, 0.35, 0.7],
-    grosorAnillo: 0.7,      // hueco del anillo (fracción del radio: 0.7 = anillo fino-mediano)
+    grosorAnillo: 0.6,      // hueco del anillo (fracción del tamaño: 0.6 = anillo grueso · 0.8 = fino)
     luzFormas: 1,           // brillo de las formas
     // morfo
     tamMorfo: 0.42, durMorfo: 0.6, giroMorfo: 90, popMorfo: 0.12,
@@ -250,7 +255,7 @@
     s.fase = Math.random() * 6.28
     s.barrido = Math.random() * 6.28
     s.angulo = anguloActual()
-    s.anillo = s.tipo !== 'golpe' && Math.random() < probAnillo()
+    s.anillo = false   // los círculos de Vociferan usan su hueco original, sin anillos
   }
   V.notaOff = (nota = 60) => {
     for (let k = 1; k <= N; k++) {
@@ -332,6 +337,7 @@
 
   // vibración global para las escenas nuevas (la misma idea que en cada círculo)
   const J = { x: 0, y: 0, l: 1, r: 1 }
+  let faseFormas = 0.8   // la franja de las formas: quieta en silencio, corre con la voz
   // F7: 0 = nada · 0.5 = los valores de micPos/micLuz/micTam/micBorde · 1 = 2.5 veces
   const cuantoVibra = () => { const v = clamp01(C.vibracion); return v <= 0.5 ? v * 2 : 1 + (v - 0.5) * 3 }
   // temblor suavizado: cada cuadro se acerca a un valor al azar en vez de saltar
@@ -508,11 +514,13 @@
       float adentro = smoothstep(hueco - 0.02, hueco, d);
       float v = clamp(adentro - afuera, 0.0, 1.0);
       float u = (p.x - c.x) / max(radio, 0.01);
-      float una = 1.0 - sombra * abs(sin(u * 3.14 + barrido));
+      // una sola franja de degradado a lo ancho del círculo (los tres canales
+      // levemente corridos para el multicolor)
+      float una = 1.0 - sombra * abs(sin(u * 1.57 + barrido));
       vec3 tres = vec3(
-        1.0 - sombra * abs(sin(u * 1.57 + barrido)),
-        1.0 - sombra * abs(sin(u * 3.14 + barrido * 1.3)),
-        1.0 - sombra * abs(sin(u * 6.28 + barrido * 1.7)));
+        1.0 - sombra * abs(sin(u * 1.2 + barrido)),
+        1.0 - sombra * abs(sin(u * 1.57 + barrido * 1.3 + 0.5)),
+        1.0 - sombra * abs(sin(u * 2.0 + barrido * 1.7 + 1.0)));
       vec3 k = clamp(mix(vec3(una), tres, multi), 0.0, 1.0);
       return vec4(v * k, 1.0);
     `
@@ -540,6 +548,25 @@
       float f = fuerza * (1.0 - smoothstep(0.0, 2.0 * r, d));
       if (hueco > 0.001) f *= smoothstep(hueco * 0.8, hueco, d);
       return vec4(vec3(f), 1.0);
+    `
+  })
+  // banda: la misma franja de degradado, de lado a lado de la pantalla (para las formas)
+  const definirBanda = () => setFunction({
+    name: 'banda',
+    type: 'src',
+    inputs: [
+      { type: 'float', name: 'fase', default: 0.0 },
+      { type: 'float', name: 'sombra', default: 0.6 },
+      { type: 'float', name: 'multi', default: 0.0 },
+    ],
+    glsl: `
+      float u = (_st.x - 0.5) * 2.0;
+      float una = 1.0 - sombra * abs(sin(u * 0.9 + fase));
+      vec3 tres = vec3(
+        1.0 - sombra * abs(sin(u * 0.7 + fase)),
+        1.0 - sombra * abs(sin(u * 0.9 + fase * 1.3 + 0.5)),
+        1.0 - sombra * abs(sin(u * 1.15 + fase * 1.7 + 1.0)));
+      return vec4(clamp(mix(vec3(una), tres, multi), 0.0, 1.0), 1.0);
     `
   })
   // empuje: vector que aleja del centro del círculo (para desplazar la escena)
@@ -654,7 +681,7 @@
       img = img.layer(aro(
           () => posX(s) + s.jx, () => posY(s) + s.jy,
           r2, () => radioFusion(s) * 0.15, 0,
-          () => s.barrido, () => C.barridoFuerza * vozEnv, () => C.multicolor)
+          () => s.barrido, () => Math.min(1, C.degradado + C.barridoFuerza * vozEnv), () => C.multicolor)
         .color(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz())
         .mask(disco))
     }
@@ -706,6 +733,7 @@
       // (mezcla explícita base·(1−m) + círculos·m: sumar capas en Hydra también suma
       //  el alpha, y con .layer eso desborda el color)
       img = solid(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
+        .mult(banda(() => faseFormas, () => Math.min(1, C.degradadoFormas + C.barridoFuerza * vozEnv * 0.5), () => C.multicolor))
         .mult(mascaraCirculos().invert())
         .add(colorCirculos().mult(mascaraCirculos()))
         .mult(forma)
@@ -733,6 +761,7 @@
       s.jr = hacia(s.jr, 1 + (Math.random() - 0.5) * 2 * k * C.micTam)
       s.barrido += dt * C.barridoVel * v
     }
+    faseFormas += dt * C.barridoVel * 0.5 * v
     const kj = v * cuantoVibra()
     J.x = hacia(J.x, (Math.random() - 0.5) * 2 * kj * C.micPos * 0.5)
     J.y = hacia(J.y, (Math.random() - 0.5) * 2 * kj * C.micPos * 0.5)
@@ -780,6 +809,7 @@
     Object.assign(C, limpio, config)
     definirAro()
     definirCampo()
+    definirBanda()
     definirEmpuje()
     if (typeof a !== 'undefined' && a.setBins) {
       a.setBins(4)
