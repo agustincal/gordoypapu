@@ -18,6 +18,8 @@
 //              (v3.5: degradado de UNA franja como estética de color, en círculos y
 //              formas, siempre presente y la voz lo hace correr; anillos sólo en las
 //              formas de James, más gruesos)
+//              (v3.6: micMute apaga la vibración; byn = blanco y negro puro (N13);
+//              franja de las formas más angosta y marcada)
 // ============================================================
 //
 // Escenas (C.escena):
@@ -57,7 +59,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.5'
+  const VERSION = 'v3.6'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -102,6 +104,7 @@
     fluct: 0.25, fluctVel: 3,
     // vibración del mic: F7 (vibracion) es el volumen de TODO esto junto
     vibracion: 0.5,         // F7 · 0 = nada · 0.5 = normal · 1 = mucho
+    micMute: false,         // true = sin vibración del mic, mueva F7 o no (la franja de la voz sigue)
     micPos: 0.06, micLuz: 0.5, micTam: 0.25,   // sacudón, parpadeo de luz y latido de tamaño (a vibración 0.5)
     vibSuave: 0.35,         // suavizado del temblor (más chico = más lento y orgánico · 1 = crudo)
     micUmbral: 0.15,        // puerta de ruido: por debajo de esto el mic no hace nada
@@ -111,7 +114,12 @@
     mostrarMic: true,
     barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,
     degradado: 0.6,         // franja de degradado siempre presente (0 = color plano · 1 = de luz a negro)
-    degradadoFormas: 0.6,   // lo mismo en las formas de las escenas (una franja de lado a lado)
+    degradadoFormas: 0.75,  // lo mismo en las formas de las escenas
+    anchoFranja: 1.6,       // cuántas franjas entran a lo ancho de la pantalla en las formas (más = más angosta)
+    // blanco y negro puro: todo lo que tiene luz queda blanco, el resto negro (N13)
+    byn: false,
+    umbralByn: 0.04,        // desde qué luz cuenta como blanco (más alto = sólo lo más claro)
+    bufferFinal: 'o2',      // buffer libre donde se dibuja la imagen antes del blanco y negro
     vozAtaque: 0.3, vozCaida: 0.05,
     calibrarSeg: 3, calibrarMargen: 1.3,
     tamano: 0.5,            // F1 · círculos y formas · 0 = nada · 0.5 = normal · 1 = enormes
@@ -339,7 +347,10 @@
   const J = { x: 0, y: 0, l: 1, r: 1 }
   let faseFormas = 0.8   // la franja de las formas: quieta en silencio, corre con la voz
   // F7: 0 = nada · 0.5 = los valores de micPos/micLuz/micTam/micBorde · 1 = 2.5 veces
-  const cuantoVibra = () => { const v = clamp01(C.vibracion); return v <= 0.5 ? v * 2 : 1 + (v - 0.5) * 3 }
+  const cuantoVibra = () => {
+    if (C.micMute) return 0
+    const v = clamp01(C.vibracion); return v <= 0.5 ? v * 2 : 1 + (v - 0.5) * 3
+  }
   // temblor suavizado: cada cuadro se acerca a un valor al azar en vez de saltar
   const hacia = (actual, objetivo) => actual + (objetivo - actual) * C.vibSuave
 
@@ -558,9 +569,10 @@
       { type: 'float', name: 'fase', default: 0.0 },
       { type: 'float', name: 'sombra', default: 0.6 },
       { type: 'float', name: 'multi', default: 0.0 },
+      { type: 'float', name: 'ancho', default: 1.6 },
     ],
     glsl: `
-      float u = (_st.x - 0.5) * 2.0;
+      float u = (_st.x - 0.5) * 2.0 * ancho;
       float una = 1.0 - sombra * abs(sin(u * 0.9 + fase));
       vec3 tres = vec3(
         1.0 - sombra * abs(sin(u * 0.7 + fase)),
@@ -733,15 +745,27 @@
       // (mezcla explícita base·(1−m) + círculos·m: sumar capas en Hydra también suma
       //  el alpha, y con .layer eso desborda el color)
       img = solid(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
-        .mult(banda(() => faseFormas, () => Math.min(1, C.degradadoFormas + C.barridoFuerza * vozEnv * 0.5), () => C.multicolor))
+        .mult(banda(() => faseFormas, () => Math.min(1, C.degradadoFormas + C.barridoFuerza * vozEnv * 0.5), () => C.multicolor, () => C.anchoFranja))
         .mult(mascaraCirculos().invert())
         .add(colorCirculos().mult(mascaraCirculos()))
         .mult(forma)
       img = golpes(img)
     }
-    img
-      .add(solid(() => C.flashColor[0], () => C.flashColor[1], () => C.flashColor[2]), flash)
-      .out(salidaOut)
+    // la imagen se dibuja en un buffer y se lee de ahí: el blanco y negro (N13)
+    // es instantáneo y no obliga a recalcular la escena
+    const fin = window[C.bufferFinal]
+    if (fin && fin !== salidaOut) {
+      img
+        .add(solid(() => C.flashColor[0], () => C.flashColor[1], () => C.flashColor[2]), flash)
+        .out(fin)
+      src(fin)
+        .blend(src(fin).thresh(() => C.umbralByn, 0.0001), () => C.byn ? 1 : 0)
+        .out(salidaOut)
+    } else {
+      img
+        .add(solid(() => C.flashColor[0], () => C.flashColor[1], () => C.flashColor[2]), flash)
+        .out(salidaOut)
+    }
     armada = C.escena
     armadaFusion = C.fusion
   }

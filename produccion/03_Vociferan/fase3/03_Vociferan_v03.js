@@ -13,6 +13,7 @@
 //              (V1: ninguno / algunos / muchos); F7 = vibración general del mic)
 //              v3.5: degradado de una franja en círculos y formas; anillos sólo en
 //              las formas de James (los círculos vuelven a su hueco original))
+//              v3.6: vibración del mic muteada (micMute); N13 = blanco y negro puro
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -80,13 +81,15 @@ V.init({
   golpeDur: 0.4, golpeRadio: 1.3, golpeLuz: 1.8,
   fluct: 0.25, fluctVel: 3,
   vibracion: 0.5,                    // F7 · volumen de toda la vibración del mic (0 = nada · 0.5 = normal · 1 = mucho)
+  micMute: true,                     // POR AHORA: vibración del mic apagada en todos los estados (false para volver a usarla)
   micPos: 0.06, micLuz: 0.5, micTam: 0.25,   // sacudón, parpadeo y latido (a vibración 0.5)
   vibSuave: 0.35,                    // temblor suavizado (más chico = más orgánico · 1 = crudo)
   micUmbral: 0.15, micRodilla: 0.1,  // puerta de ruido: sonidos bajos no hacen nada (subilo si vibra con la sala)
   micBorde: 0.05, micRuido: 4,       // deformación del contorno (a vibración 0.5) · tamaño de las ondas
   barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,   // la voz hace correr la franja · multicolor: cuánto se separan los tonos en la franja (0.2 = casi monocromo)
   degradado: 0.6,                    // franja de degradado en los círculos, siempre (0 = color plano)
-  degradadoFormas: 0.6,              // lo mismo en las formas de las escenas
+  degradadoFormas: 0.75,             // lo mismo en las formas de las escenas
+  anchoFranja: 1.6,                  // franjas a lo ancho de la pantalla en las formas (más = más angosta)
   mostrarMic: true,
   tamano: 0.35,                      // F1 · círculos y formas (0.5 = normal)
   direccion: 0,                      // F2 · de dónde entran los círculos
@@ -112,6 +115,8 @@ V.init({
   latido: 0.5,                       // F5 · cuánto laten
   circulos: 0.5,                     // F6 · tamaño de los círculos del canal 1 en las escenas nuevas (0 = no · 0.5 = normal)
   quieto: false,                     // N12 · congela las formas
+  byn: false,                        // N13 · blanco y negro puro, sin grises
+  umbralByn: 0.04,                   // desde qué luz cuenta como blanco
   golpeAlCambiar: true,              // un golpe central tapa cada cambio de escena
   derivaLente: 0.015,
   formaGrilla: 'morfo',               // grilla de lente: 'morfo' (cuadrado → triángulo → círculo) | 'cuadrado' | 'circulo'
@@ -137,6 +142,7 @@ const CONTROLES = {
   contorno:  'V1',     // botón de abajo de F1: anillos ninguno → algunos → muchos
   strobe:    'N11',
   quieto:    'N12',
+  byn:       'N13',
 }
 
 
@@ -183,12 +189,12 @@ const ESTADOS = [
 //   F1 tamaño · F2 dirección · F3 tiempo · F4 giro · F5 latido · F6 tamaño de los círculos en las escenas
 //   F7 vibración del mic (todo junto) · F8 familia de color (por zonas)
 //   V1 (botón de abajo de F1) = anillos sueltos: ninguno → algunos → muchos (LED: apagado / prendido / parpadeo)
-//   N11 strobe · N12 quieto (congela las formas)
+//   N11 strobe · N12 quieto (congela las formas) · N13 blanco y negro puro
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   88 = calibrar mic (3 s de silencio, ¡sin voz!) · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N12'])
+GP.midi.buttons(['N11', 'N12', 'N13'])
 GP.midi.versiones({ F1: 3 })   // botón V1 (abajo de F1): anillos ninguno / algunos / muchos
 GP.midi.filas({
   8: { canal: 1, rango: [V.C.notaGrave, V.C.notaAguda] },
