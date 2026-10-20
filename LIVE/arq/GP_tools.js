@@ -8,13 +8,13 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-16 (v1.8: panel por canal + lista de notas)
+// Actualizado: 2026-10-20 (v1.9: informe de canción · ensayo con varios aparatos · canal de estados)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.8'
+  const VERSION = 'v1.9'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -30,7 +30,15 @@
     grabarVideo: true,      // false = sólo MIDI + audio
     fps: 30,                // cuadros por segundo del video
     videoBitrate: 6e6,      // 6 Mbps · subilo si se ve pixelado, bajalo si pesa mucho
-    padGrabador: 89,        // nota del Akai que hace grabar / detener+guardar (null = ninguno)
+    padGrabador: 89,
+    // reproductor de ensayo: a qué puerto loopMIDI va cada aparato grabado.
+    // [aparato grabado, puerto de ensayo]. Además, automático: un puerto llamado
+    // "<palabra>_Ensayo" recibe lo del aparato cuyo nombre contiene esa palabra
+    // (ej: keystep_Ensayo ← "Arturia KeyStep 37").
+    puertosEnsayo: [
+      [/korg|padkontrol/i, /korg.*ensayo|padkontrol.*ensayo/i],
+      [/apc|akai_?ensayo/i, /akai.*ensayo|apc.*ensayo/i],
+    ],        // nota del Akai que hace grabar / detener+guardar (null = ninguno)
   }
   T.config = cfg
   T.init = (opciones = {}) => {
@@ -77,7 +85,8 @@
   // prende con la actividad. El clock va aparte, con su BPM.
   // Si GP_midi está cargado, muestra a qué fila va el canal y si está muteado.
   let panelEl = null
-  const canales = new Map()        // 'aparato|ch' → { aparato, ch, ultimo, n, t }
+  const canales = new Map()        // 'aparato|ch' → { aparato, ch, ultimo, n, t, notas, ccs, desde, hasta, tiempos }
+  let panelDesde = performance.now()   // desde cuándo junta datos el panel (limpiarPanel lo reinicia)
   const clocks = new Map()         // aparato → { pulsos, ultimaNegra, bpm, t }
   let renderPendiente = false
   const ACTIVO_MS = 180
@@ -113,7 +122,9 @@
     for (const c of orden) {
       const activo = ahora - c.t < ACTIVO_MS
       let extra = ''
-      if (GP.midi && GP.midi.filaDelCanal) {
+      if (GP.estados && GP.estados.esCanalEstados && GP.estados.esCanalEstados(c.aparato, c.ch)) {
+        extra = ` <span style="color:#c9f">estados</span>`
+      } else if (GP.midi && GP.midi.filaDelCanal) {
         const fila = GP.midi.filaDelCanal(c.aparato, c.ch - 1)
         if (fila) extra = GP.midi.muteado(fila) ? ` <span style="color:#f80">fila ${fila} MUTE</span>` : ` <span style="color:#888">fila ${fila}</span>`
       }
@@ -156,10 +167,15 @@
     const ch = (st & 0x0f) + 1
     const tipo = st & 0xf0
     const k = `${nombre}|${ch}`
-    const c = canales.get(k) || { aparato: nombre, ch, ultimo: '', n: 0, t: 0, notas: new Map() }
+    const c = canales.get(k) || { aparato: nombre, ch, ultimo: '', n: 0, t: 0, notas: new Map(), ccs: new Map(), desde: null, hasta: null, tiempos: [] }
     c.ultimo = describir(tipo, d1, d2)
-    if (tipo === 0x90 && d2 > 0) { c.n++; c.t = performance.now(); c.notas.set(d1, (c.notas.get(d1) || 0) + 1) }
-    else if (tipo === 0xb0) c.t = performance.now()
+    const ahora = performance.now()
+    if (tipo === 0x90 && d2 > 0) {
+      c.n++; c.t = ahora; c.notas.set(d1, (c.notas.get(d1) || 0) + 1)
+      if (c.desde == null) c.desde = ahora
+      c.hasta = ahora
+      if (c.tiempos.length < 200) c.tiempos.push(ahora)
+    } else if (tipo === 0xb0) { c.t = ahora; c.ccs.set(d1, (c.ccs.get(d1) || 0) + 1) }
     canales.set(k, c)
     pedirRender()
   }
@@ -177,7 +193,75 @@
     }
     return out
   }
-  T.limpiarPanel = () => { canales.clear(); clocks.clear(); if (panelEl) panelEl.textContent = 'esperando MIDI...' }
+  T.limpiarPanel = () => { canales.clear(); clocks.clear(); panelDesde = performance.now(); if (panelEl) panelEl.textContent = 'esperando MIDI...' }
+
+  // ============================================================
+  // Informe de canción (Ctrl+Alt+I): qué entró por cada aparato y canal desde
+  // el último limpiarPanel(), con una sugerencia de GP.midi.filas. Se descarga
+  // como .md y se imprime en la consola.
+  // ============================================================
+  const esAPC = n => /apc|akai_?ensayo/i.test(n)
+  const mmss = ms => { const s = Math.max(0, Math.round(ms / 1000)); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` }
+  const regexDe = n => {
+    const palabra = (n.match(/[A-Za-z][A-Za-z0-9]{2,}/) || [n])[0]
+    return `/${palabra.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/i`
+  }
+  T.informe = ({ descargar = true } = {}) => {
+    const ahora = performance.now()
+    const lista = [...canales.values()].sort((a, b) => a.aparato.localeCompare(b.aparato) || a.ch - b.ch)
+    const esEst = c => GP.estados && GP.estados.esCanalEstados && GP.estados.esCanalEstados(c.aparato, c.ch)
+    const d = new Date(), dd = n => String(n).padStart(2, '0')
+    const fecha = `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())} ${dd(d.getHours())}:${dd(d.getMinutes())}`
+    const L = []
+    L.push(`# Mapa MIDI · ${cfg.cancion} · ${fecha}`, '')
+    L.push(`Escuchado: ${mmss(ahora - panelDesde)} (desde el último limpiarPanel).`)
+    for (const [ap, c] of clocks) L.push(`Clock: ${ap}${c.bpm ? ` · ${c.bpm.toFixed(1)} BPM` : ''}.`)
+    L.push('', '| Aparato | Canal | Notas | Distintas | Rango | Más tocadas | CC | De – a | Hoy va a |', '|---|---|---|---|---|---|---|---|---|')
+    for (const c of lista) {
+      const notas = [...c.notas.keys()].sort((a, b) => a - b)
+      const top = [...c.notas].sort((a, b) => b[1] - a[1]).slice(0, 4).map(([n, v]) => `${n} (${v})`).join(', ')
+      const ccs = [...c.ccs].sort((a, b) => a[0] - b[0]).map(([n, v]) => `${n}×${v}`).join(' ')
+      let uso = '—'
+      if (esEst(c)) uso = 'estados'
+      else if (esAPC(c.aparato)) uso = 'consola Akai'
+      else if (GP.midi && GP.midi.filaDelCanal) { const f = GP.midi.filaDelCanal(c.aparato, c.ch - 1); if (f) uso = `fila ${f}` }
+      const tramo = c.desde != null ? `${mmss(c.desde - panelDesde)} – ${mmss(c.hasta - panelDesde)}` : '—'
+      L.push(`| ${c.aparato} | ${c.ch} | ${c.n} | ${notas.length} | ${notas.length ? `${notas[0]}–${notas[notas.length - 1]}` : '—'} | ${top || '—'} | ${ccs || '—'} | ${tramo} | ${uso} |`)
+    }
+    const est = lista.filter(esEst)
+    if (est.length) {
+      L.push('', '## Canal de estados')
+      for (const c of est) L.push(`${c.aparato} canal ${c.ch}: **${c.n} cambios** → ${c.tiempos.map(t => mmss(t - panelDesde)).join(', ')}`)
+      if (GP.estados && GP.estados.total) L.push(`El sketch tiene ${GP.estados.total} estados.`)
+    }
+    const musicales = lista.filter(c => c.n > 0 && !esEst(c) && !esAPC(c.aparato))
+    if (musicales.length) {
+      L.push('', '## Notas de cada canal')
+      for (const c of musicales) L.push(`- ${c.aparato} canal ${c.ch}: ${[...c.notas.keys()].sort((a, b) => a - b).join(' ')}`)
+      L.push('', '## Sugerencia para GP.midi.filas (los más tocados arriba)', '', '```js', 'GP.midi.filas({')
+      const orden = [...musicales].sort((a, b) => b.n - a.n)
+      ;[8, 7, 6, 5, 4].forEach((fila, i) => {
+        const c = orden[i]
+        if (!c) { L.push(`  ${fila}: null,`); return }
+        const notas = [...c.notas.keys()].sort((a, b) => a - b)
+        const como = notas.length <= 2 ? `pulso: 'vuelta'` : notas.length <= 8 ? `notas: [${notas.join(', ')}]` : `rango: [${notas[0]}, ${notas[notas.length - 1]}]`
+        L.push(`  ${fila}: { puerto: ${regexDe(c.aparato)}, canal: ${c.ch}, ${como} },   // ${c.n} notas`)
+      })
+      L.push('})', '```')
+      if (orden.length > 5) L.push('', `Quedaron afuera (hay 5 filas): ${orden.slice(5).map(c => `${c.aparato} ch${c.ch} (${c.n})`).join(', ')}.`)
+    }
+    const texto = L.join('\n')
+    console.log(texto)
+    if (descargar) {
+      const url = URL.createObjectURL(new Blob([texto], { type: 'text/markdown' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${cfg.cancion}_mapa_midi_${fecha.replace(' ', '_').replace(':', '-')}.md`
+      a.click()
+      setTimeout(() => URL.revokeObjectURL(url), 10000)
+    }
+    return texto
+  }
 
   // atajo para el sketch: graba todo y muestra lo que no es clock/sistema
   T.midi = (nombre, data, ts) => {
@@ -219,14 +303,14 @@
   }
 
 
-  const esAkaiReal = n => /apc|akai/i.test(n) && !/ensayo/i.test(n)
+  const esAkaiReal = n => /apc/i.test(n) && !/ensayo/i.test(n)   // el APC físico (un teclado Akai no cuenta)
   T.accesoMidi = () => bus.conectar()
 
   // graba + panel + pad del grabador. Siempre activo apenas se carga tools.
   bus.escuchar('tools', (nombre, data, ts) => {
     T.midi(nombre, data, ts)
     const esNoteOn = (data[0] & 0xf0) === 0x90 && data[2] > 0
-    if (esNoteOn && data[1] === cfg.padGrabador && /apc|akai/i.test(nombre)) T.grabadorCiclo()
+    if (esNoteOn && data[1] === cfg.padGrabador && /apc|akai_?ensayo/i.test(nombre)) T.grabadorCiclo()
   })
   bus.puertos('tools', (acc) => {
     T.led.salida = null
@@ -467,8 +551,7 @@
   // ============================================================
   let midiEnsayo = null
   let audioEl = null
-  let salidaKorg = null
-  let salidaAkai = null
+  let salidas = []
   let programados = []
 
   const ensayoEl = crearCaja('gpEnsayoPanel', `
@@ -551,13 +634,33 @@
 
   const buscarSalidas = async () => {
     const acc = await T.accesoMidi()
-    salidaKorg = salidaAkai = null
-    acc.outputs.forEach(o => {
-      if (o.state !== 'connected') return
-      if (/korg|padkontrol/i.test(o.name)) salidaKorg = o
-      if (/apc|akai/i.test(o.name)) salidaAkai = o
-    })
-    return salidaKorg || salidaAkai
+    salidas = []
+    acc.outputs.forEach(o => { if (o.state === 'connected' && /ensayo/i.test(o.name)) salidas.push(o) })
+    return salidas.length > 0
+  }
+  const soloLetras = t => t.toLowerCase().replace(/[^a-z0-9]/g, '')
+  // a qué puerto de ensayo va un aparato grabado (null = no hay)
+  const salidaPara = (nombreOriginal) => {
+    for (const [orig, dest] of cfg.puertosEnsayo) {
+      if (orig.test(nombreOriginal)) { const o = salidas.find(x => dest.test(x.name)); if (o) return o }
+    }
+    const limpio = soloLetras(nombreOriginal)
+    for (const o of salidas) {
+      const m = /^(.+?)[\s_-]*ensayo/i.exec(o.name)
+      const palabra = m ? soloLetras(m[1]) : ''
+      if (palabra.length >= 3 && limpio.includes(palabra)) return o
+    }
+    return null
+  }
+
+  // para chequear antes del ensayo: GP.tools.rutaEnsayo(['Arturia KeyStep 37', 'padKONTROL'])
+  // (sin argumentos usa los aparatos del .json cargado)
+  T.rutaEnsayo = async (nombres) => {
+    await buscarSalidas()
+    const lista = nombres || (midiEnsayo ? [...new Set(midiEnsayo.map(m => m[1]))] : [])
+    const r = lista.map(n => { const o = salidaPara(n); return { aparato: n, puerto: o ? o.name : 'SIN PUERTO' } })
+    console.table(r)
+    return r
   }
 
   const detenerProgramados = () => {
@@ -576,15 +679,22 @@
       if (!(await buscarSalidas())) { setEnsayo('sin puertos loopMIDI'); return }
 
       detenerEnsayo()   // nunca se suman dos reproducciones
+      const ruta = new Map()       // aparato grabado → puerto de ensayo
+      for (const [, n] of midiEnsayo) if (!ruta.has(n)) ruta.set(n, salidaPara(n))
+      const faltan = [...ruta].filter(([, o]) => !o).map(([n]) => n)
       let enviados = 0
       midiEnsayo.forEach(([ms, nombreOriginal, bytes]) => {
-        const salida = /korg|padkontrol/i.test(nombreOriginal) ? salidaKorg : salidaAkai
+        const salida = ruta.get(nombreOriginal)
         if (!salida) return
         programados.push(setTimeout(() => salida.send(bytes), ms))
         enviados++
       })
       if (audioEl) audioEl.play()
-      setEnsayo(`▶ ${resumenEnsayo()}`)
+      console.info('GP.tools ensayo:', [...ruta].map(([n, o]) => `${n} → ${o ? o.name : 'SIN PUERTO'}`).join(' · '))
+      if (faltan.length) {
+        console.warn(`GP.tools ensayo: no hay puerto para ${faltan.join(', ')}. Creá en loopMIDI un puerto "<palabra>_Ensayo" con una palabra de ese nombre (ej: ${soloLetras(faltan[0]).slice(0, 8)}_Ensayo) y reiniciá Chrome entero.`)
+        setEnsayo(`▶ ${resumenEnsayo()} · sin puerto: ${faltan.map(n => n.slice(0, 12)).join(', ')}`)
+      } else setEnsayo(`▶ ${resumenEnsayo()}`)
     } catch (err) {
       setEnsayo(`error: ${err.message}`)
       console.error('GP.tools ensayo:', err)
@@ -626,18 +736,21 @@
   // ============================================================
   // 5. Atajos de teclado (no escriben en el editor)
   //    Ctrl+Alt+R grabar/detener · S detener · P mostrar/ocultar paneles · N lista de notas
+  //    I informe de la canción (mapa MIDI)
+  //    (se lee la tecla física: con AltGr en teclado español no se confunde con €, @, etc.)
   // ============================================================
   T.atajosTeclado = () => {
     if (window._gpToolsAtajos) window.removeEventListener('keydown', window._gpToolsAtajos, true)
     window._gpToolsAtajos = (e) => {
       if (!e.ctrlKey || !e.altKey) return
       const acciones = {
-        r: () => T.grabadorCiclo(),     // toggle grabar / detener+guardar
-        s: () => T.grabador.detener(),  // detener+guardar
-        p: () => T.paneles(),
-        n: () => T.notas(),
+        KeyR: () => T.grabadorCiclo(),     // toggle grabar / detener+guardar
+        KeyS: () => T.grabador.detener(),  // detener+guardar
+        KeyP: () => T.paneles(),
+        KeyN: () => T.notas(),
+        KeyI: () => T.informe(),
       }
-      const accion = acciones[e.key.toLowerCase()]
+      const accion = acciones[e.code]
       if (!accion) return
       e.preventDefault()
       e.stopPropagation()

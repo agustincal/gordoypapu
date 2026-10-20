@@ -5,7 +5,7 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-16 (v1.5: FMASTER fundido · fila 'vuelta' · filaDelCanal para el panel)
+// Actualizado: 2026-10-20 (v1.6: filas de disparo 4-8 · varios aparatos · APC por nombre exacto)
 // ============================================================
 //
 // Cómo funcionan los LEDs
@@ -20,11 +20,12 @@
 //
 // Zonas de la grilla (igual en todos los sketches)
 // ------------------------------------------------
-//   filas 1-4 → TOGGLE   (GP.midi.buttons)  verde = habilitado · rojo parpadeo = prendido
-//   filas 5-8 → DISPARO  (GP.midi.filas)    verde = en reposo · amarillo = suena el canal
+//   filas 1-3 → TOGGLE   (GP.midi.buttons)  verde = habilitado · rojo parpadeo = prendido
+//   filas 4-8 → DISPARO  (GP.midi.filas)    verde = en reposo · amarillo = suena el canal
 //                                            rojo parpadeo = lo tocás · amarillo al soltar
-//   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85) = MUTE del canal
+//   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85, 4→86) = MUTE del canal
 //     apagado = no llegó nada · prendido = recibiendo · parpadea = muteado
+//   87 / 88 = estado anterior / siguiente (GP_estados)
 //   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
 //     apagado = versión 1 · prendido = versión 2 · parpadea = versión 3
 //   89 = grabador (GP_tools)
@@ -34,7 +35,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.5'
+  const VERSION = 'v1.6'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -84,7 +85,8 @@
   // Configuración
   // ============================================================
   const cfg = {
-    akai: /apc|akai/i,          // nombre de la entrada/salida del Akai
+    akai: /apc|akai_?ensayo/i,  // el APC mini (o su puerto de ensayo). Ojo: NO /akai/ a secas,
+                                //   así un teclado Akai (MPK, etc.) no se confunde con la consola
     ensayo: /ensayo/i,          // puertos virtuales del reproductor (entran, pero no reciben LEDs)
     canal: 0,                   // canal del Akai (0 = canal 1)
     tanda: 32,                  // máx. LEDs por envío
@@ -223,9 +225,9 @@
   // ============================================================
   // Filas de disparo (5-8) y mute por canal
   // ============================================================
-  const FILAS_DISPARO = [5, 6, 7, 8]
+  const FILAS_DISPARO = [4, 5, 6, 7, 8]
   const notaDe = (fila, col) => (fila - 1) * 8 + col          // fila 1..8, col 0..7
-  const botonMute = fila => 90 - fila                          // 8→82 ... 5→85
+  const botonMute = fila => 90 - fila                          // 8→82 ... 4→86
   const LED_DISPARO = { reposo: COLOR.verde, suena: COLOR.amarillo, mano: COLOR.rojoParpadeo, recien: COLOR.amarillo }
   const LED_MUTE = { nada: 0, recibe: 1, muteado: 2 }          // botones redondos: 0 / 1 / 2 parpadeo
   const tiempos = { recienMs: 300, minSuenaMs: 90 }
@@ -295,7 +297,9 @@
     for (const fila of FILAS_DISPARO) {
       const f = filas[fila]
       if (!f || !f.cfg || f.cfg.canal == null) continue
-      if (f.cfg.canal - 1 === canal && f.cfg.puerto.test(nombre)) return fila
+      if (f.cfg.canal - 1 !== canal) continue
+      // sin puerto: cualquier aparato que no sea el Akai · con puerto: sólo ese aparato
+      if (f.cfg.puerto ? f.cfg.puerto.test(nombre) : !cfg.akai.test(nombre)) return fila
     }
     return null
   }
@@ -438,7 +442,7 @@
         // pad de una fila de disparo configurada
         if (d1 <= 63 && filas[fila] && filas[fila].cfg) padDeMano(fila, d1 % 8, d2, esOn)
         // botón de mute (82..85)
-        else if (esOn && d1 >= 82 && d1 <= 85) alternarMute(90 - d1)
+        else if (esOn && d1 >= 82 && d1 <= 86) alternarMute(90 - d1)
         // botón de versión arriba de cada fader (64..71)
         else if (esOn && d1 >= 64 && d1 <= 71) { const f = `F${d1 - 63}`; ponerVersion(f, versionDe(f) + 1, 'akai') }
         // botón de la grilla (toggle, filas 1-4 o donde el sketch los habilite)
@@ -530,16 +534,24 @@
   // Llamala en cada evaluación: reemplaza a la anterior, no se acumula.
   M.alMensaje = (fn) => { alMensaje = fn; return M }
 
-  // filas de disparo 5-8. Cada fila: { puerto, canal (1-16), notas | rango | pulso }
+  // filas de disparo 4-8. Cada fila: { puerto, canal (1-16), notas | rango | pulso }
+  //   puerto: regex del aparato (ej /korg/i, /keystep/i). Sin puerto = cualquier aparato menos el Akai.
   //   null = fila apagada · {} sin canal = sólo disparo a mano
   // El mute y el "ya llegó" se conservan al reevaluar.
   M.filas = function (config = {}) {
+    for (const k of Object.keys(config)) {
+      if (!FILAS_DISPARO.includes(Number(k))) console.warn(`[GP MIDI] fila ${k}: las filas de disparo son de la 4 a la 8 (la 1-3 son toggles)`)
+    }
+    const canalEstados = GP.estados && GP.estados.config ? GP.estados.config.canal : 16
     for (const fila of FILAS_DISPARO) {
       const c = config[fila]
       const f = filas[fila] || (filas[fila] = nuevaFila())
       const antes = f.cfg
-      f.cfg = c ? { puerto: /korg|padkontrol/i, ...c } : null
-      if (!antes || !f.cfg || antes.canal !== f.cfg.canal) { f.mute = false; f.visto = false }
+      f.cfg = c ? { puerto: null, ...c } : null
+      if (f.cfg && f.cfg.puerto && !(f.cfg.puerto instanceof RegExp)) f.cfg.puerto = new RegExp(String(f.cfg.puerto), 'i')
+      if (f.cfg && f.cfg.canal === canalEstados) console.warn(`[GP MIDI] fila ${fila}: el canal ${canalEstados} es el de los estados, no hace falta mostrarlo`)
+      const mismoOrigen = antes && f.cfg && antes.canal === f.cfg.canal && String(antes.puerto) === String(f.cfg.puerto)
+      if (!mismoOrigen) { f.mute = false; f.visto = false }
       for (const p of f.pads) { p.mano = false; p.korg.clear(); p.color = null }
       f.vuelta = { pos: -1, n: 0 }
       pintarFila(fila)
@@ -557,10 +569,14 @@
   M.buttons = function (names = []) {
     limpiarCapaBoton()
     const notas = [...new Set(names.map(n => String(n).trim().toUpperCase()))].map(buttonToNote)
+    const enDisparo = notas.filter(n => n >= 24 && n <= 63 && filas[Math.floor(n / 8) + 1] && filas[Math.floor(n / 8) + 1].cfg)
+    if (enDisparo.length) console.warn(`[GP MIDI] ${enDisparo.map(n => `N${Math.floor(n / 8) + 1}${n % 8 + 1}`).join(', ')}: esa fila es de disparo; los toggles van en las filas 1-3`)
+    // los toggles que siguen activos conservan su estado al reevaluar (como los mutes)
+    const antes = state.buttonState || {}
     state.activeButtons = notas
     state.buttonState = {}
     state.buttonHandlers = {}
-    for (const n of notas) { state.buttonState[n] = false; state.buttonHandlers[n] = []; pintarBoton(n) }
+    for (const n of notas) { state.buttonState[n] = !!antes[n]; state.buttonHandlers[n] = []; pintarBoton(n) }
     pintarVersiones()
     for (const fila of FILAS_DISPARO) { pintarFila(fila); pintarMute(fila) }   // no borrar las filas de disparo
     return M

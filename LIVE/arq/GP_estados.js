@@ -7,7 +7,7 @@
 // Depende de: GP_midi (faders, toggles, versiones, mutes, LEDs).
 //             GP_tools es opcional: si está cargado (ensayo) muestra el
 //             estado arriba a la derecha. En el show no se ve.
-// Actualizado: 2026-10-16 (v1.0)
+// Actualizado: 2026-10-20 (v1.1: suspender, copiar estado, aviso de cambio, botones 87/88)
 // ============================================================
 //
 // Un estado es una foto de la consola + ajustes de la canción:
@@ -24,7 +24,7 @@
 //       tamano:  'F1',           //   F1..F8 = fader (valores de 0 a 1)
 //       strobe:  'N11',          //   N11..N88 = toggle (true / false)
 //       forma:   'V3',           //   V1..V8 = versión del fader (0, 1 o 2)
-//       melodia: 'M8',           //   M5..M8 = mute de esa fila de disparo (true = muteada)
+//       melodia: 'M8',           //   M4..M8 = mute de esa fila de disparo (true = muteada)
 //     },
 //     estados: [
 //       { nombre: 'intro',      tamano: 0.3, strobe: false },
@@ -46,26 +46,34 @@
 //     actual con los números nuevos (para curar sin perder el lugar).
 //     GP.estados.reiniciar() vuelve al inicio (ej: antes de dar ▶ a un ensayo).
 //
-// Ensayo / emergencia: botón redondo 86 = anterior · 87 = siguiente
-// (LED prendido = hay a dónde ir).
+// Ensayo / emergencia: botón redondo 87 = anterior · 88 = siguiente
+// (LED prendido = hay a dónde ir · parpadean medio segundo en cada cambio ·
+//  parpadean siempre = estados suspendidos).
 // Consola: GP.estados.siguiente() · .anterior() · .ir(5) · .reiniciar() · .tabla()
+//
+// Diseñar estados:
+//   Ctrl+Alt+E  suspender / reanudar (el canal de estados deja de mover; 87/88 siguen)
+//   Ctrl+Alt+C  copiar el estado actual (consola + portapapeles + lista de capturas)
+//   Ctrl+Alt+G  guardar las capturas en un archivo .js
+//   GP.estados.alcanzar()  ir al estado en el que va la canción (después de reanudar)
 // ============================================================
 
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.0'
+  const VERSION = 'v1.1'
 
   if (GP.estados && GP.estados._version === VERSION) return
 
   // ---- configuración general (igual para todas las canciones) ----
   const cfg = {
-    fuente: /korg|padkontrol/i,  // aparato que manda los cambios de estado (incluye korg_Ensayo)
+    fuente: null,                // aparato que manda los cambios (regex). null = cualquiera menos el Akai
     canal: 16,                   // canal de estados, 1..16 como lo muestra el panel
     antirrebote: 150,            // ms: dos notas más juntas que esto cuentan como una sola
-    akai: /apc|akai/i,
-    botonAnterior: 86,           // botones redondos de la columna derecha (null = sin botón)
-    botonSiguiente: 87,
+    akai: /apc|akai_?ensayo/i,   // el APC mini (no /akai/ a secas: un teclado Akai no es la consola)
+    botonAnterior: 87,           // botones redondos de la columna derecha (null = sin botón)
+    botonSiguiente: 88,
+    avisoMs: 500,                // parpadeo de 87/88 al cambiar de estado (0 = sin aviso)
     fundido: 0.3,                // segundos entre estados, si el estado no dice otra cosa
     umbralToque: 3,              // cuánto hay que mover un fader (de 0 a 127) para tomar el control
     mezclaToque: 0.25,           // segundos que tarda en pasar del valor del estado al del fader
@@ -77,6 +85,9 @@
 
   // se conserva al reevaluar: en qué estado estamos
   const mem = window._gpEstadosMem || (window._gpEstadosMem = { cancion: null, numero: 0 })
+  if (mem.suspendido == null) mem.suspendido = false   // modo diseño
+  if (mem.sombra == null) mem.sombra = mem.numero      // en qué estado va la canción (aunque esté suspendido)
+  const esFuente = nombre => cfg.fuente ? cfg.fuente.test(nombre) : !cfg.akai.test(nombre)
 
   // ============================================================
   // Utilidades
@@ -103,8 +114,8 @@
     if ((m = /^F([1-8])$/.exec(s))) return { tipo: 'fader', ref: s }
     if ((m = /^N([1-8])([1-8])$/.exec(s))) return { tipo: 'toggle', ref: s }
     if ((m = /^V([1-8])$/.exec(s))) return { tipo: 'version', ref: `F${m[1]}` }
-    if ((m = /^M([5-8])$/.exec(s))) return { tipo: 'mute', fila: Number(m[1]) }
-    throw new Error(`GP estados: el control "${clave}: '${ref}'" no existe. Usá F1..F8, N11..N88, V1..V8 o M5..M8.`)
+    if ((m = /^M([4-8])$/.exec(s))) return { tipo: 'mute', fila: Number(m[1]) }
+    throw new Error(`GP estados: el control "${clave}: '${ref}'" no existe. Usá F1..F8, N11..N88, V1..V8 o M4..M8.`)
   }
 
   // ============================================================
@@ -191,19 +202,50 @@
   // ============================================================
   // Entrar a un estado
   // ============================================================
-  const mostrar = (origen) => {
-    const total = can.lista.length - 1
-    const texto = numero === 0 ? 'inicio' : `${numero}/${total} · ${objetivo.nombre}`
-    if (GP.tools && GP.tools.cartel) GP.tools.cartel.mostrar(texto)
+  // LEDs de 87/88: fijos = hay a dónde ir · aviso = parpadeo corto al cambiar ·
+  // suspendido = parpadeo continuo (el del Akai, valor 2)
+  let avisoTimer = null
+  const ledsBotones = (aviso) => {
     const M = midi()
-    if (M && M.luz) {
-      if (cfg.botonAnterior != null) M.luz(cfg.botonAnterior, numero > 0 ? 1 : 0)
-      if (cfg.botonSiguiente != null) M.luz(cfg.botonSiguiente, numero < total ? 1 : 0)
+    if (!M || !M.luz || !can) return
+    clearInterval(avisoTimer)
+    const total = can.lista.length - 1
+    const poner = (ant, sig) => {
+      if (cfg.botonAnterior != null) M.luz(cfg.botonAnterior, ant)
+      if (cfg.botonSiguiente != null) M.luz(cfg.botonSiguiente, sig)
     }
+    const fijos = () => mem.suspendido ? poner(2, 2) : poner(numero > 0 ? 1 : 0, numero < total ? 1 : 0)
+    if (!aviso || mem.suspendido || !(cfg.avisoMs > 0)) { fijos(); return }
+    let fase = 0
+    const pasos = Math.max(2, Math.round(cfg.avisoMs / 125))
+    poner(1, 1)
+    avisoTimer = setInterval(() => {
+      fase++
+      if (fase >= pasos) { clearInterval(avisoTimer); fijos(); return }
+      const prendido = fase % 2 === 0
+      poner(prendido ? 1 : 0, prendido ? 1 : 0)
+    }, 125)
+  }
+
+  const textoEstado = () => {
+    const total = can.lista.length - 1
+    let t = numero === 0 ? 'inicio' : `${numero}/${total} · ${objetivo.nombre}`
+    if (mem.suspendido) {
+      t = `⏸ ${t}`
+      if (mem.sombra !== numero) t += `  ·  canción en ${mem.sombra}`
+    }
+    return t
+  }
+  const cartel = (texto) => { if (GP.tools && GP.tools.cartel) GP.tools.cartel.mostrar(texto) }
+
+  const mostrar = (origen, aviso = false) => {
+    const texto = textoEstado()
+    cartel(texto)
+    ledsBotones(aviso)
     console.info(`[GP estados] ${texto}${origen ? `  (${origen})` : ''}`)
   }
 
-  const entrar = (n, { fundir = true, avisar = true, origen = '' } = {}) => {
+  const entrar = (n, { fundir = true, avisar = true, origen = '', conservar = false } = {}) => {
     if (!can) return
     const total = can.lista.length - 1
     n = Math.max(0, Math.min(total, n | 0))
@@ -218,6 +260,7 @@
 
     numero = n
     mem.numero = n
+    if (!mem.suspendido) mem.sombra = n
     objetivo = proximo
     tCambio = performance.now()
     durFundido = fundir ? Math.max(0, can.fundidos[n] || 0) : 0
@@ -227,17 +270,20 @@
       const c = can.controles[k]
       if (c && c.tipo === 'fader') {
         // takeover: el fader vuelve a mandar el estado hasta que lo muevas
+        // (en modo diseño, al reevaluar, el fader que ya tocaste sigue mandando)
         const raw = leerFisico(c)
-        toque[k] = { base: raw, tocado: false, t: 0 }
         if (fisico[k] == null) fisico[k] = raw / 127
+        if (!(conservar && toque[k] && toque[k].tocado)) toque[k] = { base: raw, tocado: false, t: 0 }
       } else if (c) {
-        aplicarDiscreto(c, objetivo[k])   // toggles, versiones, mutes: al instante (con su LED)
+        // toggles, versiones, mutes: al instante (con su LED). En modo diseño, al
+        // reevaluar, quedan como los dejaste en la consola.
+        if (!conservar) aplicarDiscreto(c, objetivo[k])
       } else if (durFundido === 0 || !esFundible(desde[k], objetivo[k])) {
         escribir(k, copia(objetivo[k]))   // lo que no se funde, al instante
       }
     }
     tick()
-    mostrar(origen)
+    mostrar(origen, avisar && n !== anterior)
     if (avisar && can.alEntrar) {
       try { can.alEntrar(objetivo, n, anterior) } catch (err) { console.error('[GP estados] alEntrar:', err) }
     }
@@ -251,10 +297,17 @@
     const [st, d1, d2] = data
     if (st >= 0xf0 || (st & 0xf0) !== 0x90 || !(d2 > 0)) return
     const canal = (st & 0x0f) + 1
-    if (canal === cfg.canal && cfg.fuente.test(nombre)) {
+    if (canal === cfg.canal && esFuente(nombre)) {
       const ahora = performance.now()
       if (ahora - ultimaNota < cfg.antirrebote) return
       ultimaNota = ahora
+      if (mem.suspendido) {
+        // modo diseño: no cambia, pero lleva la cuenta de por dónde va la canción
+        mem.sombra = Math.min(mem.sombra + 1, can.lista.length - 1)
+        cartel(textoEstado())
+        console.info(`[GP estados] suspendido · la canción pasó al ${mem.sombra}  (GP.estados.alcanzar() para ir)`)
+        return
+      }
       E.siguiente(`canal ${cfg.canal}`)
       return
     }
@@ -376,8 +429,8 @@
     }
 
     // misma canción → seguimos en el mismo estado (reevaluar no vuelve al principio)
-    if (mem.cancion !== cancion) { mem.cancion = cancion; mem.numero = 0 }
-    entrar(Math.min(mem.numero, lista.length - 1), { fundir: false, avisar: false, origen: 'init' })
+    if (mem.cancion !== cancion) { mem.cancion = cancion; mem.numero = 0; mem.sombra = 0; mem.suspendido = false }
+    entrar(Math.min(mem.numero, lista.length - 1), { fundir: false, avisar: false, origen: 'init', conservar: mem.suspendido })
     return E
   }
 
@@ -393,7 +446,128 @@
     return E
   }
   E.ir = (n, origen = 'código') => { entrar(n, { origen }); return E }
-  E.reiniciar = () => { entrar(0, { fundir: false, origen: 'reiniciar' }); return E }
+  E.reiniciar = () => { mem.sombra = 0; entrar(0, { fundir: false, origen: 'reiniciar' }); return E }
+
+  // ============================================================
+  // Modo diseño: suspender los estados
+  // ============================================================
+  // Suspendido, el canal de estados no mueve nada (pero se cuenta por dónde va
+  // la canción). 87/88 y la consola siguen navegando. Al reevaluar el sketch,
+  // lo que tocaste a mano se conserva.
+  E.suspender = (v = !mem.suspendido) => {
+    mem.suspendido = !!v
+    if (mem.suspendido) mem.sombra = numero
+    if (can) mostrar(mem.suspendido ? 'suspendido: el canal de estados no mueve nada' : 'reanudado')
+    if (!mem.suspendido && mem.sombra !== numero) console.info(`[GP estados] la canción va por el ${mem.sombra}: GP.estados.alcanzar() para ir`)
+    return E
+  }
+  E.reanudar = ({ alcanzar = false } = {}) => { E.suspender(false); if (alcanzar) E.alcanzar(); return E }
+  E.alcanzar = () => { if (can) entrar(mem.sombra, { origen: 'alcanzar' }); return E }
+
+  // ============================================================
+  // Copiar el estado actual (para pegarlo en ESTADOS)
+  // ============================================================
+  const CLAVE_CAPTURAS = c => `GP_estados_capturas_${c || 'sin_nombre'}`
+  const leerCapturas = () => { try { return JSON.parse(localStorage.getItem(CLAVE_CAPTURAS(can && can.cancion)) || '[]') } catch (_) { return [] } }
+  const grabarCapturas = l => { try { localStorage.setItem(CLAVE_CAPTURAS(can && can.cancion), JSON.stringify(l)) } catch (_) {} }
+
+  const r2 = v => Math.round(v * 100) / 100
+  const fmt = v => {
+    if (typeof v === 'number') return Number.isInteger(v) ? String(v) : r2(v).toFixed(2)
+    if (typeof v === 'string') return `'${v.replace(/'/g, "\\'")}'`
+    if (Array.isArray(v)) return `[${v.map(fmt).join(', ')}]`
+    if (v && typeof v === 'object') return JSON.stringify(v)
+    return String(v)
+  }
+  const igual = (a, b) => {
+    if (typeof a === 'number' && typeof b === 'number') return r2(a) === r2(b)
+    return JSON.stringify(a) === JSON.stringify(b)
+  }
+  const clave = k => /^[A-Za-z_$][\w$]*$/.test(k) ? k : `'${k}'`
+
+  // lo que se está viendo ahora: faders (con lo que tocaste), toggles, versiones,
+  // mutes y los valores sueltos del visual (con lo que cambiaste con Ctrl+Enter)
+  const valoresActuales = () => {
+    const out = {}
+    for (const k of can.claves) {
+      const c = can.controles[k]
+      if (c && c.tipo !== 'fader') out[k] = leerFisico(c)
+      else if (c) out[k] = valores[k]
+      else out[k] = can.destino && k in can.destino ? can.destino[k] : valores[k]
+    }
+    return out
+  }
+
+  // completo: true = todas las claves · false (default) = sólo lo que difiere de la base
+  E.copiar = ({ completo = false, nombre } = {}) => {
+    if (!can) return ''
+    const base = can.lista[0]
+    const ahora = valoresActuales()
+    const partes = [`nombre: ${fmt(nombre || (numero === 0 ? 'nuevo' : `${objetivo.nombre} (copia)`))}`]
+    for (const k of can.claves) {
+      if (ahora[k] === undefined) continue
+      if (!completo && igual(ahora[k], base[k])) continue
+      partes.push(`${clave(k)}: ${fmt(ahora[k])}`)
+    }
+    const texto = `{ ${partes.join(', ')} },`
+    const lista = leerCapturas()
+    const hora = new Date().toTimeString().slice(0, 5)
+    lista.push({ texto, desde: numero === 0 ? 'inicio' : `${numero} · ${objetivo.nombre}`, hora })
+    grabarCapturas(lista)
+    console.log(`%c[GP estados] captura ${lista.length} (desde ${lista[lista.length - 1].desde}):`, 'color:#9cf')
+    console.log(texto)
+    try { navigator.clipboard && navigator.clipboard.writeText(texto).catch(() => {}) } catch (_) {}
+    cartel(`📋 captura ${lista.length} copiada`)
+    setTimeout(() => cartel(textoEstado()), 1500)
+    return texto
+  }
+  E.capturas = () => { const l = leerCapturas(); l.forEach((c, i) => console.log(`${i + 1} · ${c.hora} · desde ${c.desde}\n${c.texto}`)); return l }
+  E.borrarCapturas = () => { grabarCapturas([]); console.info('[GP estados] capturas borradas'); return E }
+  // descarga las capturas como un .js listo para copiar a ESTADOS
+  E.guardarCapturas = () => {
+    const l = leerCapturas()
+    if (!l.length) { console.info('[GP estados] no hay capturas (Ctrl+Alt+C para copiar el estado actual)'); return E }
+    const d = new Date()
+    const dd = n => String(n).padStart(2, '0')
+    const fecha = `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}_${dd(d.getHours())}-${dd(d.getMinutes())}`
+    const cancion = (can && can.cancion) || 'sin_nombre'
+    const cuerpo = [
+      `// Estados capturados · ${cancion} · ${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())} ${dd(d.getHours())}:${dd(d.getMinutes())}`,
+      '// Copiá las líneas que quieras dentro de ESTADOS, en el orden de la canción.',
+      '// Sólo anotan lo que difiere de la base (V.init).',
+      '',
+      'const ESTADOS_CAPTURADOS = [',
+      ...l.map((c, i) => `  /* ${i + 1} · ${c.hora} · desde ${c.desde} */\n  ${c.texto}`),
+      ']',
+      '',
+    ].join('\n')
+    const url = URL.createObjectURL(new Blob([cuerpo], { type: 'text/javascript' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${cancion}_estados_capturados_${fecha}.js`
+    a.click()
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+    console.info(`[GP estados] ${l.length} capturas guardadas en ${a.download}`)
+    return E
+  }
+
+  // ¿este aparato y canal (1..16) son los de los estados? (lo usa el panel de GP_tools)
+  E.esCanalEstados = (nombre, canal) => canal === cfg.canal && esFuente(nombre)
+
+  // ---- atajos de teclado (no escriben en el editor; usan la tecla física, así AltGr no molesta) ----
+  if (typeof window.addEventListener === 'function') {
+    if (window._gpEstadosAtajos) window.removeEventListener('keydown', window._gpEstadosAtajos, true)
+    window._gpEstadosAtajos = (e) => {
+      if (!e.ctrlKey || !e.altKey) return
+      const acciones = { KeyE: () => E.suspender(), KeyC: () => E.copiar(), KeyG: () => E.guardarCapturas() }
+      const accion = acciones[e.code]
+      if (!accion) return
+      e.preventDefault()
+      e.stopPropagation()
+      accion()
+    }
+    window.addEventListener('keydown', window._gpEstadosAtajos, true)
+  }
 
   // valor que se está usando ahora (con takeover y fundido incluidos)
   E.valor = clave => valores[clave]
@@ -418,6 +592,8 @@
     total: { get: () => (can ? can.lista.length - 1 : 0) },
     actual: { get: () => objetivo },                                // el estado actual, resuelto
     nombre: { get: () => (objetivo && objetivo.nombre) || '' },
+    suspendido: { get: () => mem.suspendido },
+    cancionEn: { get: () => mem.sombra },                            // por dónde va la canción
   })
   E._tick = tick   // para pruebas
 
