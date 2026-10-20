@@ -48,13 +48,17 @@ V.init({
   bpm: 136,                     // reloj propio, sólo si no llega clock MIDI
 
   // ---- puertas ----
-  alto: [0.22, 0.78],           // franja de la pantalla donde viven los paneles (de arriba a abajo)
+  alto: [0, 1],                 // franja de la pantalla donde viven los paneles (0 = arriba · 1 = abajo)
   abre: 4,                      // negras que tarda en abrir
   sostiene: 1,                  // negras que queda abierto
   cierra: 4,                    // negras que tarda en plegarse hasta desaparecer
   curva: 6,                     // fuerza del ease in-out del pliegue (3 = suave · 6 = muy pronunciado · 10 = extremo)
   linea: 0.004,                 // ancho de la línea final antes de desaparecer
   prob: 0.6,                    // chance de que cada panel se prenda en cada ciclo
+  // escalonado: el panel se parte en franjas horizontales y cada una arranca un poco tarde
+  escalonado: false,            // N11 · sí / no
+  franjas: 4,                   // en cuántas franjas se parte (hasta 8)
+  demora: 0.5,                  // demora máxima de una franja (negras); cada franja toma una al azar, distinta en cada ciclo
   // la frase se arma sola a partir de la animación (nunca se corta):
   silencio: 0.5,                // negras de negro al final de cada ciclo, antes del siguiente
   ciclos: 3,                    // ciclos de puertas por frase
@@ -65,15 +69,17 @@ V.init({
   //   1  = se abre desde el borde izquierdo hacia la derecha y se cierra también hacia la derecha
   //   -1 = lo mismo, de derecha a izquierda
   paneles: [
-    [0.34, 0.66, 1],            // un cuadrado en el centro
+    [0, 1, 1],                  // pantalla completa
   ],
 })
 
 
 // ============================================================
-// CONTROLES — qué hay en la consola en esta canción (por ahora nada)
+// CONTROLES — qué hay en la consola en esta canción
 // ============================================================
-const CONTROLES = {}
+const CONTROLES = {
+  escalonado: 'N11',
+}
 
 
 // ============================================================
@@ -100,10 +106,12 @@ const ESTADOS = [
 
 // ============================================================
 // AKAI — mapa LIVE (una fila por canal). Por ahora sólo muestran lo que llega.
+//   N11 = escalonado sí / no
 //   fila 8 → canal 1, bajo (31–38) · fila 7 → canal 10, batería · fila 6 → canal 2, melodía (64–88)
 //   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
+GP.midi.buttons(['N11'])          // N11 = escalonado sí / no
 GP.midi.filas({
   8: { canal: 1,  rango: [31, 38] },
   7: { canal: 10, pulso: 'vuelta' },

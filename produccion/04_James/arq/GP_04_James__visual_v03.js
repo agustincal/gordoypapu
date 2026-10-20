@@ -4,7 +4,8 @@
 // Rol: motor visual v03 — rectángulos de luz, blanco puro, pantalla plana.
 //      Referencia: videos de Milian Mori. Arranca con la escena Puertas.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v03.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v3.2: un panel que se abre desde un borde y se cierra hacia el otro,
+// Actualizado: 20/10/2026 (v3.3: pantalla completa; escalonado en franjas horizontales con demoras al azar.
+//              v3.2: un panel que se abre desde un borde y se cierra hacia el otro,
 //              como si se desplazara; abre y cierra con el mismo ease in-out (curva);
 //              la frase se arma a partir de la duración de la animación)
 // ============================================================
@@ -27,7 +28,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.2'
+  const VERSION = 'v3.3'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -45,7 +46,7 @@
     bpm: 136,                    // reloj propio, sólo si no llega clock MIDI
 
     // ---- puertas ----
-    alto: [0.22, 0.78],          // franja de la pantalla donde viven los paneles (de arriba a abajo)
+    alto: [0, 1],                // franja de la pantalla donde viven los paneles (0 = arriba · 1 = abajo)
     abre: 0.12,                  // negras que tarda en abrir (casi seco)
     sostiene: 1,                 // negras que queda abierto
     cierra: 1.5,                 // negras que tarda en plegarse hasta desaparecer
@@ -54,6 +55,11 @@
                                  // parece quedarse un ratito antes de irse (no es un sostenido)
     linea: 0.004,                // ancho de la línea final antes de desaparecer
     prob: 0.6,                   // chance de que cada panel se prenda en cada ciclo
+    // escalonado: el panel se parte en franjas horizontales y cada una arranca un poco tarde
+    escalonado: false,           // sí / no (N11 en la consola)
+    franjas: 4,                  // en cuántas franjas se parte
+    demora: 0.5,                 // la demora máxima de una franja (negras); cada una toma una
+                                 // demora al azar entre 0 y esto, distinta en cada ciclo
     // la frase se arma sola a partir de la animación (nunca se corta):
     silencio: 0.5,               // negras de negro al final de cada ciclo, antes del siguiente
     ciclos: 3,                   // ciclos de puertas por frase
@@ -66,14 +72,14 @@
     //   dirección -1 = lo mismo, de derecha a izquierda
     // El primero siempre se prende; los demás según 'prob'.
     paneles: [
-      [0.34, 0.66, 1],           // un cuadrado en el centro (0.32 de ancho ≈ 0.56 de alto en 16:9)
+      [0, 1, 1],                 // pantalla completa
     ],
   }
   const copiaDefaults = () => JSON.parse(JSON.stringify(DEFAULTS))
   const C = copiaDefaults()
   V.C = C
   V.DEFAULTS = DEFAULTS
-  const MAX_PANELES = 12
+  const MAX_PANELES = 2
 
   // ============================================================
   // Pulso: clock MIDI (o reloj propio)
@@ -120,22 +126,32 @@
   //   null = apagado
   // Abre:   el frente avanza desde el borde de entrada hasta el otro (desde 0, hasta 0 → 1)
   // Cierra: la cola avanza en la misma dirección (desde 0 → 1, hasta 1): parece que se desplazó
-  const momento = i => {
-    const f = frase()
+  // atraso = negras que esta franja llega tarde
+  const momento = (i, atraso = 0) => {
+    const n = nb() - atraso
+    const f = mod(n, largoFrase()), nF = Math.floor(n / largoFrase())
     if (f >= inicioGolpe()) return { desde: 0, hasta: 1 }   // golpe: todo prendido (el barrido lo recorta)
     if (f >= C.ciclos * largoCiclo()) return null           // negro
     const L = largoCiclo()
     const ciclo = Math.floor(f / L), k = f - ciclo * L
-    if (i > 0 && azar(i + 1, nFrase() * 3 + ciclo) > C.prob) return null
+    if (i > 0 && azar(i + 1, nF * 3 + ciclo) > C.prob) return null
     if (k < C.abre) return { desde: 0, hasta: inOut(k / C.abre, C.curva) }
     if (k < C.abre + C.sostiene) return { desde: 0, hasta: 1 }
     const c = (k - C.abre - C.sostiene) / C.cierra
     return c < 1 ? { desde: inOut(c, C.curva), hasta: 1 } : null
   }
-  const borde = (i, lado) => () => {
+  // franjas activas y la demora de cada una (cambia en cada ciclo, sin orden: más natural)
+  const MAX_FRANJAS = 8
+  const nFranjas = () => C.escalonado ? Math.max(1, Math.min(MAX_FRANJAS, Math.round(C.franjas))) : 1
+  const atrasoDe = (i, j) => {
+    if (nFranjas() === 1) return 0
+    const ciclo = Math.floor(nb() / largoCiclo())
+    return C.demora * azar(j * 7.31 + i * 13.7 + 1.7, ciclo * 3.1 + 0.5)
+  }
+  const borde = (i, j, lado) => () => {
     const p = C.paneles[i]
-    if (!p) return 2
-    const m = momento(i)
+    if (!p || j >= nFranjas()) return 2
+    const m = momento(i, atrasoDe(i, j))
     if (!m) return 2                                        // fuera de pantalla = apagado
     const [a, b, dir] = p
     let d = m.desde, h = m.hasta
@@ -151,10 +167,17 @@
     return f < 0 ? 1 : 1 - inOut(f / Math.max(0.01, C.barrido), C.curva)
   }
 
+  // alto de la franja j de nFranjas (de arriba a abajo)
+  const altoFranja = (j, lado) => () => {
+    const a = C.alto[0], b = C.alto[1], n = nFranjas()
+    return a + (b - a) * (j + lado) / n
+  }
   const puertas = () => {
     let luz = solid(0, 0, 0)
     for (let i = 0; i < MAX_PANELES; i++) {
-      luz = luz.add(caja(borde(i, 0), borde(i, 1), () => C.alto[0], () => C.alto[1]))
+      for (let j = 0; j < MAX_FRANJAS; j++) {
+        luz = luz.add(caja(borde(i, j, 0), borde(i, j, 1), altoFranja(j, 0), altoFranja(j, 1)))
+      }
     }
     return luz.mult(caja(0, barrido, 0, 1))
   }
