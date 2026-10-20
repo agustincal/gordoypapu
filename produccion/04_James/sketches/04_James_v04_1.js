@@ -14,6 +14,8 @@
 //              Variante 4, STROBO QUE INVIERTE: ráfaga que invierte la pantalla entera en ritmo
 //                rápido. Al entrar al pico (estado 9) y en el pad fila 5 col 4 (mientras apretás).
 //                ⚠ Parpadeo rápido: avisar al público (fotosensibilidad).
+//              8 BITS (efecto de salida, LIVE/arq/GP_8bits.js): F4 pixela la salida (abajo = apagado),
+//                el botón arriba de F4 elige tramado / damero / umbral. Apagado no cambia nada.
 //              La v04 sigue intacta en 04_James_v04.js)
 // ============================================================
 //
@@ -42,6 +44,7 @@ await cargarGP('LIVE/arq/GP_midi.js')                                // Akai: fa
 await cargarGP('LIVE/arq/GP_tools.js')                               // SÓLO ENSAYO: grabador (89), panel, reproductor
 await cargarGP('LIVE/arq/GP_estados.js')                             // estados: cada nota del canal 16 pasa al siguiente
 await cargarGP('produccion/04_James/arq/GP_04_James__visual_v04_1.js') // motor de DESARROLLO
+await cargarGP('LIVE/arq/GP_8bits.js')                               // efecto 8 bits a la salida (F4) — ya está en LIVE
 
 if (GP.tools) { GP.tools.init({ cancion: '04_James' }); GP.tools.panel() }
 await GP.midi.start()
@@ -121,6 +124,10 @@ V.init({
   stroboDur: 1,                 // negras que dura cada ráfaga de stroboVoz
   stroboPaso: 0.125,            // negras entre inversiones: 0.125 = fusa · 0.25 = semicorchea · 0.5 = corchea
 
+  // ---- PRUEBA 8 BITS (efecto aparte, GP_8bits.js) ----
+  pixeles: 0,                   // F4 · 0 = apagado · apenas arriba = píxeles chicos · 1 = enormes
+  verPixel: 0,                  // arriba de F4 · 0 tramado (puntos) · 1 damero (cuadros) · 2 umbral (sin trama)
+
   // ---- golpe ----
   golpeSostiene: 0.25,          // negras que queda toda blanca
   golpeCierra: 1.5,             // negras que tarda el barrido en llevársela
@@ -137,6 +144,8 @@ const CONTROLES = {
   verFranjas: 'V1',   // parejas · desparejas · persiana
   verEstela:  'V2',   // degradado · eco · agujas
   verGesto:   'V3',   // desplazamiento · ida y vuelta · cruzado
+  pixeles:    'F4',   // PRUEBA 8 bits: tamaño de píxel (abajo = apagado)
+  verPixel:   'V4',   // PRUEBA 8 bits: tramado · damero · umbral
   porAltura:  'N11',  // cada nota, su franja
   partida:    'N12',  // la puerta en pedazos
   totem:      'N13',  // se abre desde un punto, se recoge en dos agujas
@@ -192,13 +201,13 @@ const ESTADOS = [
 //   fila 5 → a mano: col 1 = golpe (pantalla entera) · col 2 = una puerta (sin nota)
 //            col 3 = los pedazos saltan (partida) · col 4 = strobo que invierte (mientras apretás)
 //            col 5-8 libres
-//   F1 franjas · F2 estela · F3 duración · botones arriba de F1/F2/F3 = versiones
+//   F1 franjas · F2 estela · F3 duración · F4 píxeles (prueba 8 bits) · botones arriba de F1–F4 = versiones
 //   N11 = cada nota, su franja · N12 = partida (la puerta en pedazos) · N13 = tótem · N14 = respira
 //   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13', 'N14'])
-GP.midi.versiones({ F1: 3, F2: 3, F3: 3 })
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3 })
 GP.midi.filas({
   8: { canal: 1,  rango: [31, 38] },
   7: { canal: 10, pulso: 'vuelta' },
@@ -256,5 +265,6 @@ update = () => {
   V.update()
 }
 
-V.salida(o0)
+V.salida(o1)                          // el motor dibuja en o1…
+GP.ochoBits.salida(o1, o0, V.C)       // …y el efecto 8 bits lo pasa a o0 (con F4 abajo, pasa igual)
 render(o0)

@@ -5,6 +5,7 @@
 //      El motor vive en LIVE/arq/GP_02_Buscando_Placer__visual.js
 // Actualizado: 16/10/2026 (v01: primera versión LIVE. Los 13 estados son los
 //              de produccion/02_Buscando_Placer_v03, pasados al formato nuevo)
+//              20/10/2026: imágenes de assets/sequence02, 30 JPG numerados (IMAGENES_02); la 01 queda como IMAGENES_01
 // ============================================================
 
 // ---- carga de scripts ----
@@ -46,7 +47,12 @@ const ASSETS = GP_SHA === 'main'
   ? 'https://raw.githubusercontent.com/agustincal/gordoypapu/main/produccion/02_Buscando_Placer/assets/'
   : `https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/produccion/02_Buscando_Placer/assets/`
 
-const IMAGENES = ['01', '02', '03', '04', '05', '06'].map(n => `${ASSETS}sequence01/${n}.jpg`)
+const IMAGENES_01 = ['01', '02', '03', '04', '05', '06'].map(n => `${ASSETS}sequence01/${n}.jpg`)
+
+// sequence02: 30 JPG numerados 01-30 (lado máx. 1024) en produccion/.../assets/sequence02
+const IMAGENES_02 = Array.from({ length: 30 }, (_, i) => `${ASSETS}sequence02/${String(i + 1).padStart(2, '0')}.jpg`)
+
+const IMAGENES = IMAGENES_02   // ← poné IMAGENES_01 para volver a la secuencia anterior
 const VIDEOS = Array.from({ length: 20 }, (_, i) => `${ASSETS}videos01/Kim_chi_fied_rice_${String(i + 1).padStart(2, '0')}.mp4`)
 
 V.medios({
