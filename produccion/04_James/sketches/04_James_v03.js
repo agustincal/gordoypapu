@@ -64,6 +64,14 @@ V.init({
   franjas: 3 / 7,               // F1 · 0 = 1 franja · 1 = 8 franjas (3/7 = 4)
   demora: 0.5,                  // proporción de demora máxima de una franja (al azar, distinta en cada ciclo)
   estela: 0.3,                  // F2 · degradado que deja el borde al moverse (0 = borde duro · 1 = muy largo)
+
+  // ---- versiones: botón redondo arriba de cada fader (v1 → v2 → v3) ----
+  verFranjas: 0,                // arriba de F1 · 0 parejas · 1 desparejas (alto al azar en cada ciclo) · 2 persiana (con hueco)
+  verEstela: 0,                 // arriba de F2 · 0 degradado · 1 eco (degradado en escalones) · 2 agujas (líneas finas)
+  verGesto: 0,                  // arriba de F3 · 0 desplazamiento · 1 ida y vuelta · 2 cruzado (dos que se cruzan con diff)
+  hueco: 0.35,                  // persiana: parte negra de cada franja
+  escalones: 4,                 // eco: escalones del degradado
+  agujas: 7,                    // agujas: líneas que deja el borde en su recorrido
   // la frase se arma sola a partir de la animación (nunca se corta):
   silencio: 0.5,                // proporción de negro al final de cada ciclo, antes del siguiente
   ciclos: 3,                    // ciclos de puertas por frase
@@ -86,6 +94,9 @@ const CONTROLES = {
   franjas:  'F1',     // de 1 a 8 franjas
   estela:   'F2',     // de borde duro a degradado largo
   duracion: 'F3',     // duración del gesto: de una negra a una redonda
+  verFranjas: 'V1',   // versión de F1: parejas · desparejas · persiana
+  verEstela:  'V2',   // versión de F2: degradado · eco · agujas
+  verGesto:   'V3',   // versión de F3: desplazamiento · ida y vuelta · cruzado
 }
 
 
@@ -114,10 +125,14 @@ const ESTADOS = [
 // ============================================================
 // AKAI — mapa LIVE (una fila por canal). Por ahora sólo muestran lo que llega.
 //   F1 = franjas (1 a 8) · F2 = estela · F3 = duración del gesto (negra → redonda)
+//   botón arriba de F1 = parejas / desparejas / persiana
+//   botón arriba de F2 = degradado / eco / agujas
+//   botón arriba de F3 = desplazamiento / ida y vuelta / cruzado
 //   fila 8 → canal 1, bajo (31–38) · fila 7 → canal 10, batería · fila 6 → canal 2, melodía (64–88)
 //   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3 })
 GP.midi.filas({
   8: { canal: 1,  rango: [31, 38] },
   7: { canal: 10, pulso: 'vuelta' },
@@ -125,7 +140,7 @@ GP.midi.filas({
   5: {},
 })
 
-// los estados van después de V.init y de las filas
+// los estados van después de V.init, de las versiones y de las filas
 GP.estados.init({
   cancion: '04_James',
   destino: V.C,

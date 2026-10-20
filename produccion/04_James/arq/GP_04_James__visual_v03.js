@@ -4,7 +4,8 @@
 // Rol: motor visual v03 — rectángulos de luz, blanco puro, pantalla plana.
 //      Referencia: videos de Milian Mori. Arranca con la escena Puertas.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v03.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v3.5: faders — F1 franjas (1 a 8, siempre escalonado) · F2 estela ·
+// Actualizado: 20/10/2026 (v3.6: versiones de F1, F2 y F3 — ver 'Versiones' abajo.
+//              v3.5: faders — F1 franjas (1 a 8, siempre escalonado) · F2 estela ·
 //              F3 duración del gesto (de negra a redonda, mantiene la proporción de abre/sostiene/cierra).
 //              v3.4: estela — el borde que se mueve deja un degradado adentro de su recuadro.
 //              v3.3: pantalla completa; escalonado en franjas horizontales con demoras al azar.
@@ -31,7 +32,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.5'
+  const VERSION = 'v3.6'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -72,6 +73,14 @@
     // queda adentro de su recuadro. Cuanto más rápido va el borde, más largo el degradado;
     // quieto, el borde es duro.
     estela: 0.3,                 // F2 · largo del degradado (0 = borde duro · 1 = muy largo); acompaña a la duración
+
+    // ---- versiones (botón redondo arriba de cada fader: v1 → v2 → v3) ----
+    verFranjas: 0,               // V1 · 0 parejas · 1 desparejas (alto al azar en cada ciclo) · 2 persiana (con hueco)
+    verEstela: 0,                // V2 · 0 degradado · 1 eco (degradado en escalones) · 2 agujas (líneas finas)
+    verGesto: 0,                 // V3 · 0 desplazamiento · 1 ida y vuelta · 2 cruzado (dos que se cruzan con diff)
+    hueco: 0.35,                 // persiana: parte negra de cada franja
+    escalones: 4,                // eco: cuántos escalones tiene el degradado
+    agujas: 7,                   // agujas: cuántas líneas deja el borde en su recorrido
     // la frase se arma sola a partir de la animación (nunca se corta):
     silencio: 0.5,               // proporción de negro al final de cada ciclo, antes del siguiente
     ciclos: 3,                   // ciclos de puertas por frase
@@ -158,23 +167,30 @@
     if (k < ab) return { desde: 0, hasta: inOut(k / ab, C.curva) }
     if (k < ab + so) return { desde: 0, hasta: 1 }
     const c = (k - ab - so) / ci
-    return c < 1 ? { desde: inOut(c, C.curva), hasta: 1 } : null
+    if (c >= 1) return null
+    // ida y vuelta: se cierra volviendo hacia el borde de entrada (como una tecla que sube)
+    if ((C.verGesto | 0) === 1) return { desde: 0, hasta: 1 - inOut(c, C.curva) }
+    // desplazamiento (y cruzado): la cola sigue en la misma dirección, parece que se desplazó
+    return { desde: inOut(c, C.curva), hasta: 1 }
   }
   // franjas activas y la demora de cada una (cambia en cada ciclo, sin orden: más natural)
   const MAX_FRANJAS = 8
   const nFranjas = () => 1 + Math.round(clamp01(C.franjas) * (MAX_FRANJAS - 1))     // F1: de 1 a 8
-  const atrasoDe = (i, j) => {
-    if (nFranjas() === 1) return 0
+  // capa: 0 = la de siempre · 1 = la que cruza en sentido contrario (sólo en el gesto cruzado)
+  const atrasoDe = (i, j, capa = 0) => {
+    if (nFranjas() === 1 && capa === 0) return 0
     const ciclo = Math.floor(nb() / largoCiclo())
-    return T('demora') * azar(j * 7.31 + i * 13.7 + 1.7, ciclo * 3.1 + 0.5)
+    return T('demora') * azar(j * 7.31 + i * 13.7 + 1.7 + capa * 5.3, ciclo * 3.1 + 0.5 + capa)
   }
   // dónde está la franja j del panel i en la negra n: [x0, x1] o null (apagada)
-  const posicion = (i, j, n) => {
+  const posicion = (i, j, n, capa = 0) => {
     const p = C.paneles[i]
     if (!p || j >= nFranjas()) return null
-    const m = momento(i, n - atrasoDe(i, j))
+    if (capa === 1 && (C.verGesto | 0) !== 2) return null
+    const m = momento(i, n - atrasoDe(i, j, capa))
     if (!m) return null
-    const [a, b, dir] = p
+    const [a, b, d0] = p
+    const dir = capa === 1 ? -d0 : d0
     let d = m.desde, h = m.hasta
     const minimo = C.linea / Math.max(0.001, b - a)          // nunca más fino que una línea
     if (h - d < minimo) { if (d === 0) h = minimo; else d = h - minimo }
@@ -185,34 +201,68 @@
   }
   // valores para la caja: k = 0 borde izquierdo · 1 borde derecho ·
   //                       2 estela del borde izquierdo · 3 estela del borde derecho
-  const valor = (i, j, k) => () => {
-    const n = nb(), pos = posicion(i, j, n)
-    if (!pos) return k < 2 ? 2 : 0                          // apagada: fuera de pantalla
-    if (k < 2) return pos[k]
-    const paso = 0.04, antes = posicion(i, j, n - paso)
-    if (!antes || C.estela <= 0) return 0
-    const vel = Math.abs(pos[k - 2] - antes[k - 2]) / paso  // pantallas por negra
-    return Math.min(pos[1] - pos[0], vel * C.estela * escala())  // nunca más que el recuadro
+  // se calcula una sola vez por cuadro para cada franja (los 4 valores juntos)
+  const cache = { t: null, v: {} }
+  const calcular = (i, j, capa) => {
+    const n = nb(), pos = posicion(i, j, n, capa)
+    if (!pos) return [2, 2, 0, 0]                           // apagada: fuera de pantalla
+    const paso = 0.04, antes = posicion(i, j, n - paso, capa)
+    const estela = lado => {
+      if (!antes || C.estela <= 0) return 0
+      const vel = Math.abs(pos[lado] - antes[lado]) / paso  // pantallas por negra
+      return Math.min(pos[1] - pos[0], vel * C.estela * escala())   // nunca más que el recuadro
+    }
+    return [pos[0], pos[1], estela(0), estela(1)]
+  }
+  const valor = (i, j, k, capa = 0) => () => {
+    if (cache.t !== time) { cache.t = time; cache.v = {} }
+    const clave = i * 100 + j * 2 + capa
+    if (!cache.v[clave]) cache.v[clave] = calcular(i, j, capa)
+    return cache.v[clave][k]
   }
   const barrido = () => {
     const f = frase() - inicioBarrido()
     return f < 0 ? 1 : 1 - inOut(f / Math.max(0.01, C.barrido), C.curva)
   }
 
-  // alto de la franja j de nFranjas (de arriba a abajo)
-  const altoFranja = (j, lado) => () => {
-    const a = C.alto[0], b = C.alto[1], n = nFranjas()
-    return a + (b - a) * (j + lado) / n
+  // alto de la franja j de nFranjas (de arriba a abajo), según la versión de F1
+  const cortes = () => {                                    // dónde empieza cada franja (0 a 1) + el final
+    const n = nFranjas(), v = C.verFranjas | 0
+    if (v !== 1) return Array.from({ length: n + 1 }, (_, j) => j / n)
+    // desparejas: cada franja con su alto al azar, distinto en cada ciclo
+    const ciclo = Math.floor(nb() / largoCiclo())
+    const pesos = Array.from({ length: n }, (_, j) => 0.25 + azar(j * 3.7 + 0.9, ciclo * 1.3 + 7))
+    const total = pesos.reduce((x, y) => x + y, 0)
+    const c = [0]; pesos.forEach(w => c.push(c[c.length - 1] + w / total))
+    return c
   }
-  const puertas = () => {
+  let cacheCortes = { t: null, c: null }
+  const altoFranja = (j, lado) => () => {
+    if (cacheCortes.t !== time) cacheCortes = { t: time, c: cortes() }
+    const a = C.alto[0], b = C.alto[1], c = cacheCortes.c
+    if (j >= c.length - 1) return 2
+    let y0 = c[j], y1 = c[j + 1]
+    if ((C.verFranjas | 0) === 2) {                         // persiana: un hueco negro en cada franja
+      const m = (y1 - y0) * clamp01(C.hueco) / 2
+      y0 += m; y1 -= m
+    }
+    return a + (b - a) * (lado === 0 ? y0 : y1)
+  }
+  // cómo deja rastro el borde, según la versión de F2: 0 degradado · 1 eco · 2 agujas
+  const modoEstela = () => C.verEstela | 0
+  const pasosEstela = () => (C.verEstela | 0) === 1 ? Math.max(2, C.escalones) : C.agujas
+  const capaDe = capa => {
     let luz = solid(0, 0, 0)
     for (let i = 0; i < MAX_PANELES; i++) {
       for (let j = 0; j < MAX_FRANJAS; j++) {
-        luz = luz.add(caja(valor(i, j, 0), valor(i, j, 1), altoFranja(j, 0), altoFranja(j, 1), valor(i, j, 2), valor(i, j, 3)))
+        luz = luz.add(caja(valor(i, j, 0, capa), valor(i, j, 1, capa), altoFranja(j, 0), altoFranja(j, 1),
+          valor(i, j, 2, capa), valor(i, j, 3, capa), modoEstela, pasosEstela))
       }
     }
-    return luz.mult(caja(0, barrido, 0, 1, 0, 0))
+    return luz
   }
+  // cruzado: la segunda capa va en sentido contrario y se cruza con diff (donde se pisan se invierte)
+  const puertas = () => capaDe(0).diff(capaDe(1)).mult(caja(0, barrido, 0, 1, 0, 0, 0, 1))
 
   // ============================================================
   // Salida
@@ -223,13 +273,28 @@
       { type: 'float', name: 'x0', default: 0.25 }, { type: 'float', name: 'x1', default: 0.75 },
       { type: 'float', name: 'y0', default: 0.25 }, { type: 'float', name: 'y1', default: 0.75 },
       { type: 'float', name: 'ei', default: 0.0 }, { type: 'float', name: 'ed', default: 0.0 },
+      { type: 'float', name: 'modo', default: 0.0 }, { type: 'float', name: 'pasos', default: 4.0 },
     ],
     // un rectángulo blanco; y de ARRIBA hacia abajo (0 = arriba).
-    // ei / ed = degradado hacia adentro desde el borde izquierdo / derecho (0 = borde duro)
+    // ei / ed = estela hacia adentro desde el borde izquierdo / derecho (0 = borde duro)
+    // modo: 0 degradado · 1 eco (degradado en 'pasos' escalones) · 2 agujas ('pasos' líneas finas)
     glsl: `
       float y = 1.0 - _st.y;
       float ax = 0.7 / resolution.x, ay = 0.7 / resolution.y;
-      float h = smoothstep(x0 - ax, x0 + max(ei, ax), _st.x) * (1.0 - smoothstep(x1 - max(ed, ax), x1 + ax, _st.x));
+      // dentro del recuadro, con borde duro
+      float dentro = smoothstep(x0 - ax, x0 + ax, _st.x) * (1.0 - smoothstep(x1 - ax, x1 + ax, _st.x));
+      // r = 0 en el borde que se mueve → 1 donde termina la estela
+      float ri = clamp((_st.x - x0) / max(ei, ax), 0.0, 1.0);
+      float rd = clamp((x1 - _st.x) / max(ed, ax), 0.0, 1.0);
+      float r = min(ri, rd);
+      float e = r;
+      if (modo > 0.5 && modo < 1.5) e = r >= 1.0 ? 1.0 : floor(r * pasos) / pasos;
+      if (modo > 1.5) {
+        float rl = r >= 1.0 ? 0.0 : fract(r * pasos);
+        float px = ax * 2.0 / max(max(ei, ed), ax) * pasos;
+        e = r >= 1.0 ? 1.0 : (1.0 - smoothstep(0.0, max(px, 0.08), rl));
+      }
+      float h = dentro * e;
       float v = smoothstep(y0 - ay, y0 + ay, y) * (1.0 - smoothstep(y1 - ay, y1 + ay, y));
       return vec4(vec3(h * v), 1.0);`
   })
