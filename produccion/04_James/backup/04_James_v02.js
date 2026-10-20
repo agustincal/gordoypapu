@@ -1,8 +1,8 @@
 // ============================================================
-// 04_James_v02.js  ·  LIVE/sketches/
+// 04_James_v02.js  ·  produccion/04_James/sketches/
 // Canción: 04_James (Gordo y Papu) · Fase 3
 // Rol: sketch de la canción — sólo configuración, estados y ruteo.
-//      El motor vive en LIVE/arq/GP_04_James__visual.js (v2.0)
+//      El motor vive en produccion/04_James/arq/GP_04_James__visual.js (v2.0)
 // Actualizado: 17/10/2026 (v02: formas puras en blanco y negro, 5 escenas
 //              tomadas de los ejemplos de diseño. Los 13 estados salen del
 //              análisis del audio — ver produccion/04_James/ensayo/)
@@ -34,7 +34,7 @@ const cargarGP = async (ruta) => {
 await cargarGP('LIVE/arq/GP_midi.js')               // Akai: faders, botones, filas, LEDs, FMASTER fundido
 await cargarGP('LIVE/arq/GP_tools.js')              // SÓLO ENSAYO: grabador (89), panel, reproductor → en el show, borrá esta línea
 await cargarGP('LIVE/arq/GP_estados.js')            // estados: cada nota del canal 16 pasa al siguiente
-await cargarGP('LIVE/arq/GP_04_James__visual.js')   // motor de formas puras
+await cargarGP('produccion/04_James/arq/GP_04_James__visual.js')   // motor de formas puras
 
 if (GP.tools) { GP.tools.init({ cancion: '04_James' }); GP.tools.panel() }
 await GP.midi.start()
