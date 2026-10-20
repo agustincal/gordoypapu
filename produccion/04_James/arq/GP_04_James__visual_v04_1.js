@@ -5,14 +5,20 @@
 //      que se suman de a una para probarlas con el ensayo.
 //      Rectángulos de luz, blanco puro, pantalla completa.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v04_1.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v04_1-b: variante 2, TÓTEM — la puerta se abre desde un punto hacia
+// Actualizado: 20/10/2026 (v04_1-d: variante 4, STROBO QUE INVIERTE — no pinta blanco: invierte la
+//              pantalla entera (negativo/positivo) en ritmo rápido, en ráfagas cortas, para marcar
+//              un punto muy alto (referencia: Milian Mori, primer segundo del video 3).
+//              ⚠ Parpadeo rápido de pantalla entera: avisar al público (fotosensibilidad).
+//              v04_1-c: variante 3, RESPIRA — en vez de barrer a lo ancho, la franja
+//              cambia de grosor: aparece como línea, se llena y vuelve a ser línea antes de
+//              apagarse; la estela va arriba y abajo (sale del ejemplo bandas).
+//              v04_1-b: variante 2, TÓTEM — la puerta se abre desde un punto hacia
 //              los dos lados, con un largo distinto en cada franja (borde dentado), y se recoge
 //              hasta quedar en dos agujas. El punto lo da la altura de la nota (sale del ejemplo tótem).
 //              v04_1-a: variante 1, PARTIDA — la puerta viene cortada en pedazos
 //              con huecos; con cada nota los pedazos saltan una celda, las franjas pares
 //              para un lado y las impares para el otro (sale del ejemplo laberinto).
 //              La v04 queda intacta en GP_04_James__visual_v04.js (motor v4.1))
-// Variantes que vienen, de a una: 3 respira · 4 strobo que invierte
 // ============================================================
 //
 // QUÉ SE VE
@@ -37,6 +43,10 @@
 //   C.partida   la puerta viene en pedazos con huecos; cada disparo los hace saltar una celda
 //   C.totem     la puerta se abre desde un punto hacia los dos lados y se recoge en dos agujas
 //               (se puede combinar con partida)
+//   C.respira   la franja no barre a lo ancho: crece de línea a llena y vuelve a línea
+//               (se combina con partida — bandas con escalones — y con tótem)
+//   strobo      ráfagas que invierten la pantalla entera en ritmo rápido: al entrar a un estado
+//               (stroboAlEntrar), con cada nota de una voz (stroboVoz) o mientras apretás el pad
 //
 // Todo lo ajustable vive en GP.james.C (V.init, GP_estados, faders, o en vivo con Ctrl+Enter).
 //
@@ -49,12 +59,14 @@
 //   GP.james.alEntrarEstado()          desde GP.estados (marca el corte)
 //   GP.james.toggleCodigo() · .negras() · .reiniciar()
 //   GP.james.mano('salto')             los pedazos de la partida saltan una celda (sin abrir puertas)
+//   GP.james.mano('strobo', on)        invierte la pantalla en ritmo rápido mientras on = true
+//   GP.james.strobo(negras)            una ráfaga de strobo
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v04_1-b'
+  const VERSION = 'v04_1-d'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -134,6 +146,17 @@
     dentado: 0.55,               // cuánto cambia el largo de cada franja a cada lado (0 = parejo · 1 = muy dentado)
     totemHueco: 0.035,           // el hueco del medio, entre las dos agujas
 
+    // ---- variante 3: RESPIRA (N14) ----
+    respira: false,              // la franja crece de línea a llena y vuelve a línea (a todo el ancho)
+    respiraLinea: 0.5,           // dónde queda la línea dentro de su franja: 0 = arriba · 0.5 = al medio · 1 = abajo
+
+    // ---- variante 4: STROBO QUE INVIERTE ----
+    // ⚠ parpadeo rápido de pantalla entera: avisar al público (fotosensibilidad)
+    stroboAlEntrar: 0,           // negras de ráfaga al entrar al estado (0 = no)
+    stroboVoz: 'ninguna',        // voz que dispara una ráfaga con cada nota
+    stroboDur: 1,                // negras que dura la ráfaga de cada nota de stroboVoz
+    stroboPaso: 0.125,           // negras entre inversión e inversión: 0.125 = fusa · 0.25 = semicorchea · 0.5 = corchea
+
     // ---- reloj (disparo: 'reloj') ----
     ciclo: 0,                    // negras entre puertas (0 = lo que dura el gesto, redondeado)
   }
@@ -188,6 +211,7 @@
   const nuevosSaltos = () => [0, 1].map(() => Array.from({ length: MAX_FRANJAS }, () => ({ desde: 0, hasta: 0, t: -1e9 })))
   const S = window._jamesV41 || (window._jamesV41 = {
     saltos: nuevosSaltos(),       // partida: cuántas celdas saltó cada franja y cuándo fue el último salto
+    strobo: { desde: 0, hasta: -1e9, mano: false, manoDesde: 0 },   // ráfaga del strobo
     g: [Array.from({ length: MAX_FRANJAS }, nuevoGesto), Array.from({ length: MAX_FRANJAS }, nuevoGesto)],
     golpe: -1e9,
     semilla: 0,
@@ -305,6 +329,26 @@
   // ---- golpe: la pantalla entera blanca, se va en barrido ----
   V.golpe = () => { S.golpe = nb() }
 
+  // ---- strobo: una ráfaga de 'negras' que invierte la pantalla cada stroboPaso ----
+  // si ya hay una ráfaga andando, la alarga sin cambiar el ritmo
+  V.strobo = (negras = C.stroboDur) => {
+    const n = nb(), st = S.strobo || (S.strobo = { desde: 0, hasta: -1e9, mano: false, manoDesde: 0 })
+    if (n >= st.hasta) st.desde = n
+    st.hasta = Math.max(st.hasta, n + negras)
+  }
+  // 1 = invertida · 0 = normal (una vez por cuadro)
+  let cacheInv = { t: null, v: 0 }
+  const invertida = () => {
+    if (cacheInv.t === time) return cacheInv.v
+    const n = nb(), st = S.strobo
+    let desde = null
+    if (st && st.mano) desde = st.manoDesde
+    else if (st && n < st.hasta) desde = st.desde
+    const v = desde === null ? 0 : (Math.floor((n - desde) / Math.max(0.03, C.stroboPaso)) % 2 === 0 ? 1 : 0)
+    cacheInv = { t: time, v }
+    return v
+  }
+
   // ---- lo que entra ----
   V.nota = (voz, nota, vel, on) => {
     const clave = voz + ':' + nota
@@ -315,6 +359,7 @@
     }
     if (C.cruce === voz) disparar(1, voz, nota, clave + ':c')
     if (C.golpe === voz) V.golpe()
+    if (C.stroboVoz === voz) V.strobo(C.stroboDur)
   }
   V.soltarVoz = voz => {
     S.g.forEach(capa => capa.forEach((g, j) => {
@@ -324,45 +369,92 @@
       g.suelta = nb()
     }))
   }
-  V.mano = accion => {
+  V.mano = (accion, on = true) => {
+    if (accion === 'strobo') {                   // el pad: invierte mientras lo apretás
+      const st = S.strobo || (S.strobo = { desde: 0, hasta: -1e9, mano: false, manoDesde: 0 })
+      if (on && !st.mano) st.manoDesde = nb()
+      st.mano = !!on
+      return
+    }
+    if (!on) return
     if (accion === 'golpe') V.golpe()
     if (accion === 'salto') { const n = nb(); for (let j = 0; j < MAX_FRANJAS; j++) { saltar(0, j, n); saltar(1, j, n) } }
     if (accion === 'gesto') { disparar(0, 'mano', 0, null); if ((C.verGesto | 0) === 2) disparar(1, 'mano', 0, null, true) }
   }
-  V.alEntrarEstado = () => {
+  // estado = los valores del estado al que se entra (GP_estados los pasa; los números
+  // todavía se están fundiendo en C, por eso la ráfaga se lee de acá)
+  V.alEntrarEstado = (estado = C) => {
     S.semilla++                                   // desparejas: otros altos en cada estado
     if (C.golpeAlCambiar) V.golpe()               // el corte de la canción se marca con un golpe
+    const r = estado.stroboAlEntrar ?? C.stroboAlEntrar
+    if (r > 0) V.strobo(r)                        // un punto muy alto: ráfaga que invierte
   }
   V.reiniciar = () => {
     S.g = [Array.from({ length: MAX_FRANJAS }, nuevoGesto), Array.from({ length: MAX_FRANJAS }, nuevoGesto)]
     S.golpe = -1e9; S.reloj = -1
     S.saltos = nuevosSaltos()
+    S.strobo = { desde: 0, hasta: -1e9, mano: false, manoDesde: 0 }
   }
 
   // ============================================================
   // Dibujo
   // ============================================================
-  // dónde está la franja j de la capa en la negra n: [x0, x1, h0, h1] o null
+  // altos de las franjas según la versión de F1
+  const cortes = () => {
+    const n = nFranjas(), v = C.verFranjas | 0
+    if (v !== 1) return Array.from({ length: n + 1 }, (_, j) => j / n)
+    const pesos = Array.from({ length: n }, (_, j) => 0.25 + azar(j * 3.7 + 0.9, S.semilla * 1.3 + 7))
+    const total = pesos.reduce((x, y) => x + y, 0)
+    const c = [0]; pesos.forEach(w => c.push(c[c.length - 1] + w / total))
+    return c
+  }
+  let cacheCortes = { t: null, c: null }
+  // [y0, y1] de la franja j (0 = arriba), con el hueco de la persiana
+  const bandaDe = j => {
+    if (cacheCortes.t !== time) cacheCortes = { t: time, c: cortes() }
+    const c = cacheCortes.c
+    if (j >= c.length - 1) return null
+    let y0 = c[j], y1 = c[j + 1]
+    if ((C.verFranjas | 0) === 2) { const m = (y1 - y0) * clamp01(C.hueco) / 2; y0 += m; y1 -= m }
+    return [y0, y1]
+  }
+
+  // dónde está la franja j de la capa en la negra n: [x0, x1, h0, h1, y0, y1] o null
   //   h0..h1 = hueco en el medio (sólo el tótem; si no, h1 < h0)
+  //   y0..y1 = alto (la franja entera, o lo que respira)
   //   cual: 0 = el gesto actual · 1 = el anterior (que se está yendo)
   const posicion = (capa, j, n, cual = 0) => {
-    if (j >= nFranjas()) return null
+    const banda = bandaDe(j)
+    if (!banda) return null
+    const xs = posicionX(capa, j, n, cual)
+    if (!xs) return null
+    if (!C.respira) return [...xs, banda[0], banda[1]]
+    // respira: el alto crece desde la línea hasta la franja entera y vuelve a la línea
+    const k = xs.k, alto = banda[1] - banda[0], lin = clamp01(C.respiraLinea)
+    const grosor = Math.max(C.linea * 16 / 9, k * alto)
+    const y0 = banda[0] + (alto - grosor) * lin
+    return [...xs, y0, y0 + grosor]
+  }
+  // lo horizontal: [x0, x1, h0, h1] (+ k = cuánto está abierta, de 0 a 1)
+  const posicionX = (capa, j, n, cual) => {
     const g = cual ? S.g[capa][j].prev : S.g[capa][j]
     const m = momentoDe(g, n)
     if (!m) return null
+    const k = Math.max(0, m.hasta - m.desde)
+    const conK = a => { a.k = k; return a }
+    if (C.respira && !C.totem) return conK([0, 1, 0, -1])          // respira: a todo el ancho
     if (C.totem) {
       // abre: crece desde el centro hacia los dos lados · se va: se recoge hasta las dos agujas
-      const k = Math.max(0, m.hasta - m.desde)
       const sem = g.sem || 0, xc = g.xc ?? 0.5, med = C.totemHueco / 2, lado = C.totemAncho / 2
       // cada lado tiene su largo (dentado) y no se sale de la pantalla: cerca del borde queda más corto
       const izq = Math.min(xc - med - 0.01, lado * (1 - clamp01(C.dentado) * azar(j * 3.1 + capa * 1.9 + 0.7, sem * 0.37 + 1.3)))
       const der = Math.min(1 - xc - med - 0.01, lado * (1 - clamp01(C.dentado) * azar(j * 5.7 + capa * 2.3 + 0.1, sem * 0.53 + 9.1)))
-      return [xc - med - Math.max(C.linea, k * izq), xc + med + Math.max(C.linea, k * der), xc - med, xc + med]
+      return conK([xc - med - Math.max(C.linea, k * izq), xc + med + Math.max(C.linea, k * der), xc - med, xc + med])
     }
     let d = m.desde, h = m.hasta
     if (h - d < C.linea) { if (d === 0) h = C.linea; else d = h - C.linea }
     const dir = (C.direccion >= 0 ? 1 : -1) * (capa === 1 ? -1 : 1)
-    return dir > 0 ? [d, h, 0, -1] : [1 - h, 1 - d, 0, -1]
+    return conK(dir > 0 ? [d, h, 0, -1] : [1 - h, 1 - d, 0, -1])
   }
   // golpe: [x0, x1] de la pantalla entera mientras se va
   const posGolpe = n => {
@@ -374,17 +466,21 @@
 
   // los valores de cada recuadro se calculan una vez por cuadro
   const cache = { t: null, v: {} }
-  const conEstela = (pos, antes, paso) => {
-    if (!pos) return [2, 2, 0, 0, 0, -1]                    // apagada: fuera de pantalla
+  // devuelve [x0, x1, ei, ed, h0, h1, y0, y1]
+  //   ei / ed: estela desde el borde izquierdo / derecho — o, si respira, desde arriba / abajo
+  const conEstela = (pos, antes, paso, vertical = false) => {
+    if (!pos) return [2, 2, 0, 0, 0, -1, 2, 2]              // apagada: fuera de pantalla
     const hueco = pos[3] > pos[2]
+    const y0 = pos[4] ?? 0, y1 = pos[5] ?? 1
     const est = lado => {
       if (!antes || C.estela <= 0) return 0
-      const vel = Math.abs(pos[lado] - antes[lado]) / paso  // pantallas por negra
-      // la estela no pasa de su lado (en el tótem, cada lado tiene la suya)
-      const tope = hueco ? (lado === 0 ? pos[2] - pos[0] : pos[1] - pos[3]) : pos[1] - pos[0]
+      const i = vertical ? 4 + lado : lado
+      const vel = Math.abs(pos[i] - antes[i]) / paso        // pantallas por negra
+      // la estela no pasa de su lado (en el tótem, cada lado tiene la suya; si respira, la mitad del alto)
+      const tope = vertical ? (y1 - y0) / 2 : hueco ? (lado === 0 ? pos[2] - pos[0] : pos[1] - pos[3]) : pos[1] - pos[0]
       return Math.min(tope, vel * C.estela * escala())
     }
-    return [pos[0], pos[1], est(0), est(1), pos[2] ?? 0, pos[3] ?? -1]
+    return [pos[0], pos[1], est(0), est(1), pos[2] ?? 0, pos[3] ?? -1, y0, y1]
   }
   const valor = (clave, calc, k) => () => {
     if (cache.t !== time) { cache.t = time; cache.v = {} }
@@ -394,45 +490,28 @@
   const PASO = 0.04
   const valorFranja = (capa, j, cual, k) => valor('f' + capa + '_' + j + '_' + cual, () => {
     const n = nb()
-    return conEstela(posicion(capa, j, n, cual), posicion(capa, j, n - PASO, cual), PASO)
+    return conEstela(posicion(capa, j, n, cual), posicion(capa, j, n - PASO, cual), PASO, !!C.respira)
   }, k)
   const valorGolpe = k => valor('golpe', () => {
     const n = nb()
     return conEstela(posGolpe(n), posGolpe(n - PASO), PASO)
   }, k)
 
-  // altos de las franjas según la versión de F1
-  const cortes = () => {
-    const n = nFranjas(), v = C.verFranjas | 0
-    if (v !== 1) return Array.from({ length: n + 1 }, (_, j) => j / n)
-    const pesos = Array.from({ length: n }, (_, j) => 0.25 + azar(j * 3.7 + 0.9, S.semilla * 1.3 + 7))
-    const total = pesos.reduce((x, y) => x + y, 0)
-    const c = [0]; pesos.forEach(w => c.push(c[c.length - 1] + w / total))
-    return c
-  }
-  let cacheCortes = { t: null, c: null }
-  const altoFranja = (j, lado) => () => {
-    if (cacheCortes.t !== time) cacheCortes = { t: time, c: cortes() }
-    const c = cacheCortes.c
-    if (j >= c.length - 1) return 2
-    let y0 = c[j], y1 = c[j + 1]
-    if ((C.verFranjas | 0) === 2) { const m = (y1 - y0) * clamp01(C.hueco) / 2; y0 += m; y1 -= m }
-    return lado === 0 ? y0 : y1
-  }
   // partida: valores por franja (los de la capa entera son los mismos para todas)
   const valorCorr = (capa, j) => valor('c' + capa + '_' + j, () => [corrimiento(capa, j, nb())], 0)
   const pCeldas = () => C.partida ? Math.max(1, C.celdas) : 0
   const pHuecos = () => clamp01(C.huecos)
   const pSepara = () => clamp01(C.separa)
   const pEscalon = () => clamp01(C.escalon)
-  const modoEstela = () => C.verEstela | 0
+  const modoEstela = () => (C.verEstela | 0) + (C.respira ? 3 : 0)   // +3: la estela va arriba y abajo
+  const modoGolpe = () => C.verEstela | 0
   const pasosEstela = () => (C.verEstela | 0) === 1 ? Math.max(2, C.escalones) : C.agujas
 
   const capaDe = capa => {
     let luz = solid(0, 0, 0)
     for (let j = 0; j < MAX_FRANJAS; j++) {
       for (const cual of [0, 1]) {                          // el gesto actual y el que se está yendo
-        luz = luz.add(caja(valorFranja(capa, j, cual, 0), valorFranja(capa, j, cual, 1), altoFranja(j, 0), altoFranja(j, 1),
+        luz = luz.add(caja(valorFranja(capa, j, cual, 0), valorFranja(capa, j, cual, 1), valorFranja(capa, j, cual, 6), valorFranja(capa, j, cual, 7),
           valorFranja(capa, j, cual, 2), valorFranja(capa, j, cual, 3), modoEstela, pasosEstela,
           pCeldas, pHuecos, pSepara, pEscalon, valorCorr(capa, j), j + capa * 8 + 1,
           valorFranja(capa, j, cual, 4), valorFranja(capa, j, cual, 5)))
@@ -442,7 +521,8 @@
   }
   const escena = () => capaDe(0)
     .diff(capaDe(1))                                        // donde se cruzan, se invierte
-    .add(caja(valorGolpe(0), valorGolpe(1), 0, 1, valorGolpe(2), valorGolpe(3), modoEstela, pasosEstela, 0, 0, 0, 0, 0, 0, 0, -1))
+    .add(caja(valorGolpe(0), valorGolpe(1), 0, 1, valorGolpe(2), valorGolpe(3), modoGolpe, pasosEstela, 0, 0, 0, 0, 0, 0, 0, -1))
+    .invert(invertida)                                      // strobo: negativo / positivo
 
   const definirCaja = () => setFunction({
     name: 'caja', type: 'src',
@@ -459,25 +539,14 @@
     // un rectángulo blanco; y de ARRIBA hacia abajo (0 = arriba).
     // ei / ed = estela hacia adentro desde el borde izquierdo / derecho (0 = borde duro)
     // modo: 0 degradado · 1 eco (en 'pasos' escalones) · 2 agujas ('pasos' líneas finas)
+    //       +3 = la estela va desde arriba / abajo (respira)
     // partida (celdas > 0): la puerta se ve sólo donde hay pedazo. Los pedazos se corren
     // 'corr' celdas; 'huecos' de ellos faltan; cada uno sube o baja hasta 'escalon' de la franja
     // tótem (h1 > h0): entre h0 y h1 hay un hueco negro (las dos agujas quedan en sus bordes)
     glsl: `
       float y = 1.0 - _st.y;
       float ax = 0.7 / resolution.x, ay = 0.7 / resolution.y;
-      float dentro = smoothstep(x0 - ax, x0 + ax, _st.x) * (1.0 - smoothstep(x1 - ax, x1 + ax, _st.x));
-      float ri = clamp((_st.x - x0) / max(ei, ax), 0.0, 1.0);
-      float rd = clamp((x1 - _st.x) / max(ed, ax), 0.0, 1.0);
-      float r = min(ri, rd);
-      float e = r;
-      if (modo > 0.5 && modo < 1.5) e = r >= 1.0 ? 1.0 : floor(r * pasos) / pasos;
-      if (modo > 1.5) {
-        float rl = r >= 1.0 ? 0.0 : fract(r * pasos);
-        float px = ax * 2.0 / max(max(ei, ed), ax) * pasos;
-        e = r >= 1.0 ? 1.0 : (1.0 - smoothstep(0.0, max(px, 0.08), rl));
-      }
-      float h = dentro * e;
-      if (h1 > h0) h *= 1.0 - smoothstep(h0 - ax, h0 + ax, _st.x) * (1.0 - smoothstep(h1 - ax, h1 + ax, _st.x));
+      float pieza = 1.0;
       float py0 = y0, py1 = y1;
       if (celdas > 0.5) {
         float u = _st.x * celdas - corr;
@@ -486,12 +555,28 @@
         float hay = step(huecos, fract(sin(ci * 12.9898 + sem * 78.233) * 43758.5453));
         float bc = ax * celdas;
         float mitad = separa * 0.5;
-        h *= hay * smoothstep(mitad - bc, mitad + bc, fu) * (1.0 - smoothstep(1.0 - mitad - bc, 1.0 - mitad + bc, fu));
+        pieza = hay * smoothstep(mitad - bc, mitad + bc, fu) * (1.0 - smoothstep(1.0 - mitad - bc, 1.0 - mitad + bc, fu));
         float alto = y1 - y0;
         float r2 = fract(sin(ci * 39.346 + sem * 11.135) * 24634.6345);
         py0 = y0 + r2 * escalon * alto;
         py1 = py0 + (1.0 - escalon) * alto;
       }
+      float dentro = smoothstep(x0 - ax, x0 + ax, _st.x) * (1.0 - smoothstep(x1 - ax, x1 + ax, _st.x));
+      float vert = step(2.5, modo);
+      float m = modo - 3.0 * vert;
+      float a = mix(ax, ay, vert);
+      float ri = mix(clamp((_st.x - x0) / max(ei, ax), 0.0, 1.0), clamp((y - py0) / max(ei, ay), 0.0, 1.0), vert);
+      float rd = mix(clamp((x1 - _st.x) / max(ed, ax), 0.0, 1.0), clamp((py1 - y) / max(ed, ay), 0.0, 1.0), vert);
+      float r = min(ri, rd);
+      float e = r;
+      if (m > 0.5 && m < 1.5) e = r >= 1.0 ? 1.0 : floor(r * pasos) / pasos;
+      if (m > 1.5) {
+        float rl = r >= 1.0 ? 0.0 : fract(r * pasos);
+        float px = a * 2.0 / max(max(ei, ed), a) * pasos;
+        e = r >= 1.0 ? 1.0 : (1.0 - smoothstep(0.0, max(px, 0.08), rl));
+      }
+      float h = dentro * e * pieza;
+      if (h1 > h0) h *= 1.0 - smoothstep(h0 - ax, h0 + ax, _st.x) * (1.0 - smoothstep(h1 - ax, h1 + ax, _st.x));
       float v = smoothstep(py0 - ay, py0 + ay, y) * (1.0 - smoothstep(py1 - ay, py1 + ay, y));
       return vec4(vec3(h * v), 1.0);`
   })

@@ -9,6 +9,11 @@
 //                probada en los estados 2, 6 y 12.
 //              Variante 2, TÓTEM: se abre desde el lugar de la nota hacia los dos lados y se
 //                recoge en dos agujas (N13). Probada en los estados 10 y 11.
+//              Variante 3, RESPIRA: la franja crece de línea a llena y vuelve a línea (N14).
+//                Probada en los estados 8 y 13.
+//              Variante 4, STROBO QUE INVIERTE: ráfaga que invierte la pantalla entera en ritmo
+//                rápido. Al entrar al pico (estado 9) y en el pad fila 5 col 4 (mientras apretás).
+//                ⚠ Parpadeo rápido: avisar al público (fotosensibilidad).
 //              La v04 sigue intacta en 04_James_v04.js)
 // ============================================================
 //
@@ -105,6 +110,17 @@ V.init({
   dentado: 0.55,                // cuánto cambia el largo de cada franja (0 = parejo)
   totemHueco: 0.035,            // hueco del medio, entre las dos agujas
 
+  // ---- variante 3: RESPIRA (N14) — la franja crece de línea a llena y vuelve a línea ----
+  respira: false,
+  respiraLinea: 0.5,            // dónde queda la línea en su franja: 0 = arriba · 0.5 = al medio · 1 = abajo
+
+  // ---- variante 4: STROBO QUE INVIERTE — no pinta blanco: da vuelta la pantalla entera ----
+  // ⚠ parpadeo rápido de pantalla entera: avisar al público (fotosensibilidad)
+  stroboAlEntrar: 0,            // negras de ráfaga al entrar al estado (0 = no)
+  stroboVoz: 'ninguna',         // voz que dispara una ráfaga con cada nota
+  stroboDur: 1,                 // negras que dura cada ráfaga de stroboVoz
+  stroboPaso: 0.125,            // negras entre inversiones: 0.125 = fusa · 0.25 = semicorchea · 0.5 = corchea
+
   // ---- golpe ----
   golpeSostiene: 0.25,          // negras que queda toda blanca
   golpeCierra: 1.5,             // negras que tarda el barrido en llevársela
@@ -124,6 +140,7 @@ const CONTROLES = {
   porAltura:  'N11',  // cada nota, su franja
   partida:    'N12',  // la puerta en pedazos
   totem:      'N13',  // se abre desde un punto, se recoge en dos agujas
+  respira:    'N14',  // crece de línea a llena y vuelve a línea
 }
 
 
@@ -148,10 +165,12 @@ const ESTADOS = [
                     partida: true, celdas: 6, huecos: 0.3, escalon: 0 },
                   //   las dos capas en pedazos que se corren en sentidos contrarios
   /*  7 · 1:37 */ { nombre: 'caja agujas',    disparo: 'caja', duracion: 0.15, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'bajo' },
-  /*  8 · 1:59 */ { nombre: 'respira',        disparo: 'bajo', franjas: 0, duracion: 1, estela: 0.8 },
-                  //   sin bombo: una sola puerta enorme y lenta
-  /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bajo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, repite: 0.5 },
-                  //   el bajo suena casi todo el tiempo: persiana cruzada que late en corcheas
+  /*  8 · 1:59 */ { nombre: 'respira',        disparo: 'bajo', franjas: 2 / 7, duracion: 1, estela: 0.8, respira: true },
+                  //   sin bombo: tres líneas a todo el ancho que se llenan con el bajo y vuelven a ser línea
+  /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bajo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, repite: 0.5,
+                    stroboAlEntrar: 2, golpeAlCambiar: false },
+                  //   el bajo suena casi todo el tiempo: persiana cruzada que late en corcheas.
+                  //   La entrada se marca con 2 negras de strobo que invierte (en vez del golpe)
   /* 10 · 2:52 */ { nombre: 'quiebre',        disparo: 'melodia', franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5, totem: true },
                   //   tótem: cada nota de la melodía levanta una pila de 8 barras en su lugar (grave a la izquierda)
   /* 11 · 3:10 */ { nombre: 'quiebre 2',      disparo: 'melodia', franjas: 5 / 7, verEstela: 1, cruce: 'bajo',
@@ -160,7 +179,8 @@ const ESTADOS = [
   /* 12 · 3:24 */ { nombre: 'caja',           disparo: 'caja', duracion: 0.1, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'melodia',
                     partida: true, celdas: 14, huecos: 0.55, escalon: 0.4 },
                   //   la caja abre pedazos chicos que saltan con cada golpe
-  /* 13 · 3:38 */ { nombre: 'final',          disparo: 'bajo', franjas: 0, duracion: 1, estela: 1, fundido: 4 },
+  /* 13 · 3:38 */ { nombre: 'final',          disparo: 'bajo', franjas: 0, duracion: 1, estela: 1, fundido: 4, respira: true },
+                  //   una sola línea en el medio de la pantalla que respira con el bajo
 ]
 
 
@@ -170,13 +190,14 @@ const ESTADOS = [
 //   fila 7 → canal 10, batería (36 bombo · 38 caja). A mano: col 1-4 bombo · col 5-8 caja. Mute: 83
 //   fila 6 → canal 2, melodía (64–88). Tocás un pad = una nota de melodía. Mute: 84
 //   fila 5 → a mano: col 1 = golpe (pantalla entera) · col 2 = una puerta (sin nota)
-//            col 3 = los pedazos saltan (partida) · col 4-8 libres
+//            col 3 = los pedazos saltan (partida) · col 4 = strobo que invierte (mientras apretás)
+//            col 5-8 libres
 //   F1 franjas · F2 estela · F3 duración · botones arriba de F1/F2/F3 = versiones
-//   N11 = cada nota, su franja · N12 = partida (la puerta en pedazos) · N13 = tótem
+//   N11 = cada nota, su franja · N12 = partida (la puerta en pedazos) · N13 = tótem · N14 = respira
 //   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N12', 'N13'])
+GP.midi.buttons(['N11', 'N12', 'N13', 'N14'])
 GP.midi.versiones({ F1: 3, F2: 3, F3: 3 })
 GP.midi.filas({
   8: { canal: 1,  rango: [31, 38] },
@@ -191,7 +212,7 @@ GP.estados.init({
   destino: V.C,
   controles: CONTROLES,
   estados: ESTADOS,
-  alEntrar: () => V.alEntrarEstado(),   // marca el corte con un golpe
+  alEntrar: (estado) => V.alEntrarEstado(estado),   // marca el corte (golpe y/o strobo)
 })
 
 GP.midi.alDisparo(({ fila, columna, nota, vel, on, origen }) => {
@@ -203,7 +224,9 @@ GP.midi.alDisparo(({ fila, columna, nota, vel, on, origen }) => {
     V.nota(caja ? 'caja' : 'bombo', nota, vel, true)
     return
   }
-  if (fila === 5 && on) {
+  if (fila === 5) {
+    if (columna === 3) { V.mano('strobo', on); return }   // strobo: mientras apretás
+    if (!on) return
     if (columna === 0) V.mano('golpe')
     if (columna === 1) V.mano('gesto')
     if (columna === 2) V.mano('salto')
