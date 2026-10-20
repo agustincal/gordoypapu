@@ -1,0 +1,291 @@
+// ============================================================
+// 03_Vociferan_v03.js  ·  LIVE/sketches/
+// Canción: 03_Vociferan (Gordo y Papu) · Fase 3
+// Rol: sketch de la canción — sólo configuración, estados y ruteo.
+//      El motor vive en LIVE/arq/GP_03_Vociferan__visual_v3.js (círculos + escenas).
+//      v01 / v02 (motor v2.0, sólo círculos) quedan como estaban.
+// Actualizado: 20/10/2026 (paso a LIVE desde produccion/03_Vociferan/fase3/03_Vociferan_v03.js:
+//              motor desde LIVE/arq · mapa Akai nuevo — filas 4-8 de disparo, estados
+//              en 87/88, calibrar mic pasa del 88 al pad N38)
+//              17/10/2026 (v03: fusión por umbral — círculos y escenas se recortan
+//              entre sí con bordes duros; el mic deforma el contorno; puerta de ruido.
+//              Formas con paleta propia cyan/celeste/azul; F7 voz en la forma;
+//              F8 tono de las formas; grilla de lente cuadrado → triángulo → círculo;
+//              v3.4: color por familias (F8 elige por zonas); anillos sueltos
+//              (V1: ninguno / algunos / muchos); F7 = vibración general del mic)
+//              v3.5: degradado de una franja en círculos y formas; anillos sólo en
+//              las formas de James (los círculos vuelven a su hueco original))
+//              v3.6: vibración del mic muteada (micMute); N13 = blanco y negro puro
+//              Base: v02 (escenas de James, 13 estados del análisis del audio).
+// ============================================================
+//
+// Ensayo sin músicos: en el panel de GP_tools cargá
+//   midi  → produccion/03_Vociferan/ensayo/03_Vociferan_ensayo_interpretado_midi.json
+//   audio → Vociferan_-_MST_V3.wav
+// y antes de dar ▶: GP.estados.reiniciar() en la consola.
+// Para comparar con la v3.0 en vivo: V.C.fusion = 'encima' (y 'xor' para volver).
+// ============================================================
+
+// ---- carga de scripts ----
+// 'main' = ensayo: trae lo último que subiste, directo de GitHub (sin purgar).
+//          Después de cada push: recargá Hydra y volvé a evaluar.
+// Para el show: pegá el hash completo del commit probado
+//          (GitHub Desktop → History → clic derecho → Copy SHA).
+const GP_SHA = 'main'
+
+const cargarGP = async (ruta) => {
+  if (GP_SHA !== 'main') {
+    await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/${ruta}`)
+    return
+  }
+  const url = `https://raw.githubusercontent.com/agustincal/gordoypapu/main/${ruta}?t=${Date.now()}`
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`no encontré ${ruta} (${res.status})`)
+  ;(0, eval)(await res.text())
+}
+
+await cargarGP('LIVE/arq/GP_midi.js')                  // Akai: faders, botones, filas, LEDs, FMASTER fundido
+await cargarGP('LIVE/arq/GP_tools.js')                 // SÓLO ENSAYO: grabador (89), panel, reproductor → en el show, borrá esta línea
+await cargarGP('LIVE/arq/GP_estados.js')               // estados: cada nota del canal 16 pasa al siguiente
+await cargarGP('LIVE/arq/GP_03_Vociferan__visual_v3.js')  // motor: círculos + escenas
+
+if (GP.tools) { GP.tools.init({ cancion: '03_Vociferan' }); GP.tools.panel() }
+await GP.midi.start()
+
+const V = GP.vociferan
+
+
+// ============================================================
+// BASE — cómo se ve la canción cuando ningún estado dice otra cosa.
+// Se puede cambiar en vivo: V.C.release = 2 + Ctrl+Enter
+// (dura hasta el próximo estado que anote ese valor)
+// ============================================================
+V.init({
+  escena: 'circulos',     // 'circulos' | 'morfo' | 'iris' | 'corte' | 'anidado' | 'lente'
+
+  // ---- círculos (la Vociferan de siempre) ----
+  // tamaño según la nota: grave = grande, agudo = chico (rango sacado del audio)
+  notaGrave: 45, notaAguda: 84,
+  radioGrave: 0.32, radioAgudo: 0.07,
+  borde: 0.07,
+  hue: 20, hueVar: 8, sat: 1,
+  // ---- color por familias: un tono principal (formas) + dos vecinos (círculos) ----
+  familias: [20, 195, 340, 215, 40, 180],   // naranja, celeste, rosa, azul, ámbar, cyan
+  vecinos: 25,                       // grados entre el tono principal y sus dos vecinos
+  familia: 0,                        // familia de arranque; cada cambio de escena pasa a la siguiente
+  tonoFormas: 0,                     // F8 · elige la familia por zonas (6 tramos = 6 familias)
+  satFormas: 1,
+  entrada: 0.35, entradas: [0.15, 0.35, 0.8], radioAkai: 0.22,
+  mantener: 0.5, release: 1.2, huecoAlIrse: 0.8,
+  escapeProb: 0.12, escapeDir: 1,
+  golpeDur: 0.4, golpeRadio: 1.3, golpeLuz: 1.8,
+  fluct: 0.25, fluctVel: 3,
+  vibracion: 0.5,                    // F7 · volumen de toda la vibración del mic (0 = nada · 0.5 = normal · 1 = mucho)
+  micMute: true,                     // POR AHORA: vibración del mic apagada en todos los estados (false para volver a usarla)
+  micPos: 0.06, micLuz: 0.5, micTam: 0.25,   // sacudón, parpadeo y latido (a vibración 0.5)
+  vibSuave: 0.35,                    // temblor suavizado (más chico = más orgánico · 1 = crudo)
+  micUmbral: 0.15, micRodilla: 0.1,  // puerta de ruido: sonidos bajos no hacen nada (subilo si vibra con la sala)
+  micBorde: 0.05, micRuido: 4,       // deformación del contorno (a vibración 0.5) · tamaño de las ondas
+  barridoFuerza: 0.8, barridoVel: 4, multicolor: 0.7,   // la voz hace correr la franja · multicolor: cuánto se separan los tonos en la franja (0.2 = casi monocromo)
+  degradado: 0.6,                    // franja de degradado en los círculos, siempre (0 = color plano)
+  degradadoFormas: 0.75,             // lo mismo en las formas de las escenas
+  anchoFranja: 1.6,                  // franjas a lo ancho de la pantalla en las formas (más = más angosta)
+  mostrarMic: true,
+  tamano: 0.35,                      // F1 · círculos y formas (0.5 = normal)
+  direccion: 0,                      // F2 · de dónde entran los círculos
+  tamanoMax: 1.15, giroMax: 90,
+  strobe: false,                     // N11 · strobe rojo con cada bombo (ojo fotosensibilidad)
+  flashDur: 0.045,
+
+  // ---- fusión: cómo se juntan los círculos y las escenas ----
+  fusion: 'xor',                     // 'xor' se recortan · 'union' se funden · 'encima' como la v02
+  suavidad: 0.004,                   // borde del umbral (0.004 = duro)
+  desplazar: 0.25,                   // cuánto empujan los círculos a la escena
+  contorno: 1,                       // V1 · anillos en las formas de James: 0 = ninguno · 1 = algunos · 2 = muchos
+  probAnillos: [0, 0.35, 0.7],       // qué parte de las formas nace como anillo
+  grosorAnillo: 0.6,                 // hueco del anillo (0.6 = grueso · 0.8 = fino)
+
+  // ---- escenas nuevas ----
+  cambio: 'bombo',                   // quién pasa a la forma siguiente: 'bombo' | 'caja' | 'melodia' | 'ninguna'
+  golpe: 'bombo',                    // quién hace latir las formas
+  formas: 'todas',                   // 'todas' (triángulo, cuadrado, círculo) | 'circulo'
+  separacion: 0.25,                  // segundos mínimos entre dos cambios
+  tiempo: 0.5,                       // F3 · duración de las transiciones (0 = seco)
+  giro: 0.5,                         // F4 · cuánto giran las formas
+  latido: 0.5,                       // F5 · cuánto laten
+  circulos: 0.5,                     // F6 · tamaño de los círculos del canal 1 en las escenas nuevas (0 = no · 0.5 = normal)
+  quieto: false,                     // N12 · congela las formas
+  byn: false,                        // N13 · blanco y negro puro, sin grises
+  umbralByn: 0.04,                   // desde qué luz cuenta como blanco
+  golpeAlCambiar: true,              // un golpe central tapa cada cambio de escena
+  derivaLente: 0.015,
+  formaGrilla: 'morfo',               // grilla de lente: 'morfo' (cuadrado → triángulo → círculo) | 'cuadrado' | 'circulo'
+  velGrilla: 0.25, tamGrilla: 0.42,
+
+  demo: false,                       // true = notas falsas para probar sin MIDI
+})
+
+
+// ============================================================
+// CONTROLES — qué hay en la consola en esta canción.
+// Mismo nombre que en V.init: los estados usan estos nombres.
+// ============================================================
+const CONTROLES = {
+  tamano:    'F1',
+  direccion: 'F2',
+  tiempo:    'F3',
+  giro:      'F4',
+  latido:    'F5',
+  circulos:  'F6',
+  vibracion: 'F7',
+  tonoFormas: 'F8',
+  contorno:  'V1',     // botón de abajo de F1: anillos ninguno → algunos → muchos
+  strobe:    'N11',
+  quieto:    'N12',
+  byn:       'N13',
+}
+
+
+// ============================================================
+// ESTADOS — cada nota del canal 16 pasa al siguiente.
+// Salen del análisis del audio (cambios de sección, 103 BPM), con el tiempo
+// en que llegan en el ensayo interpretado. BASE = inicio (círculos chicos).
+// Cada estado anota sólo lo que cambia respecto de la BASE.
+//   como: N   → arranca del estado N y le cambia lo que anota
+//   fundido   → segundos que tarda en llegar (si no se anota: 0.3)
+// Las escenas cambian detrás de un golpe central.
+// ============================================================
+const ESTADOS = [
+  /*  1 · 0:05 */ { nombre: 'intro',             tamano: 0.4, release: 2, fluct: 0.4 },
+  /*  2 · 0:24 */ { nombre: 'entra el bombo',    tamano: 0.5, strobe: true },
+  /*  3 · 0:33 */ { nombre: 'anillos',           escena: 'anidado', formas: 'circulo', tamano: 0.5 },
+  /*  4 · 0:42 */ { nombre: 'formas',            escena: 'morfo', cambio: 'caja', tamano: 0.55, circulos: 0.4 },
+  /*  5 · 1:04 */ { nombre: 'iris',              escena: 'iris', strobe: true },
+  /*  6 · 1:20 */ { nombre: 'corte azul',        escena: 'corte', cambio: 'caja', familiaFija: 3, tamano: 0.5 },
+  /*  7 · 1:39 */ { nombre: 'lente',             escena: 'lente', tamano: 0.5, latido: 0.7 },
+  /*  8 · 1:51 */ { nombre: 'anidado',           escena: 'anidado', tamano: 0.55, latido: 0.8, strobe: true },
+  /*  9 · 2:17 */ { nombre: 'quiebre',           tamano: 0.35, release: 2.5, familiaFija: 3, fluct: 0.5, fundido: 1.5 },   // sin bombo
+  /* 10 · 2:26 */ { nombre: 'crece',             escena: 'morfo', formas: 'circulo', cambio: 'caja', tiempo: 0.8, familiaFija: 1, tamano: 0.5, circulos: 0.6 },
+  /* 11 · 2:45 */ { nombre: 'iris caja',         escena: 'iris', cambio: 'caja', giro: 0.7 },
+  /* 12 · 3:08 */ { nombre: 'pico',              escena: 'anidado', tamano: 0.6, tiempo: 0.35, latido: 0.9, strobe: true, circulos: 0.7 },
+  /* 13 · 3:22 */ { nombre: 'final',             tamano: 0.2, release: 2.5, fundido: 6 },
+]
+
+
+// ============================================================
+// AKAI — mapa LIVE (una fila por canal)
+//   fila 8 → canal 1, melodía: cada nota entra como círculo (en todas las escenas,
+//            más o menos visible según F6). Tocás un pad = círculo de esa altura. Mute: 82
+//   fila 7 → canal 10, batería (37 bombo · 38 caja). El bombo hace el strobe.
+//            A mano: col 1-4 bombo (flash) · col 5-8 caja. Mute: 83
+//   fila 6 → disparos a mano, en el color de la canción:
+//            col 1 2 3 = entra por la izquierda rápido / medio / lento
+//            col 4     = golpe central
+//            col 5 6 7 = entra por la derecha lento / medio / rápido
+//            col 8     = se escapa arriba o abajo al soltar
+//   fila 5 → col 1-4 = golpe de paleta: salta a la familia 1-4 (naranja, celeste, rosa, azul)
+//            col 5 = vuelve a círculos · col 6 / 7 = escena anterior / siguiente
+//            col 8 = pasa a la forma siguiente
+//   F1 tamaño · F2 dirección · F3 tiempo · F4 giro · F5 latido · F6 tamaño de los círculos en las escenas
+//   F7 vibración del mic (todo junto) · F8 familia de color (por zonas)
+//   V1 (botón de abajo de F1) = anillos sueltos: ninguno → algunos → muchos (LED: apagado / prendido / parpadeo)
+//   fila 4 → libre (mute: botón 86)
+//   N11 strobe · N12 quieto (congela las formas) · N13 blanco y negro puro
+//   N38 (fila 3, col 8, amarillo) = calibrar mic (3 s de silencio, ¡sin voz!; parpadea mientras mide)
+//   87 / 88 = estado anterior / siguiente (ensayo o emergencia)
+//   98 (Shift) = ocultar código y paneles
+//   89 = grabador (GP_tools) · FMASTER = fundido a negro
+// ============================================================
+GP.midi.buttons(['N11', 'N12', 'N13'])
+GP.midi.versiones({ F1: 3 })   // botón V1 (abajo de F1): anillos ninguno / algunos / muchos
+GP.midi.filas({
+  8: { canal: 1, rango: [V.C.notaGrave, V.C.notaAguda] },
+  7: { canal: 10, pulso: 'vuelta' },
+  6: {},     // sólo a mano
+  5: {},     // sólo a mano
+  4: null,   // libre
+})
+
+// los estados van después de V.init, de los botones y de las filas
+GP.estados.init({
+  cancion: '03_Vociferan',
+  destino: V.C,
+  controles: CONTROLES,
+  estados: ESTADOS,
+})
+
+const FILA6 = {
+  1: { lado: -1, velocidad: 0 },
+  2: { lado: -1, velocidad: 1 },
+  3: { lado: -1, velocidad: 2 },
+  4: { golpe: true },
+  5: { lado: 1, velocidad: 2 },
+  6: { lado: 1, velocidad: 1 },
+  7: { lado: 1, velocidad: 0 },
+  8: { escape: true, velocidad: 1 },
+}
+const otraEscena = paso => {
+  const E = V.ESCENAS, i = E.indexOf(V.C.escena)
+  V.escenaMano(E[(i + paso + E.length) % E.length])
+}
+
+GP.midi.alDisparo(({ fila, columna, nota, vel, on, origen }) => {
+  // melodía: del Korg, o a mano con la altura de la columna
+  if (fila === 8) {
+    if (origen === 'canal') { if (on) V.notaOn(nota, vel); else V.notaOff(nota) }
+    else { const id = 4000 + columna; if (on) V.notaOn(id, vel, { altura: nota }); else V.notaOff(id) }
+    if (on) V.voz('melodia')
+    return
+  }
+  // batería: el bombo hace el strobe (a mano siempre flashea) y cuenta como 'bombo'; la caja como 'caja'
+  if (fila === 7) {
+    if (!on) return
+    const caja = origen === 'canal' ? (nota === 38 || nota === 40) : columna >= 4
+    if (caja) { V.voz('caja'); return }
+    if (origen === 'akai' || V.C.strobe) V.golpe()
+    V.voz('bombo')
+    return
+  }
+  // disparos a mano en el color de la canción
+  if (fila === 6) {
+    const id = 3000 + columna
+    const accion = FILA6[columna + 1]
+    if (!on) { V.notaOff(id); return }
+    if (accion.golpe) V.notaOn(id, vel, { tipo: 'golpe' })
+    else V.disparo(id, vel, accion)
+    return
+  }
+  // golpes de paleta y escenas a mano
+  if (fila === 5) {
+    if (columna < 4) { if (on) V.golpePaleta(columna); else V.notaOff(2000 + columna); return }
+    if (!on) return
+    if (columna === 4) V.escenaMano('circulos')
+    if (columna === 5) otraEscena(-1)
+    if (columna === 6) otraEscena(1)
+    if (columna === 7) V.cambioMano()
+  }
+})
+
+// botones sueltos del Akai
+// (/apc|akai_?ensayo/: el APC o su puerto de ensayo, no un teclado Akai)
+const PAD_CALIBRAR = 23   // N38: fila 3, columna 8
+GP.midi.luz(PAD_CALIBRAR, GP.midi.COLOR.amarillo)
+GP.midi.alMensaje((nombre, data) => {
+  const [st, nota, vel] = data
+  if ((st & 0xf0) !== 0x90 || vel === 0 || !/apc|akai_?ensayo/i.test(nombre)) return
+  if (nota === PAD_CALIBRAR) {
+    V.calibrarMic()
+    GP.midi.luz(PAD_CALIBRAR, GP.midi.COLOR.amarilloParpadeo)
+    setTimeout(() => GP.midi.luz(PAD_CALIBRAR, GP.midi.COLOR.amarillo), (V.C.calibrarSeg || 3) * 1000)
+  }
+  if (nota === 98) V.toggleCodigo()
+})
+
+
+// ============================================================
+// RENDER
+// ============================================================
+update = () => V.update()
+
+V.salida(o0)
+render(o0)
