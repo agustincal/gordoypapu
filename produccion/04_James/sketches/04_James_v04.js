@@ -1,0 +1,202 @@
+// ============================================================
+// 04_James_v04.js  ·  produccion/04_James/sketches/  (DESARROLLO)
+// Canción: 04_James (Gordo y Papu) · Fase 3
+// Rol: sketch de la canción — sólo configuración, estados y ruteo.
+//      Usa GP_midi / GP_tools / GP_estados de LIVE/arq y el motor de desarrollo
+//      produccion/04_James/arq/GP_04_James__visual_v04.js
+// Actualizado: 20/10/2026 (v04: las puertas las tocan las notas. Cada estado elige qué
+//              voz abre, cuál cruza y cuál golpea. Los 13 estados salen del análisis del audio.
+//              La v03 sigue en 04_James_v03.js)
+// ============================================================
+//
+// Ensayo sin músicos: en el panel de GP_tools cargá
+//   midi  → produccion/04_James/ensayo/04_James_ensayo_interpretado_midi.json
+//   audio → produccion/04_James/ensayo/James - MST V3.mp3
+// y antes de dar ▶: GP.estados.reiniciar() en la consola.
+
+// ---- carga de scripts ----
+// 'main' = ensayo: trae lo último que subiste, directo de GitHub (sin purgar).
+//          Después de cada push: recargá Hydra (F5) y volvé a evaluar.
+const GP_SHA = 'main'
+
+const cargarGP = async (ruta) => {
+  if (GP_SHA !== 'main') {
+    await loadScript(`https://cdn.jsdelivr.net/gh/agustincal/gordoypapu@${GP_SHA}/${ruta}`)
+    return
+  }
+  const url = `https://raw.githubusercontent.com/agustincal/gordoypapu/main/${ruta}?t=${Date.now()}`
+  const res = await fetch(url, { cache: 'no-store' })
+  if (!res.ok) throw new Error(`no encontré ${ruta} (${res.status})`)
+  ;(0, eval)(await res.text())
+}
+
+await cargarGP('LIVE/arq/GP_midi.js')                                // Akai: faders, botones, filas, LEDs, FMASTER fundido
+await cargarGP('LIVE/arq/GP_tools.js')                               // SÓLO ENSAYO: grabador (89), panel, reproductor
+await cargarGP('LIVE/arq/GP_estados.js')                             // estados: cada nota del canal 16 pasa al siguiente
+await cargarGP('produccion/04_James/arq/GP_04_James__visual_v04.js') // motor de DESARROLLO
+
+if (GP.tools) { GP.tools.init({ cancion: '04_James' }); GP.tools.panel() }
+await GP.midi.start()
+
+const V = GP.james
+
+
+// ============================================================
+// BASE — cómo se ve la canción cuando ningún estado dice otra cosa.
+// Es también el "inicio" (antes de la primera nota del canal 16): nada dispara, pantalla negra.
+// Se puede cambiar en vivo: V.C.curva = 8 + Ctrl+Enter
+// ============================================================
+V.init({
+  bpm: 136,                     // reloj propio, sólo si no llega clock MIDI
+
+  // ---- quién hace qué (cada estado lo cambia) ----
+  disparo: 'ninguna',           // voz que abre las puertas: 'bajo' | 'melodia' | 'bombo' | 'caja' | 'reloj' | 'ninguna'
+                                //   bajo y melodía: la puerta queda abierta mientras suena la nota
+                                //   bombo y caja: se abre, se sostiene un instante y se va
+  cruce: 'ninguna',             // voz que dispara una segunda capa en sentido contrario (donde se pisan, se invierte)
+  golpe: 'ninguna',             // voz que prende la pantalla entera y la cierra en barrido
+  porAltura: false,             // N11 · cada nota prende sólo su franja (grave abajo); la batería, una al azar
+  golpeAlCambiar: true,         // cada cambio de estado se marca con un golpe de pantalla entera
+  rangos: { bajo: [31, 38], melodia: [64, 88] },   // del análisis del audio
+  separacion: 0.25,             // negras: notas más pegadas que esto alargan la puerta en vez de cortarla
+  direccion: 1,                 // 1 = se abren desde la izquierda · -1 = desde la derecha
+
+  // ---- faders ----
+  franjas: 3 / 7,               // F1 · 0 = 1 franja · 1 = 8 franjas (3/7 = 4)
+  estela: 0.3,                  // F2 · 0 = borde duro · 1 = estela muy larga
+  duracion: 0.5,                // F3 · duración del gesto: 0 = una negra · 0.5 = una blanca · 1 = una redonda
+  durMin: 1, durMax: 4,         // negras con F3 abajo / arriba
+
+  // ---- forma del gesto (proporciones: la duración real la da F3) ----
+  abre: 4,                      // lo que tarda en abrir
+  sostiene: 1,                  // lo que queda abierto (batería; bajo y melodía lo sostienen con la nota)
+  sostieneMax: 4,               // lo máximo que una nota larga deja la puerta abierta (0 = sin límite)
+  cierra: 4,                    // lo que tarda en irse
+  demora: 0.5,                  // demora máxima de cada franja (escalonado)
+  curva: 6,                     // fuerza del ease in-out (3 suave · 6 pronunciado · 10 extremo)
+
+  // ---- versiones: botón redondo arriba de cada fader (v1 → v2 → v3) ----
+  verFranjas: 0,                // arriba de F1 · 0 parejas · 1 desparejas · 2 persiana
+  verEstela: 0,                 // arriba de F2 · 0 degradado · 1 eco · 2 agujas
+  verGesto: 0,                  // arriba de F3 · 0 desplazamiento · 1 ida y vuelta · 2 cruzado
+  hueco: 0.35, escalones: 4, agujas: 7,
+
+  // ---- golpe ----
+  golpeSostiene: 0.25,          // negras que queda toda blanca
+  golpeCierra: 1.5,             // negras que tarda el barrido en llevársela
+})
+
+
+// ============================================================
+// CONTROLES — qué hay en la consola en esta canción.
+// ============================================================
+const CONTROLES = {
+  franjas:    'F1',   // de 1 a 8 franjas
+  estela:     'F2',   // de borde duro a estela larga
+  duracion:   'F3',   // duración del gesto: de una negra a una redonda
+  verFranjas: 'V1',   // parejas · desparejas · persiana
+  verEstela:  'V2',   // degradado · eco · agujas
+  verGesto:   'V3',   // desplazamiento · ida y vuelta · cruzado
+  porAltura:  'N11',  // cada nota, su franja
+}
+
+
+// ============================================================
+// ESTADOS — cada nota del canal 16 pasa al siguiente.
+// Los 13 cortes del análisis del audio (136 BPM). Cada estado anota sólo lo que cambia
+// respecto de la BASE. Cada cambio se marca con un golpe (golpeAlCambiar).
+//   fundido → segundos que tarda en llegar (los números se funden; textos y versiones cambian al instante)
+// Franjas: 0 = 1 · 1/7 = 2 · 3/7 = 4 · 5/7 = 6 · 6/7 = 7 · 1 = 8
+// ============================================================
+const ESTADOS = [
+  /*  1 · 0:03 */ { nombre: 'arranca',        disparo: 'bajo', franjas: 0, estela: 0.4 },
+                  //   una sola puerta, la pantalla entera: abre con cada nota del bajo y queda abierta mientras suena
+  /*  2 · 0:10 */ { nombre: 'entra todo',     disparo: 'bajo', franjas: 3 / 7, cruce: 'caja' },
+                  //   4 franjas escalonadas; la caja cruza en sentido contrario
+  /*  3 · 0:33 */ { nombre: 'desparejas',     disparo: 'bajo', franjas: 5 / 7, verFranjas: 1, verEstela: 1, cruce: 'caja' },
+  /*  4 · 0:47 */ { nombre: 'teclado',        disparo: 'bajo', porAltura: true, franjas: 1, verFranjas: 2, cruce: 'bombo' },
+                  //   cada nota del bajo prende su franja (31 abajo … 38 arriba); el bombo cruza
+  /*  5 · 1:02 */ { nombre: 'bombo',          disparo: 'bombo', duracion: 0.2, franjas: 6 / 7, verGesto: 1, cruce: 'bajo' },
+                  //   el bombo toca puertas cortas (ida y vuelta); el bajo cruza largo
+  /*  6 · 1:23 */ { nombre: 'cruzado',        disparo: 'bajo', verGesto: 2, franjas: 3 / 7, estela: 0.6 },
+  /*  7 · 1:37 */ { nombre: 'caja agujas',    disparo: 'caja', duracion: 0.15, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'bajo' },
+  /*  8 · 1:59 */ { nombre: 'respira',        disparo: 'bajo', franjas: 0, duracion: 1, estela: 0.8 },
+                  //   sin bombo: una sola puerta enorme y lenta
+  /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bombo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, cruce: 'caja' },
+  /* 10 · 2:52 */ { nombre: 'quiebre',        disparo: 'melodia', porAltura: true, franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5 },
+                  //   la melodía toca su franja (64 abajo … 88 arriba)
+  /* 11 · 3:10 */ { nombre: 'quiebre 2',      disparo: 'melodia', porAltura: true, franjas: 1, verEstela: 1, cruce: 'bajo' },
+  /* 12 · 3:24 */ { nombre: 'caja',           disparo: 'caja', duracion: 0.1, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'melodia' },
+  /* 13 · 3:38 */ { nombre: 'final',          disparo: 'bajo', franjas: 0, duracion: 1, estela: 1, fundido: 4 },
+]
+
+
+// ============================================================
+// AKAI — mapa LIVE (una fila por canal)
+//   fila 8 → canal 1, bajo (31–38). Tocás un pad = una nota de bajo (se sostiene mientras apretás). Mute: 82
+//   fila 7 → canal 10, batería (36 bombo · 38 caja). A mano: col 1-4 bombo · col 5-8 caja. Mute: 83
+//   fila 6 → canal 2, melodía (64–88). Tocás un pad = una nota de melodía. Mute: 84
+//   fila 5 → a mano: col 1 = golpe (pantalla entera) · col 2 = una puerta (sin nota) · col 3-8 libres
+//   F1 franjas · F2 estela · F3 duración · botones arriba de F1/F2/F3 = versiones
+//   N11 = cada nota, su franja
+//   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
+//   89 = grabador (GP_tools) · FMASTER = fundido a negro
+// ============================================================
+GP.midi.buttons(['N11'])
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3 })
+GP.midi.filas({
+  8: { canal: 1,  rango: [31, 38] },
+  7: { canal: 10, pulso: 'vuelta' },
+  6: { canal: 2,  rango: [64, 88] },
+  5: {},      // sólo a mano
+})
+
+// los estados van después de V.init, de los botones, las versiones y las filas
+GP.estados.init({
+  cancion: '04_James',
+  destino: V.C,
+  controles: CONTROLES,
+  estados: ESTADOS,
+  alEntrar: () => V.alEntrarEstado(),   // marca el corte con un golpe
+})
+
+GP.midi.alDisparo(({ fila, columna, nota, vel, on, origen }) => {
+  if (fila === 8) { V.nota('bajo', nota, vel, on); return }
+  if (fila === 6) { V.nota('melodia', nota, vel, on); return }
+  if (fila === 7) {
+    if (!on) return
+    const caja = origen === 'canal' ? (nota === 38 || nota === 40) : columna >= 4
+    V.nota(caja ? 'caja' : 'bombo', nota, vel, true)
+    return
+  }
+  if (fila === 5 && on) {
+    if (columna === 0) V.mano('golpe')
+    if (columna === 1) V.mano('gesto')
+  }
+})
+
+// todo lo que entra: el clock da el pulso; 98 oculta el código
+GP.midi.alMensaje((nombre, data) => {
+  V.midi(nombre, data)
+  const [st, nota, vel] = data
+  if ((st & 0xf0) === 0x90 && vel > 0 && /apc|akai/i.test(nombre) && nota === 98) V.toggleCodigo()
+})
+
+
+// ============================================================
+// RENDER
+// ============================================================
+const VOZ_DE_FILA = { 8: 'bajo', 6: 'melodia' }
+const muteAntes = {}
+update = () => {
+  // al mutear una fila, lo que quedó sonando de esa voz se suelta (si no, la puerta queda abierta)
+  for (const [fila, voz] of Object.entries(VOZ_DE_FILA)) {
+    const muteada = GP.midi.muteado(Number(fila))
+    if (muteada && !muteAntes[fila]) V.soltarVoz(voz)
+    muteAntes[fila] = muteada
+  }
+  V.update()
+}
+
+V.salida(o0)
+render(o0)
