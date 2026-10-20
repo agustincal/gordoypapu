@@ -4,9 +4,12 @@
 // Rol: motor visual v04 — las puertas de la v03, ahora tocadas por la música.
 //      Rectángulos de luz, blanco puro, pantalla completa.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v04.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v4.0: las notas abren y cierran las puertas — el bajo y la melodía
-//              las sostienen mientras suena la nota, como una tecla; la batería las toca cortas.
-//              Cada estado elige qué voz dispara, cuál cruza y cuál golpea.
+// Actualizado: 20/10/2026 (v4.1: una nota larga ya no deja la pantalla quieta: cuando llega a
+//              sostieneMax, la puerta se va y vuelve a entrar con el pulso mientras la nota suena
+//              (repite). Relevo: si llega una nota con la puerta abierta, la que estaba se va y la
+//              nueva entra un instante después — se ve el negro entre las dos.
+//              v4.0: las notas abren y cierran las puertas — el bajo y la melodía las sostienen
+//              mientras suena la nota, como una tecla; la batería las toca cortas.
 //              La v03 (reloj fijo) queda intacta en GP_04_James__visual_v03.js)
 // ============================================================
 //
@@ -18,7 +21,8 @@
 //
 // QUÉ HACE LA MÚSICA (cada estado elige)
 //   C.disparo   la voz que abre las puertas: 'bajo' | 'melodia' | 'bombo' | 'caja' | 'reloj' | 'ninguna'
-//                 bajo y melodía: la puerta queda abierta mientras suena la nota (tecla de piano)
+//                 bajo y melodía: la puerta queda abierta mientras suena la nota (tecla de piano);
+//                                 si la nota dura más que sostieneMax, la puerta late con el pulso (repite)
 //                 bombo y caja:   la puerta se abre, se sostiene un instante (sostiene) y se va
 //                 reloj:          sin música, una puerta cada tanto (como la v03)
 //   C.cruce     la voz que dispara una segunda capa en sentido contrario; donde se pisan, diff
@@ -42,7 +46,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v4.0'
+  const VERSION = 'v4.1'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -67,6 +71,10 @@
     rangos: { bajo: [31, 38], melodia: [64, 88] },   // notas que se reparten en las franjas
     separacion: 0.25,            // negras: una nota que llega antes de esto sobre la misma franja
                                  // la alarga (legato) en vez de cortarla y empezar otra
+                                 // (mientras la puerta se está abriendo también es legato)
+    relevo: 0.15,                // cuando una nota llega con la puerta abierta: la que estaba se va
+                                 // y la nueva entra esta fracción de 'cierra' después (0 = pegadas:
+                                 // la pantalla queda toda blanca · 0.3 = se ve bien el negro entre las dos)
     maxSostenida: 16,            // negras: una nota colgada (sin note-off) se suelta sola
     direccion: 1,                // 1 = se abren desde la izquierda · -1 = desde la derecha
 
@@ -82,6 +90,8 @@
     sostiene: 1,                 // lo que queda abierto (sólo batería y reloj: bajo y melodía lo sostienen con la nota)
     sostieneMax: 4,              // lo máximo que una nota larga deja la puerta abierta (0 = sin límite):
                                  // el bajo de James sostiene notas de varios segundos y la pantalla quedaría quieta
+    repite: 1,                   // si la nota sigue sonando después de sostieneMax, la puerta vuelve a entrar
+                                 // en la próxima negra (1) · 0.5 = corchea · 2 = blanca · 0 = no vuelve
     cierra: 4,                   // lo que tarda en irse
     demora: 0.5,                 // demora máxima de cada franja cuando se abren todas juntas (escalonado)
     curva: 6,                    // fuerza del ease in-out (3 suave · 6 pronunciado · 10 extremo)
@@ -185,29 +195,37 @@
   //   clave: la nota que lo sostiene (null = gesto corto, se suelta solo)
   const tocarFranja = (capa, j, clave, atraso) => {
     const g = S.g[capa][j], n = nb()
-    // legato: una nota que llega muy pegada a la anterior la alarga en vez de cortarla
-    if (clave && n - (g.inicio - (g.atraso || 0)) < C.separacion && n < cierreDe(g)) {
-      g.suelta = null
-      g.notas.add(clave)
+    // la puerta todavía se está abriendo (o está por entrar): la nota nueva se suma a ésta
+    // en vez de cortarla — legato. La batería no la alarga; el bajo y la melodía sí.
+    if (n < g.inicio + T('abre') || n - (g.inicio - (g.atraso || 0)) < C.separacion) {
+      if (clave && n < cierreDe(g)) { g.suelta = null; g.notas.add(clave) }
+      if (!clave && n >= g.inicio + T('abre') && n < cierreDe(g)) g.suelta = Math.max(g.suelta, n + atraso + T('sostiene'))
       return
     }
-    const inicio = n + atraso
-    // el que estaba sonando se suelta: la nota nueva lo reemplaza, pero se va con su animación
-    const anterior = { inicio: g.inicio, atraso: g.atraso || 0, suelta: g.suelta === null ? inicio : g.suelta, notas: new Set(), prev: null }
+    // relevo: la puerta que estaba se va ahora (con su animación) y la nueva entra
+    // un poquito después, así se ve el negro entre las dos (relevo = 0: entra pegada)
+    const suelta = Math.min(g.suelta === null ? Infinity : g.suelta, n + atraso)
+    const anterior = { inicio: g.inicio, atraso: g.atraso || 0, suelta, notas: new Set(), prev: null }
+    const sigue = momentoDe(anterior, n) !== null
+    const inicio = sigue ? Math.max(n + atraso, cierreDe(anterior) + C.relevo * T('cierra')) : n + atraso
     S.g[capa][j] = {
       inicio,
       atraso,
+      nace: inicio,
       suelta: clave ? null : inicio + T('sostiene'),
       notas: new Set(clave ? [clave] : []),
-      prev: anterior,
+      prev: sigue ? anterior : null,
     }
   }
   const soltarClave = clave => {
-    for (const capa of S.g) for (const g of capa) {
-      if (!g.notas.has(clave)) continue
+    S.g.forEach(capa => capa.forEach((g, j) => {
+      if (!g.notas.has(clave)) return
       g.notas.delete(clave)
-      if (g.notas.size === 0 && g.suelta === null) g.suelta = nb() + (g.atraso || 0)
-    }
+      if (g.notas.size > 0 || g.suelta !== null) return
+      // una puerta que iba a volver a entrar (repite) y todavía no entró: no entra
+      if (g.repetida && nb() < g.inicio && g.prev) { capa[j] = g.prev; return }
+      g.suelta = nb() + (g.atraso || 0)
+    }))
   }
 
   // qué franjas toca una nota
@@ -245,10 +263,12 @@
     if (C.golpe === voz) V.golpe()
   }
   V.soltarVoz = voz => {
-    for (const capa of S.g) for (const g of capa) {
+    S.g.forEach(capa => capa.forEach((g, j) => {
       for (const k of [...g.notas]) if (k.startsWith(voz + ':')) g.notas.delete(k)
-      if (g.notas.size === 0 && g.suelta === null) g.suelta = nb()
-    }
+      if (g.notas.size > 0 || g.suelta !== null) return
+      if (g.repetida && nb() < g.inicio && g.prev) { capa[j] = g.prev; return }
+      g.suelta = nb()
+    }))
   }
   V.mano = accion => {
     if (accion === 'golpe') V.golpe()
@@ -381,10 +401,20 @@
 
   V.update = () => {
     const n = nb()
-    // notas colgadas (sin note-off): se sueltan solas
-    for (const capa of S.g) for (const g of capa) {
-      if (g.suelta === null && n - g.inicio > C.maxSostenida) { g.notas.clear(); g.suelta = n }
-    }
+    S.g.forEach(capa => capa.forEach((g, j) => {
+      if (g.suelta !== null) return
+      // notas colgadas (sin note-off): se sueltan solas
+      if (n - (g.nace ?? g.inicio) > C.maxSostenida) { g.notas.clear(); g.suelta = n; return }
+      // repite: la nota sigue sonando y la puerta ya llegó a sostieneMax → se va,
+      // y vuelve a entrar en la próxima negra (con el mismo escalonado de su franja)
+      if (!(C.repite > 0) || !(C.sostieneMax > 0)) return
+      const cierre = cierreDe(g)
+      if (n < cierre) return
+      const at = g.atraso || 0
+      const inicio = Math.ceil((cierre - at + C.relevo * T('cierra')) / C.repite - 1e-6) * C.repite + at
+      capa[j] = { inicio, atraso: at, nace: g.nace ?? g.inicio, suelta: null, notas: g.notas, repetida: true,
+                  prev: { inicio: g.inicio, atraso: at, suelta: cierre, notas: new Set(), prev: null } }
+    }))
     // reloj: una puerta cada tanto, sin música
     if (C.disparo === 'reloj') {
       const ciclo = C.ciclo > 0 ? C.ciclo

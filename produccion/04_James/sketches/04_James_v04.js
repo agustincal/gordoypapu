@@ -4,7 +4,8 @@
 // Rol: sketch de la canción — sólo configuración, estados y ruteo.
 //      Usa GP_midi / GP_tools / GP_estados de LIVE/arq y el motor de desarrollo
 //      produccion/04_James/arq/GP_04_James__visual_v04.js
-// Actualizado: 20/10/2026 (v04: las puertas las tocan las notas. Cada estado elige qué
+// Actualizado: 20/10/2026 (motor v4.1: las notas largas laten con el pulso; pico con el bajo)
+//              (v04: las puertas las tocan las notas. Cada estado elige qué
 //              voz abre, cuál cruza y cuál golpea. Los 13 estados salen del análisis del audio.
 //              La v03 sigue en 04_James_v03.js)
 // ============================================================
@@ -71,6 +72,10 @@ V.init({
   abre: 4,                      // lo que tarda en abrir
   sostiene: 1,                  // lo que queda abierto (batería; bajo y melodía lo sostienen con la nota)
   sostieneMax: 4,               // lo máximo que una nota larga deja la puerta abierta (0 = sin límite)
+  repite: 1,                    // si la nota sigue sonando, la puerta vuelve a entrar en la próxima negra
+                                //   (0.5 = corchea · 2 = blanca · 0 = no vuelve)
+  relevo: 0.15,                 // nota nueva con la puerta abierta: la que estaba se va y la nueva entra
+                                //   un instante después (0 = pegadas · 0.3 = más negro entre las dos)
   cierra: 4,                    // lo que tarda en irse
   demora: 0.5,                  // demora máxima de cada franja (escalonado)
   curva: 6,                     // fuerza del ease in-out (3 suave · 6 pronunciado · 10 extremo)
@@ -122,7 +127,8 @@ const ESTADOS = [
   /*  7 · 1:37 */ { nombre: 'caja agujas',    disparo: 'caja', duracion: 0.15, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'bajo' },
   /*  8 · 1:59 */ { nombre: 'respira',        disparo: 'bajo', franjas: 0, duracion: 1, estela: 0.8 },
                   //   sin bombo: una sola puerta enorme y lenta
-  /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bombo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, cruce: 'caja' },
+  /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bajo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, repite: 0.5 },
+                  //   el bajo suena casi todo el tiempo: persiana cruzada que late en corcheas
   /* 10 · 2:52 */ { nombre: 'quiebre',        disparo: 'melodia', porAltura: true, franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5 },
                   //   la melodía toca su franja (64 abajo … 88 arriba)
   /* 11 · 3:10 */ { nombre: 'quiebre 2',      disparo: 'melodia', porAltura: true, franjas: 1, verEstela: 1, cruce: 'bajo' },
