@@ -42,25 +42,30 @@ const V = GP.james
 
 // ============================================================
 // BASE — cómo se ve la canción cuando ningún estado dice otra cosa.
-// Se puede cambiar en vivo: V.C.cierra = 1 + Ctrl+Enter
+// Se puede cambiar en vivo: V.C.curva = 8 + Ctrl+Enter
 // ============================================================
 V.init({
   bpm: 136,                     // reloj propio, sólo si no llega clock MIDI
 
   // ---- puertas ----
   alto: [0, 1],                 // franja de la pantalla donde viven los paneles (0 = arriba · 1 = abajo)
-  abre: 4,                      // negras que tarda en abrir
-  sostiene: 1,                  // negras que queda abierto
-  cierra: 4,                    // negras que tarda en plegarse hasta desaparecer
+  // ---- duración del gesto (F3): de una negra a una redonda ----
+  duracion: 1,                  // F3 · 0 = durMin · 1 = durMax
+  durMin: 1,                    // negras con F3 abajo (una negra)
+  durMax: 4,                    // negras con F3 arriba (una redonda)
+  // proporciones del gesto (la duración real la da F3):
+  abre: 4,                      // proporción que tarda en abrir
+  sostiene: 1,                  // proporción que queda abierto
+  cierra: 4,                    // proporción que tarda en plegarse hasta desaparecer
   curva: 6,                     // fuerza del ease in-out del pliegue (3 = suave · 6 = muy pronunciado · 10 = extremo)
   linea: 0.004,                 // ancho de la línea final antes de desaparecer
   prob: 0.6,                    // chance de que cada panel se prenda en cada ciclo
   // escalonado: el panel se parte en franjas horizontales y cada una arranca un poco tarde
-  escalonado: false,            // N11 · sí / no
-  franjas: 4,                   // en cuántas franjas se parte (hasta 8)
-  demora: 0.5,                  // demora máxima de una franja (negras); cada franja toma una al azar, distinta en cada ciclo
+  franjas: 3 / 7,               // F1 · 0 = 1 franja · 1 = 8 franjas (3/7 = 4)
+  demora: 0.5,                  // proporción de demora máxima de una franja (al azar, distinta en cada ciclo)
+  estela: 0.3,                  // F2 · degradado que deja el borde al moverse (0 = borde duro · 1 = muy largo)
   // la frase se arma sola a partir de la animación (nunca se corta):
-  silencio: 0.5,                // negras de negro al final de cada ciclo, antes del siguiente
+  silencio: 0.5,                // proporción de negro al final de cada ciclo, antes del siguiente
   ciclos: 3,                    // ciclos de puertas por frase
   negro: 3,                     // negras de negro después de los ciclos
   golpe: 3,                     // negras que la sala entera queda prendida
@@ -78,7 +83,9 @@ V.init({
 // CONTROLES — qué hay en la consola en esta canción
 // ============================================================
 const CONTROLES = {
-  escalonado: 'N11',
+  franjas:  'F1',     // de 1 a 8 franjas
+  estela:   'F2',     // de borde duro a degradado largo
+  duracion: 'F3',     // duración del gesto: de una negra a una redonda
 }
 
 
@@ -106,12 +113,11 @@ const ESTADOS = [
 
 // ============================================================
 // AKAI — mapa LIVE (una fila por canal). Por ahora sólo muestran lo que llega.
-//   N11 = escalonado sí / no
+//   F1 = franjas (1 a 8) · F2 = estela · F3 = duración del gesto (negra → redonda)
 //   fila 8 → canal 1, bajo (31–38) · fila 7 → canal 10, batería · fila 6 → canal 2, melodía (64–88)
 //   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11'])          // N11 = escalonado sí / no
 GP.midi.filas({
   8: { canal: 1,  rango: [31, 38] },
   7: { canal: 10, pulso: 'vuelta' },
