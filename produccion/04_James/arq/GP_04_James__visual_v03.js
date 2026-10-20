@@ -4,7 +4,8 @@
 // Rol: motor visual v03 — rectángulos de luz, blanco puro, pantalla plana.
 //      Referencia: videos de Milian Mori. Arranca con la escena Puertas.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v03.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v3.0: Puertas del ejemplo D; pliegue con ease in-out pronunciado;
+// Actualizado: 20/10/2026 (v3.2: un panel que se abre desde un borde y se cierra hacia el otro,
+//              como si se desplazara; abre y cierra con el mismo ease in-out (curva);
 //              la frase se arma a partir de la duración de la animación)
 // ============================================================
 //
@@ -26,7 +27,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.0'
+  const VERSION = 'v3.2'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -59,14 +60,13 @@
     negro: 3,                    // negras de negro después de los ciclos
     golpe: 3,                    // negras que la sala entera queda prendida
     barrido: 1.5,                // negras que tarda el barrido final en cerrar la sala
-    // paneles: [x0, x1, hacia dónde se pliega (0 = izquierda · 0.5 = centro · 1 = derecha)]
+    // paneles: [x0, x1, dirección]
+    //   dirección 1  = se abre desde el borde izquierdo hacia la derecha y se cierra
+    //                  también de izquierda a derecha: parece que se desplazó
+    //   dirección -1 = lo mismo, de derecha a izquierda
+    // El primero siempre se prende; los demás según 'prob'.
     paneles: [
-      [0.03, 0.10, 1],
-      [0.12, 0.33, 0],
-      [0.42, 0.58, 0.5],         // la puerta del centro (siempre se prende)
-      [0.64, 0.67, 1],
-      [0.67, 0.86, 0],
-      [0.89, 0.98, 0],
+      [0.34, 0.66, 1],           // un cuadrado en el centro (0.32 de ancho ≈ 0.56 de alto en 16:9)
     ],
   }
   const copiaDefaults = () => JSON.parse(JSON.stringify(DEFAULTS))
@@ -115,28 +115,36 @@
   const inicioGolpe = () => C.ciclos * largoCiclo() + C.negro
   const inicioBarrido = () => inicioGolpe() + C.golpe
 
-  // cuánto está abierto un panel (1 = entero · 0 = línea · -1 = apagado)
-  const estado = i => {
+  // en qué momento está un panel:
+  //   { desde, hasta } = qué parte del panel está prendida (0 = su borde de entrada · 1 = el otro borde)
+  //   null = apagado
+  // Abre:   el frente avanza desde el borde de entrada hasta el otro (desde 0, hasta 0 → 1)
+  // Cierra: la cola avanza en la misma dirección (desde 0 → 1, hasta 1): parece que se desplazó
+  const momento = i => {
     const f = frase()
-    if (f >= inicioGolpe()) return 1                        // golpe: todo prendido (el barrido lo recorta)
-    if (f >= C.ciclos * largoCiclo()) return -1             // negro
+    if (f >= inicioGolpe()) return { desde: 0, hasta: 1 }   // golpe: todo prendido (el barrido lo recorta)
+    if (f >= C.ciclos * largoCiclo()) return null           // negro
     const L = largoCiclo()
     const ciclo = Math.floor(f / L), k = f - ciclo * L
-    if (azar(i + 1, nFrase() * 3 + ciclo) > C.prob && i !== 2) return -1
-    if (k < C.abre) return suave(k / C.abre)
-    if (k < C.abre + C.sostiene) return 1
+    if (i > 0 && azar(i + 1, nFrase() * 3 + ciclo) > C.prob) return null
+    if (k < C.abre) return { desde: 0, hasta: inOut(k / C.abre, C.curva) }
+    if (k < C.abre + C.sostiene) return { desde: 0, hasta: 1 }
     const c = (k - C.abre - C.sostiene) / C.cierra
-    return c < 1 ? 1 - inOut(c, C.curva) : -1               // se pliega con ease in-out y se apaga
+    return c < 1 ? { desde: inOut(c, C.curva), hasta: 1 } : null
   }
   const borde = (i, lado) => () => {
     const p = C.paneles[i]
     if (!p) return 2
-    const [a, b, ancla] = p
-    const e = estado(i)
-    if (e < 0) return 2                                     // fuera de pantalla = apagado
-    const w = Math.max(C.linea, (b - a) * e)
-    const centro = a + (b - a) * ancla + (ancla === 0 ? w / 2 : ancla === 1 ? -w / 2 : 0)
-    return lado === 0 ? centro - w / 2 : centro + w / 2
+    const m = momento(i)
+    if (!m) return 2                                        // fuera de pantalla = apagado
+    const [a, b, dir] = p
+    let d = m.desde, h = m.hasta
+    const minimo = C.linea / Math.max(0.001, b - a)          // nunca más fino que una línea
+    if (h - d < minimo) { if (d === 0) h = minimo; else d = h - minimo }
+    // dirección 1: de a hacia b · dirección -1: de b hacia a
+    const x0 = dir >= 0 ? a + (b - a) * d : b - (b - a) * h
+    const x1 = dir >= 0 ? a + (b - a) * h : b - (b - a) * d
+    return lado === 0 ? x0 : x1
   }
   const barrido = () => {
     const f = frase() - inicioBarrido()

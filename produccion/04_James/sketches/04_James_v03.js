@@ -49,9 +49,9 @@ V.init({
 
   // ---- puertas ----
   alto: [0.22, 0.78],           // franja de la pantalla donde viven los paneles (de arriba a abajo)
-  abre: 0.12,                   // negras que tarda en abrir (casi seco)
+  abre: 4,                      // negras que tarda en abrir
   sostiene: 1,                  // negras que queda abierto
-  cierra: 1.5,                  // negras que tarda en plegarse hasta desaparecer
+  cierra: 4,                    // negras que tarda en plegarse hasta desaparecer
   curva: 6,                     // fuerza del ease in-out del pliegue (3 = suave · 6 = muy pronunciado · 10 = extremo)
   linea: 0.004,                 // ancho de la línea final antes de desaparecer
   prob: 0.6,                    // chance de que cada panel se prenda en cada ciclo
@@ -61,14 +61,11 @@ V.init({
   negro: 3,                     // negras de negro después de los ciclos
   golpe: 3,                     // negras que la sala entera queda prendida
   barrido: 1.5,                 // negras que tarda el barrido final en cerrar la sala
-  // paneles: [x0, x1, hacia dónde se pliega (0 = izquierda · 0.5 = centro · 1 = derecha)]
+  // paneles: [x0, x1, dirección]
+  //   1  = se abre desde el borde izquierdo hacia la derecha y se cierra también hacia la derecha
+  //   -1 = lo mismo, de derecha a izquierda
   paneles: [
-    [0.03, 0.10, 1],
-    [0.12, 0.33, 0],
-    [0.42, 0.58, 0.5],          // la puerta del centro (siempre se prende)
-    [0.64, 0.67, 1],
-    [0.67, 0.86, 0],
-    [0.89, 0.98, 0],
+    [0.34, 0.66, 1],            // un cuadrado en el centro
   ],
 })
 
