@@ -5,11 +5,14 @@
 //      que se suman de a una para probarlas con el ensayo.
 //      Rectángulos de luz, blanco puro, pantalla completa.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v04_1.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v04_1-a: variante 1, PARTIDA — la puerta viene cortada en pedazos
+// Actualizado: 20/10/2026 (v04_1-b: variante 2, TÓTEM — la puerta se abre desde un punto hacia
+//              los dos lados, con un largo distinto en cada franja (borde dentado), y se recoge
+//              hasta quedar en dos agujas. El punto lo da la altura de la nota (sale del ejemplo tótem).
+//              v04_1-a: variante 1, PARTIDA — la puerta viene cortada en pedazos
 //              con huecos; con cada nota los pedazos saltan una celda, las franjas pares
 //              para un lado y las impares para el otro (sale del ejemplo laberinto).
 //              La v04 queda intacta en GP_04_James__visual_v04.js (motor v4.1))
-// Variantes que vienen, de a una: 2 tótem · 3 respira · 4 strobo que invierte
+// Variantes que vienen, de a una: 3 respira · 4 strobo que invierte
 // ============================================================
 //
 // QUÉ SE VE
@@ -32,6 +35,8 @@
 //
 // VARIANTES (se prenden por estado o desde la consola)
 //   C.partida   la puerta viene en pedazos con huecos; cada disparo los hace saltar una celda
+//   C.totem     la puerta se abre desde un punto hacia los dos lados y se recoge en dos agujas
+//               (se puede combinar con partida)
 //
 // Todo lo ajustable vive en GP.james.C (V.init, GP_estados, faders, o en vivo con Ctrl+Enter).
 //
@@ -49,7 +54,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v04_1-a'
+  const VERSION = 'v04_1-b'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -121,6 +126,13 @@
     salto: 1,                    // celdas que salta con cada disparo (las pares a la derecha, las impares a la izquierda)
     saltoDur: 0.35,              // negras que tarda el salto
     deriva: 0.05,                // además se deslizan solos (celdas por negra · 0 = quietos)
+
+    // ---- variante 2: TÓTEM (N13) ----
+    totem: false,                // la puerta se abre desde un punto hacia los dos lados y se recoge en dos agujas
+    totemLugar: 'altura',        // dónde aparece: 'altura' (grave a la izquierda) · 'azar' · 'centro'
+    totemAncho: 0.85,            // ancho máximo, los dos lados juntos (fracción de pantalla)
+    dentado: 0.55,               // cuánto cambia el largo de cada franja a cada lado (0 = parejo · 1 = muy dentado)
+    totemHueco: 0.035,           // el hueco del medio, entre las dos agujas
 
     // ---- reloj (disparo: 'reloj') ----
     ciclo: 0,                    // negras entre puertas (0 = lo que dura el gesto, redondeado)
@@ -208,7 +220,7 @@
 
   // empieza un gesto en la franja j de la capa
   //   clave: la nota que lo sostiene (null = gesto corto, se suelta solo)
-  const tocarFranja = (capa, j, clave, atraso) => {
+  const tocarFranja = (capa, j, clave, atraso, xc = 0.5, sem = 0) => {
     const g = S.g[capa][j], n = nb()
     // la puerta todavía se está abriendo (o está por entrar): la nota nueva se suma a ésta
     // en vez de cortarla — legato. La batería no la alarga; el bajo y la melodía sí.
@@ -220,7 +232,7 @@
     // relevo: la puerta que estaba se va ahora (con su animación) y la nueva entra
     // un poquito después, así se ve el negro entre las dos (relevo = 0: entra pegada)
     const suelta = Math.min(g.suelta === null ? Infinity : g.suelta, n + atraso)
-    const anterior = { inicio: g.inicio, atraso: g.atraso || 0, suelta, notas: new Set(), prev: null }
+    const anterior = { inicio: g.inicio, atraso: g.atraso || 0, suelta, notas: new Set(), prev: null, xc: g.xc, sem: g.sem }
     const sigue = momentoDe(anterior, n) !== null
     const inicio = sigue ? Math.max(n + atraso, cierreDe(anterior) + C.relevo * T('cierra')) : n + atraso
     S.g[capa][j] = {
@@ -230,6 +242,7 @@
       suelta: clave ? null : inicio + T('sostiene'),
       notas: new Set(clave ? [clave] : []),
       prev: sigue ? anterior : null,
+      xc, sem,                    // tótem: dónde aparece y cómo es su borde dentado
     }
   }
   const soltarClave = clave => {
@@ -269,12 +282,22 @@
     return lado * (C.salto * avance(S.saltos[capa][j], n) + C.deriva * n) + S.semilla * 17
   }
 
-  const disparar = (capa, voz, nota, clave) => {
+  // tótem: dónde aparece (centro del tótem, de 0 a 1)
+  const lugarDe = (voz, nota) => {
+    const r = C.rangos[voz]
+    if (C.totemLugar === 'centro') return 0.5
+    if (C.totemLugar === 'altura' && r) return 0.12 + 0.76 * clamp01((nota - r[0]) / Math.max(1, r[1] - r[0]))
+    return 0.15 + 0.7 * azar(S.cuenta * 1.37 + 0.3, 5.1)                     // batería, mano, reloj: al azar
+  }
+
+  const disparar = (capa, voz, nota, clave, espejo = false) => {
     S.cuenta++
     const js = franjasDe(voz, nota)
+    const lugar = lugarDe(voz, nota)
+    const xc = espejo ? 1 - lugar : lugar        // cruzado: la otra capa aparece en el lugar espejado
     js.forEach(j => {
       const atraso = js.length > 1 ? T('demora') * azar(j * 7.31 + capa * 5.3 + 1.7, S.cuenta * 3.1 + 0.5) : 0
-      tocarFranja(capa, j, sostenida(voz) ? clave : null, atraso)
+      tocarFranja(capa, j, sostenida(voz) ? clave : null, atraso, xc, S.cuenta)
       saltar(capa, j, nb() + atraso)
     })
   }
@@ -288,7 +311,7 @@
     if (!on) { soltarClave(clave); soltarClave(clave + ':x'); soltarClave(clave + ':c'); return }
     if (C.disparo === voz) {
       disparar(0, voz, nota, clave)
-      if ((C.verGesto | 0) === 2) disparar(1, voz, nota, clave + ':x')   // cruzado: cruza también
+      if ((C.verGesto | 0) === 2) disparar(1, voz, nota, clave + ':x', true)   // cruzado: cruza también
     }
     if (C.cruce === voz) disparar(1, voz, nota, clave + ':c')
     if (C.golpe === voz) V.golpe()
@@ -304,7 +327,7 @@
   V.mano = accion => {
     if (accion === 'golpe') V.golpe()
     if (accion === 'salto') { const n = nb(); for (let j = 0; j < MAX_FRANJAS; j++) { saltar(0, j, n); saltar(1, j, n) } }
-    if (accion === 'gesto') { disparar(0, 'mano', 0, null); if ((C.verGesto | 0) === 2) disparar(1, 'mano', 0, null) }
+    if (accion === 'gesto') { disparar(0, 'mano', 0, null); if ((C.verGesto | 0) === 2) disparar(1, 'mano', 0, null, true) }
   }
   V.alEntrarEstado = () => {
     S.semilla++                                   // desparejas: otros altos en cada estado
@@ -319,17 +342,27 @@
   // ============================================================
   // Dibujo
   // ============================================================
-  // dónde está la franja j de la capa en la negra n: [x0, x1] o null
+  // dónde está la franja j de la capa en la negra n: [x0, x1, h0, h1] o null
+  //   h0..h1 = hueco en el medio (sólo el tótem; si no, h1 < h0)
   //   cual: 0 = el gesto actual · 1 = el anterior (que se está yendo)
   const posicion = (capa, j, n, cual = 0) => {
     if (j >= nFranjas()) return null
     const g = cual ? S.g[capa][j].prev : S.g[capa][j]
     const m = momentoDe(g, n)
     if (!m) return null
+    if (C.totem) {
+      // abre: crece desde el centro hacia los dos lados · se va: se recoge hasta las dos agujas
+      const k = Math.max(0, m.hasta - m.desde)
+      const sem = g.sem || 0, xc = g.xc ?? 0.5, med = C.totemHueco / 2, lado = C.totemAncho / 2
+      // cada lado tiene su largo (dentado) y no se sale de la pantalla: cerca del borde queda más corto
+      const izq = Math.min(xc - med - 0.01, lado * (1 - clamp01(C.dentado) * azar(j * 3.1 + capa * 1.9 + 0.7, sem * 0.37 + 1.3)))
+      const der = Math.min(1 - xc - med - 0.01, lado * (1 - clamp01(C.dentado) * azar(j * 5.7 + capa * 2.3 + 0.1, sem * 0.53 + 9.1)))
+      return [xc - med - Math.max(C.linea, k * izq), xc + med + Math.max(C.linea, k * der), xc - med, xc + med]
+    }
     let d = m.desde, h = m.hasta
     if (h - d < C.linea) { if (d === 0) h = C.linea; else d = h - C.linea }
     const dir = (C.direccion >= 0 ? 1 : -1) * (capa === 1 ? -1 : 1)
-    return dir > 0 ? [d, h] : [1 - h, 1 - d]
+    return dir > 0 ? [d, h, 0, -1] : [1 - h, 1 - d, 0, -1]
   }
   // golpe: [x0, x1] de la pantalla entera mientras se va
   const posGolpe = n => {
@@ -342,13 +375,16 @@
   // los valores de cada recuadro se calculan una vez por cuadro
   const cache = { t: null, v: {} }
   const conEstela = (pos, antes, paso) => {
-    if (!pos) return [2, 2, 0, 0]                           // apagada: fuera de pantalla
+    if (!pos) return [2, 2, 0, 0, 0, -1]                    // apagada: fuera de pantalla
+    const hueco = pos[3] > pos[2]
     const est = lado => {
       if (!antes || C.estela <= 0) return 0
       const vel = Math.abs(pos[lado] - antes[lado]) / paso  // pantallas por negra
-      return Math.min(pos[1] - pos[0], vel * C.estela * escala())
+      // la estela no pasa de su lado (en el tótem, cada lado tiene la suya)
+      const tope = hueco ? (lado === 0 ? pos[2] - pos[0] : pos[1] - pos[3]) : pos[1] - pos[0]
+      return Math.min(tope, vel * C.estela * escala())
     }
-    return [pos[0], pos[1], est(0), est(1)]
+    return [pos[0], pos[1], est(0), est(1), pos[2] ?? 0, pos[3] ?? -1]
   }
   const valor = (clave, calc, k) => () => {
     if (cache.t !== time) { cache.t = time; cache.v = {} }
@@ -398,14 +434,15 @@
       for (const cual of [0, 1]) {                          // el gesto actual y el que se está yendo
         luz = luz.add(caja(valorFranja(capa, j, cual, 0), valorFranja(capa, j, cual, 1), altoFranja(j, 0), altoFranja(j, 1),
           valorFranja(capa, j, cual, 2), valorFranja(capa, j, cual, 3), modoEstela, pasosEstela,
-          pCeldas, pHuecos, pSepara, pEscalon, valorCorr(capa, j), j + capa * 8 + 1))
+          pCeldas, pHuecos, pSepara, pEscalon, valorCorr(capa, j), j + capa * 8 + 1,
+          valorFranja(capa, j, cual, 4), valorFranja(capa, j, cual, 5)))
       }
     }
     return luz
   }
   const escena = () => capaDe(0)
     .diff(capaDe(1))                                        // donde se cruzan, se invierte
-    .add(caja(valorGolpe(0), valorGolpe(1), 0, 1, valorGolpe(2), valorGolpe(3), modoEstela, pasosEstela, 0, 0, 0, 0, 0, 0))
+    .add(caja(valorGolpe(0), valorGolpe(1), 0, 1, valorGolpe(2), valorGolpe(3), modoEstela, pasosEstela, 0, 0, 0, 0, 0, 0, 0, -1))
 
   const definirCaja = () => setFunction({
     name: 'caja', type: 'src',
@@ -417,12 +454,14 @@
       { type: 'float', name: 'celdas', default: 0.0 }, { type: 'float', name: 'huecos', default: 0.4 },
       { type: 'float', name: 'separa', default: 0.1 }, { type: 'float', name: 'escalon', default: 0.0 },
       { type: 'float', name: 'corr', default: 0.0 }, { type: 'float', name: 'sem', default: 0.0 },
+      { type: 'float', name: 'h0', default: 0.0 }, { type: 'float', name: 'h1', default: -1.0 },
     ],
     // un rectángulo blanco; y de ARRIBA hacia abajo (0 = arriba).
     // ei / ed = estela hacia adentro desde el borde izquierdo / derecho (0 = borde duro)
     // modo: 0 degradado · 1 eco (en 'pasos' escalones) · 2 agujas ('pasos' líneas finas)
     // partida (celdas > 0): la puerta se ve sólo donde hay pedazo. Los pedazos se corren
     // 'corr' celdas; 'huecos' de ellos faltan; cada uno sube o baja hasta 'escalon' de la franja
+    // tótem (h1 > h0): entre h0 y h1 hay un hueco negro (las dos agujas quedan en sus bordes)
     glsl: `
       float y = 1.0 - _st.y;
       float ax = 0.7 / resolution.x, ay = 0.7 / resolution.y;
@@ -438,6 +477,7 @@
         e = r >= 1.0 ? 1.0 : (1.0 - smoothstep(0.0, max(px, 0.08), rl));
       }
       float h = dentro * e;
+      if (h1 > h0) h *= 1.0 - smoothstep(h0 - ax, h0 + ax, _st.x) * (1.0 - smoothstep(h1 - ax, h1 + ax, _st.x));
       float py0 = y0, py1 = y1;
       if (celdas > 0.5) {
         float u = _st.x * celdas - corr;
@@ -472,7 +512,8 @@
       const at = g.atraso || 0
       const inicio = Math.ceil((cierre - at + C.relevo * T('cierra')) / C.repite - 1e-6) * C.repite + at
       capa[j] = { inicio, atraso: at, nace: g.nace ?? g.inicio, suelta: null, notas: g.notas, repetida: true,
-                  prev: { inicio: g.inicio, atraso: at, suelta: cierre, notas: new Set(), prev: null } }
+                  xc: g.xc, sem: g.sem,
+                  prev: { inicio: g.inicio, atraso: at, suelta: cierre, notas: new Set(), prev: null, xc: g.xc, sem: g.sem } }
     }))
     // reloj: una puerta cada tanto, sin música
     if (C.disparo === 'reloj') {
@@ -482,7 +523,7 @@
       if (k !== S.reloj) {
         S.reloj = k
         disparar(0, 'reloj', 0, null)
-        if ((C.verGesto | 0) === 2) disparar(1, 'reloj', 0, null)
+        if ((C.verGesto | 0) === 2) disparar(1, 'reloj', 0, null, true)
       }
     }
   }

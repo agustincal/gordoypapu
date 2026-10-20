@@ -6,7 +6,10 @@
 //      produccion/04_James/arq/GP_04_James__visual_v04_1.js
 // Actualizado: 20/10/2026 (v04_1: la v04 + variantes que se suman de a una.
 //              Variante 1, PARTIDA: la puerta en pedazos que saltan con cada nota (N12).
-//              Probada en los estados 2, 6 y 12. La v04 sigue intacta en 04_James_v04.js)
+//                probada en los estados 2, 6 y 12.
+//              Variante 2, TÓTEM: se abre desde el lugar de la nota hacia los dos lados y se
+//                recoge en dos agujas (N13). Probada en los estados 10 y 11.
+//              La v04 sigue intacta en 04_James_v04.js)
 // ============================================================
 //
 // Ensayo sin músicos: en el panel de GP_tools cargá
@@ -95,6 +98,13 @@ V.init({
   saltoDur: 0.35,               // negras que tarda el salto
   deriva: 0.05,                 // se deslizan solos (celdas por negra)
 
+  // ---- variante 2: TÓTEM (N13) — se abre desde un punto hacia los dos lados y se recoge en dos agujas ----
+  totem: false,
+  totemLugar: 'altura',         // 'altura' (grave a la izquierda) · 'azar' · 'centro'
+  totemAncho: 0.85,             // ancho máximo, los dos lados juntos
+  dentado: 0.55,                // cuánto cambia el largo de cada franja (0 = parejo)
+  totemHueco: 0.035,            // hueco del medio, entre las dos agujas
+
   // ---- golpe ----
   golpeSostiene: 0.25,          // negras que queda toda blanca
   golpeCierra: 1.5,             // negras que tarda el barrido en llevársela
@@ -113,6 +123,7 @@ const CONTROLES = {
   verGesto:   'V3',   // desplazamiento · ida y vuelta · cruzado
   porAltura:  'N11',  // cada nota, su franja
   partida:    'N12',  // la puerta en pedazos
+  totem:      'N13',  // se abre desde un punto, se recoge en dos agujas
 }
 
 
@@ -141,9 +152,11 @@ const ESTADOS = [
                   //   sin bombo: una sola puerta enorme y lenta
   /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bajo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, repite: 0.5 },
                   //   el bajo suena casi todo el tiempo: persiana cruzada que late en corcheas
-  /* 10 · 2:52 */ { nombre: 'quiebre',        disparo: 'melodia', porAltura: true, franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5 },
-                  //   la melodía toca su franja (64 abajo … 88 arriba)
-  /* 11 · 3:10 */ { nombre: 'quiebre 2',      disparo: 'melodia', porAltura: true, franjas: 1, verEstela: 1, cruce: 'bajo' },
+  /* 10 · 2:52 */ { nombre: 'quiebre',        disparo: 'melodia', franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5, totem: true },
+                  //   tótem: cada nota de la melodía levanta una pila de 8 barras en su lugar (grave a la izquierda)
+  /* 11 · 3:10 */ { nombre: 'quiebre 2',      disparo: 'melodia', franjas: 5 / 7, verEstela: 1, cruce: 'bajo',
+                    totem: true, dentado: 0.8, duracion: 0.7 },
+                  //   tótems de la melodía y del bajo; donde se pisan, se invierten
   /* 12 · 3:24 */ { nombre: 'caja',           disparo: 'caja', duracion: 0.1, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'melodia',
                     partida: true, celdas: 14, huecos: 0.55, escalon: 0.4 },
                   //   la caja abre pedazos chicos que saltan con cada golpe
@@ -159,11 +172,11 @@ const ESTADOS = [
 //   fila 5 → a mano: col 1 = golpe (pantalla entera) · col 2 = una puerta (sin nota)
 //            col 3 = los pedazos saltan (partida) · col 4-8 libres
 //   F1 franjas · F2 estela · F3 duración · botones arriba de F1/F2/F3 = versiones
-//   N11 = cada nota, su franja · N12 = partida (la puerta en pedazos)
+//   N11 = cada nota, su franja · N12 = partida (la puerta en pedazos) · N13 = tótem
 //   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N12'])
+GP.midi.buttons(['N11', 'N12', 'N13'])
 GP.midi.versiones({ F1: 3, F2: 3, F3: 3 })
 GP.midi.filas({
   8: { canal: 1,  rango: [31, 38] },
