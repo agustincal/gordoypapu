@@ -55,6 +55,12 @@ V.init({
   curva: 6,                     // fuerza del ease in-out del pliegue (3 = suave · 6 = muy pronunciado · 10 = extremo)
   linea: 0.004,                 // ancho de la línea final antes de desaparecer
   prob: 0.6,                    // chance de que cada panel se prenda en cada ciclo
+  // la frase se arma sola a partir de la animación (nunca se corta):
+  silencio: 0.5,                // negras de negro al final de cada ciclo, antes del siguiente
+  ciclos: 3,                    // ciclos de puertas por frase
+  negro: 3,                     // negras de negro después de los ciclos
+  golpe: 3,                     // negras que la sala entera queda prendida
+  barrido: 1.5,                 // negras que tarda el barrido final en cerrar la sala
   // paneles: [x0, x1, hacia dónde se pliega (0 = izquierda · 0.5 = centro · 1 = derecha)]
   paneles: [
     [0.03, 0.10, 1],

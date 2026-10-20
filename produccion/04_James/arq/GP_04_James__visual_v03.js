@@ -4,7 +4,8 @@
 // Rol: motor visual v03 — rectángulos de luz, blanco puro, pantalla plana.
 //      Referencia: videos de Milian Mori. Arranca con la escena Puertas.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v03.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v3.0: Puertas del ejemplo D; el pliegue con ease in-out pronunciado)
+// Actualizado: 20/10/2026 (v3.0: Puertas del ejemplo D; pliegue con ease in-out pronunciado;
+//              la frase se arma a partir de la duración de la animación)
 // ============================================================
 //
 // Pulso: sale del clock MIDI (24 ticks por negra; el Start lo pone en cero),
@@ -52,6 +53,12 @@
                                  // parece quedarse un ratito antes de irse (no es un sostenido)
     linea: 0.004,                // ancho de la línea final antes de desaparecer
     prob: 0.6,                   // chance de que cada panel se prenda en cada ciclo
+    // la frase se arma sola a partir de la animación (nunca se corta):
+    silencio: 0.5,               // negras de negro al final de cada ciclo, antes del siguiente
+    ciclos: 3,                   // ciclos de puertas por frase
+    negro: 3,                    // negras de negro después de los ciclos
+    golpe: 3,                    // negras que la sala entera queda prendida
+    barrido: 1.5,                // negras que tarda el barrido final en cerrar la sala
     // paneles: [x0, x1, hacia dónde se pliega (0 = izquierda · 0.5 = centro · 1 = derecha)]
     paneles: [
       [0.03, 0.10, 1],
@@ -96,20 +103,25 @@
   // ============================================================
   // Puertas
   // ============================================================
-  // Una frase de 16 negras:
-  //   negras 0, 3, 6  → ciclos: cada panel se abre (o no), se sostiene y se pliega a una línea
-  //   negras 9 a 12   → negro
-  //   negra 12        → golpe: la sala entera se prende de una
-  //   negras 14.5–16  → se cierra en barrido de derecha a izquierda
-  const frase = () => mod(nb(), 16)
-  const nFrase = () => Math.floor(nb() / 16)
+  // La frase se arma a partir de la animación, así nada se corta:
+  //   ciclo  = abre + sostiene + cierra + silencio, redondeado a negras enteras
+  //   frase  = ciclos × ciclo  →  negro  →  golpe (la sala entera)  →  barrido
+  // Ejemplo con la base (abre 0.12 · sostiene 1 · cierra 1.5 · silencio 0.5):
+  //   ciclo de 4 negras · 3 ciclos = 12 · negro 3 · golpe 3 · barrido 1.5 → frase de 20 negras (redondeada)
+  const largoCiclo = () => Math.max(1, Math.ceil(C.abre + C.sostiene + C.cierra + C.silencio))
+  const largoFrase = () => Math.ceil(C.ciclos * largoCiclo() + C.negro + C.golpe + C.barrido)
+  const frase = () => mod(nb(), largoFrase())
+  const nFrase = () => Math.floor(nb() / largoFrase())
+  const inicioGolpe = () => C.ciclos * largoCiclo() + C.negro
+  const inicioBarrido = () => inicioGolpe() + C.golpe
 
   // cuánto está abierto un panel (1 = entero · 0 = línea · -1 = apagado)
   const estado = i => {
     const f = frase()
-    if (f >= 12) return 1                                   // golpe: todo prendido (el barrido lo recorta)
-    if (f >= 9) return -1                                   // negro
-    const ciclo = Math.floor(f / 3), k = f - ciclo * 3
+    if (f >= inicioGolpe()) return 1                        // golpe: todo prendido (el barrido lo recorta)
+    if (f >= C.ciclos * largoCiclo()) return -1             // negro
+    const L = largoCiclo()
+    const ciclo = Math.floor(f / L), k = f - ciclo * L
     if (azar(i + 1, nFrase() * 3 + ciclo) > C.prob && i !== 2) return -1
     if (k < C.abre) return suave(k / C.abre)
     if (k < C.abre + C.sostiene) return 1
@@ -126,7 +138,10 @@
     const centro = a + (b - a) * ancla + (ancla === 0 ? w / 2 : ancla === 1 ? -w / 2 : 0)
     return lado === 0 ? centro - w / 2 : centro + w / 2
   }
-  const barrido = () => { const f = frase(); return f < 14.5 ? 1 : 1 - suave((f - 14.5) / 1.5) }
+  const barrido = () => {
+    const f = frase() - inicioBarrido()
+    return f < 0 ? 1 : 1 - inOut(f / Math.max(0.01, C.barrido), C.curva)
+  }
 
   const puertas = () => {
     let luz = solid(0, 0, 0)
