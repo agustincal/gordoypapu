@@ -51,7 +51,8 @@ V.init({
   alto: [0.22, 0.78],           // franja de la pantalla donde viven los paneles (de arriba a abajo)
   abre: 0.12,                   // negras que tarda en abrir (casi seco)
   sostiene: 1,                  // negras que queda abierto
-  cierra: 0.6,                  // negras que tarda en plegarse hasta la línea
+  cierra: 1.5,                  // negras que tarda en plegarse hasta desaparecer
+  curva: 6,                     // fuerza del ease in-out del pliegue (3 = suave · 6 = muy pronunciado · 10 = extremo)
   linea: 0.004,                 // ancho de la línea final antes de desaparecer
   prob: 0.6,                    // chance de que cada panel se prenda en cada ciclo
   // paneles: [x0, x1, hacia dónde se pliega (0 = izquierda · 0.5 = centro · 1 = derecha)]

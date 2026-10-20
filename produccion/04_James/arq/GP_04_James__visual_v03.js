@@ -4,7 +4,7 @@
 // Rol: motor visual v03 — rectángulos de luz, blanco puro, pantalla plana.
 //      Referencia: videos de Milian Mori. Arranca con la escena Puertas.
 // Lo carga el sketch produccion/04_James/sketches/04_James_v03.js; el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (v3.0: primera versión, Puertas tal como el ejemplo D de ejemplos_v03)
+// Actualizado: 20/10/2026 (v3.0: Puertas del ejemplo D; el pliegue con ease in-out pronunciado)
 // ============================================================
 //
 // Pulso: sale del clock MIDI (24 ticks por negra; el Start lo pone en cero),
@@ -32,6 +32,8 @@
   const V = GP.james
 
   const suave = x => x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? 4 * x * x * x : 1 - Math.pow(2 - 2 * x, 3) / 2
+  // ease in-out con la fuerza que quieras: p = 3 suave · p = 6 muy pronunciada (arranca y termina muy lento)
+  const inOut = (x, p) => x <= 0 ? 0 : x >= 1 ? 1 : x < 0.5 ? Math.pow(2 * x, p) / 2 : 1 - Math.pow(2 - 2 * x, p) / 2
   const mod = (a, n) => ((a % n) + n) % n
   const frac = x => x - Math.floor(x)
   const azar = (a, b = 0) => frac(Math.sin(a * 127.1 + b * 311.7) * 43758.5453)
@@ -44,7 +46,10 @@
     alto: [0.22, 0.78],          // franja de la pantalla donde viven los paneles (de arriba a abajo)
     abre: 0.12,                  // negras que tarda en abrir (casi seco)
     sostiene: 1,                 // negras que queda abierto
-    cierra: 0.6,                 // negras que tarda en plegarse hasta la línea
+    cierra: 1.5,                 // negras que tarda en plegarse hasta desaparecer
+    curva: 6,                    // fuerza del ease in-out del pliegue (3 = suave · 6 = muy pronunciado · 10 = extremo)
+                                 // con la curva fuerte, al final se mueve tan despacio que la línea
+                                 // parece quedarse un ratito antes de irse (no es un sostenido)
     linea: 0.004,                // ancho de la línea final antes de desaparecer
     prob: 0.6,                   // chance de que cada panel se prenda en cada ciclo
     // paneles: [x0, x1, hacia dónde se pliega (0 = izquierda · 0.5 = centro · 1 = derecha)]
@@ -109,7 +114,7 @@
     if (k < C.abre) return suave(k / C.abre)
     if (k < C.abre + C.sostiene) return 1
     const c = (k - C.abre - C.sostiene) / C.cierra
-    return c < 1 ? 1 - suave(c) : (c < 1.4 ? 0 : -1)        // queda un instante como línea y se apaga
+    return c < 1 ? 1 - inOut(c, C.curva) : -1               // se pliega con ease in-out y se apaga
   }
   const borde = (i, lado) => () => {
     const p = C.paneles[i]
