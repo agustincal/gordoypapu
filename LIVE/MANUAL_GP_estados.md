@@ -1,7 +1,7 @@
 # Manual · GP_estados (Fase 3 · LIVE)
 
 Estados genéricos para todas las canciones. Vive en `LIVE/arq/GP_estados.js`.
-Actualizado: 2026-10-20 · GP_estados v1.1
+Actualizado: 2026-10-21 · GP_estados v1.1 (guardar pasa a Ctrl+Alt+D · botones en pantalla)
 
 ---
 
@@ -102,6 +102,7 @@ const ESTADOS = [
 - **Botones redondos 87 / 88** = estado anterior / siguiente. LED prendido = hay a dónde ir. Sirven también de emergencia en el show.
 - **Aviso de cambio:** cada vez que entra un estado, 87 y 88 parpadean medio segundo (`config.avisoMs`, 0 = sin aviso).
 - **Cartel arriba a la derecha** (`3/5 · estribillo`), sólo si está cargado GP_tools. En el show no aparece.
+- **Tres botones chicos debajo del cartel**: **⏸** (suspender / reanudar) · **copiar** · **guardar**. Hacen lo mismo que Ctrl+Alt+E / C / D (los atajos siguen). El ⏸ se pinta amarillo mientras está suspendido. Son de GP_tools: sólo en ensayo, la tecla P los oculta con los demás paneles.
 - **Reevaluar el sketch no vuelve al principio**: re-aplica el estado actual con los números nuevos. Así se cura un estado sin perder el lugar.
 - **`GP.estados.reiniciar()`** vuelve al inicio. Hacelo antes de dar ▶ a un ensayo grabado.
 - Consola:
@@ -114,7 +115,7 @@ const ESTADOS = [
 
 ## 7. Diseñar estados
 
-### Suspender (modo diseño) · Ctrl+Alt+E
+### Suspender (modo diseño) · Ctrl+Alt+E · botón ⏸
 
 - El canal 16 deja de cambiar el estado. **87 / 88 y la consola siguen navegando**, así vas al estado que querés trabajar.
 - 87 y 88 parpadean todo el tiempo y el cartel muestra `⏸`.
@@ -122,9 +123,9 @@ const ESTADOS = [
 - **Reevaluar el sketch, suspendido, conserva lo que tocaste a mano** (faders tomados, toggles, versiones, mutes). Así cambiás números del código sin perder el look que armaste con la consola.
 - Consola: `GP.estados.suspender()` (alterna) · `.suspender(true / false)` · `.reanudar({ alcanzar: true })` · `.suspendido` · `.cancionEn`.
 
-### Copiar el estado actual · Ctrl+Alt+C
+### Copiar el estado actual · Ctrl+Alt+C · botón copiar
 
-Arma con la consola y el código el look que querés y apretá **Ctrl+Alt+C**:
+Arma con la consola y el código el look que querés y apretá **Ctrl+Alt+C** (o el botón **copiar**):
 
 - arma la línea del estado con **sólo lo que difiere de la base** (lo mismo que escribirías a mano), por ejemplo
   `{ nombre: 'estribillo (copia)', tamano: 0.78, strobe: true, hue: 123 },`
@@ -136,10 +137,11 @@ Incluye faders (con lo que tocaste), toggles, versiones, mutes y los valores sue
 - `GP.estados.copiar({ completo: true })` = todas las claves, no sólo las distintas.
 - `GP.estados.copiar({ nombre: 'pico' })` = con nombre.
 
-### Guardar las capturas en un archivo · Ctrl+Alt+G
+### Guardar las capturas en un archivo · Ctrl+Alt+D · botón guardar
 
-Descarga `<cancion>_estados_capturados_<fecha>.js` con todas las capturas, cada una con la hora y de qué estado partió, listas para copiar a `ESTADOS`. Guardalo en la carpeta de la canción si querés conservarlo.
+(Era Ctrl+Alt+G, pero en Chrome choca con Drive.) Descarga `<cancion>_estados_capturados_<fecha>.js` con todas las capturas, cada una con la hora y de qué estado partió, listas para copiar a `ESTADOS`. Guardalo en la carpeta de la canción si querés conservarlo.
 
+- Por consola: `GP.estados.guardarCapturas()`.
 - `GP.estados.capturas()` las lista en la consola · `GP.estados.borrarCapturas()` vacía la lista.
 
 ### Flujo sugerido
@@ -147,7 +149,7 @@ Descarga `<cancion>_estados_capturados_<fecha>.js` con todas las capturas, cada 
 1. Ctrl+Alt+E (suspender) y andá con 87 / 88 al estado que querés diseñar (o uno vacío al final).
 2. Buscá el look con faders, toggles y versiones; ajustá números del visual en el código y reevaluá (lo de la consola se conserva).
 3. Ctrl+Alt+C. Pegá la línea en `ESTADOS`, en su lugar.
-4. Repetí. Al final, Ctrl+Alt+G para tener todas en un archivo.
+4. Repetí. Al final, Ctrl+Alt+D (guardar) para tener todas en un archivo.
 5. Ctrl+Alt+E para reanudar, y `GP.estados.reiniciar()` antes de dar ▶ al ensayo.
 
 ---
