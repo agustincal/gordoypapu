@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.4: F4 deformación con versiones ondas que avanzan / líquido / remolino;
+// Actualizado: 21/10/2026 (v2.5: F4 ondas sin corte (cantidad entera de ondas) · remolino de verdad
+//              (anillos alrededor del centro, gira más cuanto más afuera))
+//              21/10/2026 (v2.4: F4 deformación con versiones ondas que avanzan / líquido / remolino;
 //              arreglo: la onda no se movía (scrollY sobre franjas verticales) · empujonBajo ajustable)
 //              21/10/2026 (v2.3: F3 colorama con versiones textura fija / altura del bajo / viaja con el bajo)
 //              21/10/2026 (v2.2: F2 con versiones textura / mandala / gira; desde ahora cada cambio sube la versión)
@@ -48,7 +50,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.4'
+  const VERSION = 'v2.5'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -321,6 +323,8 @@
   //   V4 = 0 ondas que avanzan · 1 líquido · 2 remolino
   //   cantidad = F4 × (0.5 + energía del bajo × empujonBajo)   (F4 en 0 = recto en las tres)
   const verD = () => (C.verDeformacion | 0)
+  const DOS_PI = Math.PI * 2
+  const ondasEnteras = (e) => DOS_PI * (1 + Math.round(e.bassPitch() * 3))
   const deforma = (e, version) =>
     verD() === version ? C.deformacion * (0.5 + e.bassEnergy() * C.empujonBajo) : 0
 
@@ -339,7 +343,9 @@
       .luma()
       // F4: las tres versiones van siempre en la cadena; la que no está elegida tiene cantidad 0 (no hace nada)
       .modulate(   // V4 ondas que avanzan: la onda corre con la fase del bajo
-        osc(() => 2 + e.bassPitch() * 6, 0, 0)
+        // scrollX envuelve la imagen (vuelve a empezar en el borde): con una cantidad ENTERA
+        // de ondas el final empalma con el principio y no se ve el corte. Grave = 1 onda · agudo = 4
+        osc(() => ondasEnteras(e), 0, 0)
           .scrollX(() => e.bassPhase() * 0.1),
         () => deforma(e, 0)
       )
@@ -349,11 +355,10 @@
           .scrollY(() => e.bassPhase() * 0.07),
         () => deforma(e, 1)
       )
-      .modulateRotate(   // V4 remolino: tuerce por zonas
-        osc(() => 2 + e.bassPitch() * 6, 0, 0)
-          .scrollX(() => e.bassPhase() * 0.1)
-          .rotate(Math.PI / 4),
-        () => deforma(e, 2) * 1.5
+      .modulateRotate(   // V4 remolino: anillos alrededor del centro; cada anillo gira distinto → espiral
+        osc(() => 3 + e.bassPitch() * 6, 0, 0).kaleid(64),   // kaleid con muchos lados = anillos
+        () => deforma(e, 2) * 4,
+        () => -deforma(e, 2) * 2   // centra el giro: tuerce sin rotar la imagen entera
       )
       .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
       .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))
