@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.8: F4 se invierten las dos primeras: V1 = ola · V2 = ondas)
+// Actualizado: 21/10/2026 (v2.9: bandas horizontales que se desalinean y se alinean (ref. Hernán Roperto):
+//              N21 bandas (al apagar convergen) · N31 bandas que respiran (se alinean solas, cíclico))
+//              21/10/2026 (v2.8: F4 se invierten las dos primeras: V1 = ola · V2 = ondas)
 //              21/10/2026 (v2.7: F4 versiones = ondas / ola negro-blanco-negro que corre con la fase /
 //              líquido quieto. Sale el remolino)
 //              21/10/2026 (v2.6: F4 ondas sin desplazamiento (sólo el empuje del bajo, sin corte) ·
@@ -55,7 +57,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.8'
+  const VERSION = 'v2.9'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -97,6 +99,14 @@
     rotarMitad: false,        // la mitad derecha rotada 90° extra
     delayMitad: false,        // la mitad derecha atrasada
     delayMs: 200,             // cuánto atraso tiene la mitad derecha
+    // bandas (ref. Hernán Roperto): franjas horizontales espejadas arriba/abajo, cada una corrida distinto
+    bandas: false,            // N21: se desalinean y derivan con la fase del arpegio; al apagar convergen
+    bandasRespira: false,     // N31: se separan y se vuelven a alinear solas, cíclico, con la fase del arpegio
+    desalineo: 0.4,           // cuánto se corre cada banda (0 = alineadas)
+    derivaBandas: 0.05,       // N21: cuánto siguen separándose con la fase (0 = quedan quietas en su lugar)
+    fundidoBandas: 0.6,       // segundos que tardan en separarse / alinearse al prender o apagar
+    respiraVel: 0.5,          // N31: velocidad del ciclo (más alto = se alinean más seguido)
+    cantidadBandas: 24,       // filas del patrón (par: así el espejo cae justo en el centro)
     // pruebas sin hardware
     demo: false,
   }
@@ -234,6 +244,9 @@
   }
 
   let pixeladoSuave = 0
+  // bandas: cuánto están prendidas (0..1, con fundido) y desde qué fase arrancaron
+  let bandasSuave = 0, respiraSuave = 0
+  let faseBandas = 0, faseRespira = 0, respiraAntes = false
 
   V.update = (dt = 16) => {
     const k = Math.min(0.1, Math.max(0, dt / 1000))
@@ -249,6 +262,15 @@
     for (let i = 0; i < 3; i++) S.rgb[i] += (S.rgbObjetivo[i] - S.rgb[i]) * clamp(k * 8)   // color con glissando
 
     pixeladoSuave += (C.pixelado - pixeladoSuave) * C.suavizadoPixelado
+    {
+      const paso = clamp(k * 3 / Math.max(0.01, C.fundidoBandas))
+      bandasSuave += ((C.bandas ? 1 : 0) - bandasSuave) * paso
+      respiraSuave += ((C.bandasRespira ? 1 : 0) - respiraSuave) * paso
+      // apagadas del todo: la próxima vez arrancan desde la fase de ese momento (números chicos, sin saltos)
+      if (!C.bandas && bandasSuave < 0.001) faseBandas = S.arpegio.phase
+      if (C.bandasRespira && !respiraAntes && respiraSuave < 0.001) faseRespira = S.arpegio.phase
+      respiraAntes = !!C.bandasRespira
+    }
     viajeColor += k * S.bajo.rate * C.colorama * 0.25   // F3 arriba y bajo a ritmo 1: una vuelta cada 4 s
 
     historial.push(muestra(ahora))
@@ -331,6 +353,22 @@
   const deforma = (e, version) =>
     verD() === version ? C.deformacion * (0.5 + e.bassEnergy() * C.empujonBajo) : 0
 
+  // bandas: patrón de filas con valores distintos, simétrico arriba/abajo (cos centrado en 0.5).
+  // Cada fila se corre en x según su valor × cuánto desalineo hay: con 0, todas alineadas.
+  const fuenteBandas = () => {
+    const f1 = 13, f2 = 31
+    const centrada = f => f * 0.5 - Math.PI / 2   // corre la onda para que sea un cos centrado en el medio
+    return osc(f1, 0, centrada(f1)).rotate(Math.PI / 2)
+      .diff(osc(f2, 0, centrada(f2)).rotate(Math.PI / 2))
+      .pixelate(1, () => C.cantidadBandas)
+  }
+  const desalineoBandas = (e) => {
+    const n21 = bandasSuave * (C.desalineo + Math.max(0, e.arpPhase() - faseBandas) * C.derivaBandas)
+    const ciclo = 0.5 - 0.5 * Math.cos(Math.max(0, e.arpPhase() - faseRespira) * C.respiraVel)
+    const n31 = respiraSuave * ciclo * C.desalineo * 2
+    return n21 + n31
+  }
+
   const mitad = (e, anguloExtra, mandala) => {
     let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
       .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
@@ -362,6 +400,7 @@
       )
       .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
       .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))
+      .modulateScrollX(fuenteBandas(), () => desalineoBandas(e))   // N21 / N31 bandas (en 0 = sin efecto)
     if (mandala) c = c.kaleid(() => 2 + C.kaleid * 6)   // V2 mandala
     return c
       .pixelate(() => pxTodoX(e), () => pxTodoY(e))   // V1 todo / tiras (textura: no se nota)
