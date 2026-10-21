@@ -2,7 +2,7 @@
 // 01_Fluorescente_v01.js  ·  LIVE/sketches/
 // Canción: 01_Fluorescente (Gordo y Papu) · Fase 3
 // Rol: sketch de la canción — sólo configuración, estados y ruteo.
-//      El motor vive en LIVE/arq/GP_01_Fluorescente__visual.js
+//      El motor vive en LIVE/arq/GP_01_Fluorescente__visual_v01.js (21/10: renombrado, es la v2.0)
 // Actualizado: 16/10/2026 (v01: primera versión LIVE, con estados.
 //              Parte de produccion/01_Fluorescente_v03 — mismo look)
 // ============================================================
@@ -28,7 +28,7 @@ const cargarGP = async (ruta) => {
 await cargarGP('LIVE/arq/GP_midi.js')                     // Akai: faders, botones, filas, LEDs, FMASTER fundido
 await cargarGP('LIVE/arq/GP_tools.js')                    // SÓLO ENSAYO: grabador (89), panel, reproductor → en el show, borrá esta línea
 await cargarGP('LIVE/arq/GP_estados.js')                  // estados: cada nota del canal 16 pasa al siguiente
-await cargarGP('LIVE/arq/GP_01_Fluorescente__visual.js')  // motor de Fluorescente
+await cargarGP('LIVE/arq/GP_01_Fluorescente__visual_v01.js')  // motor de Fluorescente v2.0
 
 if (GP.tools) { GP.tools.init({ cancion: '01_Fluorescente' }); GP.tools.panel() }
 await GP.midi.start()
