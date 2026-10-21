@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.3: F3 colorama con versiones textura fija / altura del bajo / viaja con el bajo)
+// Actualizado: 21/10/2026 (v2.4: F4 deformación con versiones ondas que avanzan / líquido / remolino;
+//              arreglo: la onda no se movía (scrollY sobre franjas verticales) · empujonBajo ajustable)
+//              21/10/2026 (v2.3: F3 colorama con versiones textura fija / altura del bajo / viaja con el bajo)
 //              21/10/2026 (v2.2: F2 con versiones textura / mandala / gira; desde ahora cada cambio sube la versión)
 //              21/10/2026 (v2.1: en silencio el movimiento frena · F1 pixelado de doble
 //              sentido + 3 versiones (textura / todo / tiras) · F2 kaleid con 3 versiones
@@ -46,7 +48,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.3'
+  const VERSION = 'v2.4'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -75,7 +77,9 @@
     verKaleid: 0,             // V2 (botón arriba de F2): 0 = textura · 1 = mandala · 2 = gira
     colorama: 0,              // F3: corrimiento de color (fuerte: subir con cuidado)
     verColorama: 0,           // V3 (botón arriba de F3): 0 = fijo · 1 = altura del bajo · 2 = viaja con el bajo
-    deformacion: 0,           // modulate del bajo (0 = recto)
+    deformacion: 0,           // F4: deformación del bajo (0 = recto)
+    verDeformacion: 0,        // V4 (botón arriba de F4): 0 = ondas que avanzan · 1 = líquido · 2 = remolino
+    empujonBajo: 0.4,         // cuánto suma cada nota del bajo a la deformación (0 = nada, sólo F4)
     flash: 0,                 // cuánto flashea cada golpe de caja
     pulso: 0,                 // cuánto pulsa cada golpe de bombo
     velocidad: 0,             // velocidad del scroll de la capa principal
@@ -313,6 +317,13 @@
     return 0.005 + C.colorama * 0.3
   }
 
+  // versiones de F4 (como parámetros, sin cortes)
+  //   V4 = 0 ondas que avanzan · 1 líquido · 2 remolino
+  //   cantidad = F4 × (0.5 + energía del bajo × empujonBajo)   (F4 en 0 = recto en las tres)
+  const verD = () => (C.verDeformacion | 0)
+  const deforma = (e, version) =>
+    verD() === version ? C.deformacion * (0.5 + e.bassEnergy() * C.empujonBajo) : 0
+
   const mitad = (e, anguloExtra, mandala) => {
     let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
       .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
@@ -326,10 +337,23 @@
       )
       .colorama(() => corrimiento(e))
       .luma()
-      .modulate(
+      // F4: las tres versiones van siempre en la cadena; la que no está elegida tiene cantidad 0 (no hace nada)
+      .modulate(   // V4 ondas que avanzan: la onda corre con la fase del bajo
         osc(() => 2 + e.bassPitch() * 6, 0, 0)
-          .scrollY(() => e.bassPhase() * 0.1),
-        () => C.deformacion * (0.5 + e.bassEnergy() * 0.4)
+          .scrollX(() => e.bassPhase() * 0.1),
+        () => deforma(e, 0)
+      )
+      .modulate(   // V4 líquido: manchas de ruido que se arrastran con la fase del bajo
+        noise(() => 2 + e.bassPitch() * 6, 0)
+          .scrollX(() => e.bassPhase() * 0.1)
+          .scrollY(() => e.bassPhase() * 0.07),
+        () => deforma(e, 1)
+      )
+      .modulateRotate(   // V4 remolino: tuerce por zonas
+        osc(() => 2 + e.bassPitch() * 6, 0, 0)
+          .scrollX(() => e.bassPhase() * 0.1)
+          .rotate(Math.PI / 4),
+        () => deforma(e, 2) * 1.5
       )
       .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
       .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))

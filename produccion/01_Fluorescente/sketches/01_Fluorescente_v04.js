@@ -6,7 +6,8 @@
 //      (midi, tools y estados siguen cargando de LIVE/arq). La versión que anda: LIVE/sketches/01_Fluorescente_v01.js
 // Actualizado: 21/10/2026 (v04: copia de trabajo de LIVE v01 · motor v2.1: en silencio el movimiento frena ·
 //              F1 pixelado de doble sentido (base 0.5) + V1 = textura / todo / tiras ·
-//              V2 = kaleid textura / mandala / gira · V3 = colorama fijo / altura del bajo / viaja con el bajo)
+//              V2 = kaleid textura / mandala / gira · V3 = colorama fijo / altura del bajo / viaja con el bajo ·
+//              V4 = deformación ondas que avanzan / líquido / remolino)
 //              16/10/2026 (v01: primera versión LIVE, con estados.
 //              Parte de produccion/01_Fluorescente_v03 — mismo look)
 // ============================================================
@@ -67,7 +68,9 @@ V.init({
   verKaleid: 0,      // V2 (botón arriba de F2): 0 = textura · 1 = mandala · 2 = gira
   colorama: 0,       // F3: corrimiento de color (fuerte: subir con cuidado)
   verColorama: 0,    // V3 (botón arriba de F3): 0 = fijo · 1 = altura del bajo · 2 = viaja con el bajo
-  deformacion: 0,    // F4: modulate del bajo (0 = recto)
+  deformacion: 0,    // F4: deformación del bajo (0 = recto)
+  verDeformacion: 0, // V4 (botón arriba de F4): 0 = ondas que avanzan · 1 = líquido · 2 = remolino
+  empujonBajo: 0.4,  // cuánto suma cada nota del bajo (si es demasiado, bajalo: 0 = sólo F4)
   flash: 0,          // F5: cuánto flashea cada golpe de caja
   pulso: 0,          // F6: cuánto pulsa cada golpe de bombo
   velocidad: 0,      // F7: velocidad del scroll de la capa principal
@@ -95,6 +98,7 @@ const CONTROLES = {
   colorama:    'F3',
   verColorama: 'V3',
   deformacion: 'F4',
+  verDeformacion: 'V4',
   flash:       'F5',
   pulso:       'F6',
   velocidad:   'F7',
@@ -134,11 +138,12 @@ const ESTADOS = [
 //   F1 doble sentido: al medio = como antes · abajo = bloques enormes · arriba = pixel fino
 //   V2 (arriba de F2) = kaleid: textura (apagado) / mandala (prendido) / gira (parpadea)
 //   V3 (arriba de F3) = colorama: fijo (apagado) / altura del bajo (prendido) / viaja con el bajo (parpadea)
+//   V4 (arriba de F4) = deformación: ondas que avanzan (apagado) / líquido (prendido) / remolino (parpadea)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13'])
-GP.midi.versiones({ F1: 3, F2: 3, F3: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ondas / líquido / remolino
 GP.midi.filas({
   8: { canal: 1, rango: V.C.rangoArpegio },
   7: { canal: 10, pulso: 'vuelta' },
