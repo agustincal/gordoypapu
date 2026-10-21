@@ -64,7 +64,7 @@
 //   GP.fluorescente.nota(voz, nota, vel, on)  desde su ruteo MIDI
 //   GP.fluorescente.golpe(pieza)              batería a mano: 'bombo' | 'caja' | 'hat'
 //   GP.fluorescente.soltar(voz)               suelta todo lo que suena en esa voz (ej: al mutear)
-// ============================================================
+// ===========================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
