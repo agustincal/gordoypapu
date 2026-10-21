@@ -4,7 +4,8 @@
 // Rol: sketch de la canción — sólo configuración, estados y ruteo.
 //      El motor de trabajo vive en produccion/01_Fluorescente/arq/GP_01_Fluorescente__visual.js
 //      (midi, tools y estados siguen cargando de LIVE/arq). La versión que anda: LIVE/sketches/01_Fluorescente_v01.js
-// Actualizado: 21/10/2026 (v04: copia de trabajo de LIVE v01 · motor v2.1: en silencio el movimiento frena)
+// Actualizado: 21/10/2026 (v04: copia de trabajo de LIVE v01 · motor v2.1: en silencio el movimiento frena ·
+//              F1 pixelado de doble sentido (base 0.5) + V1 = textura / todo / tiras)
 //              16/10/2026 (v01: primera versión LIVE, con estados.
 //              Parte de produccion/01_Fluorescente_v03 — mismo look)
 // ============================================================
@@ -59,7 +60,8 @@ V.init({
   caidaEnergia: 0.35, caidaBombo: 0.25, caidaCaja: 0.2, caidaHat: 0.1,
 
   // faders
-  pixelado: 0,       // F1: piso extra de pixelado (responde lento a propósito)
+  pixelado: 0.5,     // F1 doble sentido: 0 = bloques enormes · 0.5 = como antes · 1 = pixel muy fino
+  verPixelado: 0,    // V1 (botón arriba de F1): 0 = textura · 1 = todo · 2 = tiras
   kaleid: 0,         // F2: simetría extra
   colorama: 0,       // F3: cuánto viaja el color (fuerte: subir con cuidado)
   deformacion: 0,    // F4: modulate del bajo (0 = recto)
@@ -84,6 +86,7 @@ V.init({
 // ============================================================
 const CONTROLES = {
   pixelado:    'F1',
+  verPixelado: 'V1',
   kaleid:      'F2',
   colorama:    'F3',
   deformacion: 'F4',
@@ -122,10 +125,13 @@ const ESTADOS = [
 //   fila 5 → libre
 //   Mutear una fila congela esa voz: deja de recibir notas pero no se apaga de golpe.
 //   N11 / N12 / N13 = rotar todo 90° / rotar la mitad derecha / atrasar la mitad derecha
+//   V1 (botón redondo arriba de F1) = pixelado: textura (apagado) / todo (prendido) / tiras (parpadea)
+//   F1 doble sentido: al medio = como antes · abajo = bloques enormes · arriba = pixel fino
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13'])
+GP.midi.versiones({ F1: 3 })   // botón V1 (arriba de F1): pixelado textura / todo / tiras
 GP.midi.filas({
   8: { canal: 1, rango: V.C.rangoArpegio },
   7: { canal: 10, pulso: 'vuelta' },

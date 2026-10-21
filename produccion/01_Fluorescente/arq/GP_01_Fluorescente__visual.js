@@ -4,7 +4,8 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.1: en silencio el movimiento frena — copia de trabajo,
+// Actualizado: 21/10/2026 (v2.1: en silencio el movimiento frena · F1 pixelado de doble
+//              sentido + 3 versiones (textura / todo / tiras) — copia de trabajo,
 //              la versión que anda sigue en LIVE/arq)
 //              16/10/2026 (v2.0: versión LIVE — namespace propio, estados con
 //              GP_estados, duración por nota con note-off, rangos configurables)
@@ -65,7 +66,8 @@
     caidaRitmo: 1.5,          // segundos que tarda en frenar hasta quedar quieto
     maxSostenida: 8,          // segundos: una nota sostenida más que esto se da por suelta (en el ensayo hubo de 4 s)
     // faders
-    pixelado: 0,              // piso extra de pixelado (responde lento a propósito)
+    pixelado: 0.5,            // F1 doble sentido: 0 = bloques enormes · 0.5 = como antes · 1 = pixel muy fino (responde lento a propósito)
+    verPixelado: 0,           // V1 (botón arriba de F1): 0 = textura · 1 = todo · 2 = tiras verticales
     kaleid: 0,                // simetría extra
     colorama: 0,              // cuánto viaja el color (fuerte: subir con cuidado)
     deformacion: 0,           // modulate del bajo (0 = recto)
@@ -254,6 +256,25 @@
     derecha[campo] = () => (C.delayMitad && atrasado ? atrasado[campo] : fn())
   }
 
+  // F1: cantidad de celdas, exponencial en los dos sentidos.
+  // 0 → 2.5 celdas (bloques enormes) · 0.5 → 8 (como antes) · 1 → 200 (casi liso).
+  // El arpegio y el hat las multiplican (más actividad = pixel más fino, como antes).
+  const CELDAS_MIN = 2.5, CELDAS_MEDIO = 8, CELDAS_MAX = 200
+  const SIN_PIXEL = 4000   // tantas celdas que no se nota: así la cadena es siempre la misma
+  const celdasF1 = () => {
+    const f = clamp(pixeladoSuave)
+    return f < 0.5
+      ? CELDAS_MIN * Math.pow(CELDAS_MEDIO / CELDAS_MIN, f / 0.5)
+      : CELDAS_MEDIO * Math.pow(CELDAS_MAX / CELDAS_MEDIO, (f - 0.5) / 0.5)
+  }
+  const celdas = (e) => celdasF1() * (1 + e.arpEnergy() * 2 + e.hat() * 2.5)
+  // versiones de F1 (como parámetros: no se re-arma la cadena, cambia sin cortes)
+  //   V1 = 0 textura: sólo la capa cruzada · 1 todo: la mitad entera · 2 tiras: la mitad entera, sólo en x
+  const ver = () => (C.verPixelado | 0)
+  const pxTextura = (e) => (ver() === 0 ? celdas(e) : SIN_PIXEL)
+  const pxTodoX   = (e) => (ver() === 0 ? SIN_PIXEL : celdas(e))
+  const pxTodoY   = (e) => (ver() === 1 ? celdas(e) : SIN_PIXEL)
+
   const mitad = (e, anguloExtra) =>
     osc(() => 3 + e.arpPitch() * 30, 0, 0)
       .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
@@ -261,7 +282,7 @@
       .diff(
         osc(() => 20 + e.arpPitch() * 40, 0, 0)
           .scrollX(() => -e.arpPhase() * 0.1)
-          .pixelate(() => 8 + e.arpEnergy() * 16 + e.hat() * 20 + pixeladoSuave * 40)
+          .pixelate(() => pxTextura(e), () => pxTextura(e))
           .kaleid(() => 2 + C.kaleid * 6)
       )
       .colorama(() => 0.005 + C.colorama * 0.3)
@@ -273,6 +294,7 @@
       )
       .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
       .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))
+      .pixelate(() => pxTodoX(e), () => pxTodoY(e))   // V2 todo / V3 tiras (V1: no se nota)
       .rotate(anguloExtra)
 
   // máscaras duras que parten la pantalla en x = 0.5
