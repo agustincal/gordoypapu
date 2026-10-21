@@ -4,7 +4,8 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.1: en silencio el movimiento frena · F1 pixelado de doble
+// Actualizado: 21/10/2026 (v2.2: F2 con versiones textura / mandala / gira; desde ahora cada cambio sube la versión)
+//              21/10/2026 (v2.1: en silencio el movimiento frena · F1 pixelado de doble
 //              sentido + 3 versiones (textura / todo / tiras) · F2 kaleid con 3 versiones
 //              (textura / mandala / gira) — copia de trabajo,
 //              la versión que anda sigue en LIVE/arq)
@@ -44,7 +45,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.1'
+  const VERSION = 'v2.2'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
