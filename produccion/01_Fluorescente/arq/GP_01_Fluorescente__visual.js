@@ -257,9 +257,10 @@
   }
 
   // F1: cantidad de celdas, exponencial en los dos sentidos.
-  // 0 → 2.5 celdas (bloques enormes) · 0.5 → 8 (como antes) · 1 → 200 (casi liso).
+  // 0 → 2.5 celdas (bloques enormes) · 0.5 → 8 (como antes) · 1 → 55 (pixel fino;
+  // 21/10: tope = lo que antes daba F1 en 0.8 — con 200 se iba de más).
   // El arpegio y el hat las multiplican (más actividad = pixel más fino, como antes).
-  const CELDAS_MIN = 2.5, CELDAS_MEDIO = 8, CELDAS_MAX = 200
+  const CELDAS_MIN = 2.5, CELDAS_MEDIO = 8, CELDAS_MAX = 55
   const SIN_PIXEL = 4000   // tantas celdas que no se nota: así la cadena es siempre la misma
   const celdasF1 = () => {
     const f = clamp(pixeladoSuave)
