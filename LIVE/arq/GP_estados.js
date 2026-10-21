@@ -54,7 +54,7 @@
 // Diseñar estados:
 //   Ctrl+Alt+E  suspender / reanudar (el canal de estados deja de mover; 87/88 siguen)
 //   Ctrl+Alt+C  copiar el estado actual (consola + portapapeles + lista de capturas)
-//   Ctrl+Alt+G  guardar las capturas en un archivo .js
+//   Ctrl+Alt+D  guardar las capturas en un archivo .js
 //   GP.estados.alcanzar()  ir al estado en el que va la canción (después de reanudar)
 // ============================================================
 
@@ -559,7 +559,7 @@
     if (window._gpEstadosAtajos) window.removeEventListener('keydown', window._gpEstadosAtajos, true)
     window._gpEstadosAtajos = (e) => {
       if (!e.ctrlKey || !e.altKey) return
-      const acciones = { KeyE: () => E.suspender(), KeyC: () => E.copiar(), KeyG: () => E.guardarCapturas() }
+      const acciones = { KeyE: () => E.suspender(), KeyC: () => E.copiar(), KeyD: () => E.guardarCapturas() }
       const accion = acciones[e.code]
       if (!accion) return
       e.preventDefault()
