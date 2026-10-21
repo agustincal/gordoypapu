@@ -102,7 +102,7 @@ const ESTADOS = [
 - **Botones redondos 87 / 88** = estado anterior / siguiente. LED prendido = hay a dónde ir. Sirven también de emergencia en el show.
 - **Aviso de cambio:** cada vez que entra un estado, 87 y 88 parpadean medio segundo (`config.avisoMs`, 0 = sin aviso).
 - **Cartel arriba a la derecha** (`3/5 · estribillo`), sólo si está cargado GP_tools. En el show no aparece.
-- **Tres botones chicos debajo del cartel**: **⏸** (suspender / reanudar) · **copiar** · **guardar**. Hacen lo mismo que Ctrl+Alt+E / C / D (los atajos siguen). El ⏸ se pinta amarillo mientras está suspendido. Son de GP_tools: sólo en ensayo, la tecla P los oculta con los demás paneles.
+- **Cuatro botones chicos debajo del cartel**: **⏸** (suspender / reanudar) · **copiar** · **guardar** · **reiniciar** (= `GP.estados.reiniciar()`, vuelve al inicio). Los tres primeros hacen lo mismo que Ctrl+Alt+E / C / D (los atajos siguen). El ⏸ se pinta amarillo mientras está suspendido. Son de GP_tools: sólo en ensayo, la tecla P los oculta con los demás paneles.
 - **Reevaluar el sketch no vuelve al principio**: re-aplica el estado actual con los números nuevos. Así se cura un estado sin perder el lugar.
 - **`GP.estados.reiniciar()`** vuelve al inicio. Hacelo antes de dar ▶ a un ensayo grabado.
 - Consola:
