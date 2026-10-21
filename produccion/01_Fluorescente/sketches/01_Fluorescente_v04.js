@@ -7,7 +7,8 @@
 // Actualizado: 21/10/2026 (v04: copia de trabajo de LIVE v01 · motor v2.1: en silencio el movimiento frena ·
 //              F1 pixelado de doble sentido (base 0.5) + V1 = textura / todo / tiras ·
 //              V2 = kaleid textura / mandala / gira · V3 = colorama fijo / altura del bajo / viaja con el bajo ·
-//              V4 = deformación ola / ondas / líquido · N21 bandas / N31 bandas que respiran)
+//              V4 = deformación ola / ondas / líquido · N21 bandas / N31 bandas que respiran ·
+//              N23 / N33 = atraso de 500 ms / 1 s)
 //              16/10/2026 (v01: primera versión LIVE, con estados.
 //              Parte de produccion/01_Fluorescente_v03 — mismo look)
 // ============================================================
@@ -79,8 +80,12 @@ V.init({
   // toggles
   rotar90: false,    // N11: toda la pantalla rotada 90°
   rotarMitad: false, // N12: la mitad derecha rotada 90° extra
-  delayMitad: false, // N13: la mitad derecha atrasada
-  delayMs: 200,      // cuánto atraso tiene la mitad derecha
+  delayMitad: false,  // N13: la mitad derecha atrasada
+  delayMs: 200,       // cuánto atraso con N13
+  delayMitad2: false, // N23: más atraso
+  delayMs2: 500,
+  delayMitad3: false, // N33: mucho atraso (si hay varios prendidos, manda el más largo)
+  delayMs3: 1000,
   bandas: false,        // N21: bandas horizontales que se desalinean; al apagar convergen
   bandasRespira: false, // N31: bandas que se separan y se alinean solas (cíclico)
   desalineo: 0.4,       // cuánto se corre cada banda
@@ -112,6 +117,8 @@ const CONTROLES = {
   rotar90:     'N11',
   rotarMitad:  'N12',
   delayMitad:  'N13',
+  delayMitad2: 'N23',
+  delayMitad3: 'N33',
   bandas:        'N21',
   bandasRespira: 'N31',
 }
@@ -143,6 +150,7 @@ const ESTADOS = [
 //   Mutear una fila congela esa voz: deja de recibir notas pero no se apaga de golpe.
 //   N11 / N12 / N13 = rotar todo 90° / rotar la mitad derecha / atrasar la mitad derecha
 //   N21 = bandas que se desalinean (al apagar se alinean) · N31 = bandas que respiran (se alinean solas)
+//   N23 / N33 = atrasar la mitad derecha más: 500 ms / 1 s (N13 = 200 ms; si hay varios, manda el más largo)
 //   V1 (botón redondo arriba de F1) = pixelado: textura (apagado) / todo (prendido) / tiras (parpadea)
 //   F1 doble sentido: al medio = como antes · abajo = bloques enormes · arriba = pixel fino
 //   V2 (arriba de F2) = kaleid: textura (apagado) / mandala (prendido) / gira (parpadea)
@@ -151,7 +159,7 @@ const ESTADOS = [
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N12', 'N13', 'N21', 'N31'])
+GP.midi.buttons(['N11', 'N12', 'N13', 'N21', 'N23', 'N31', 'N33'])
 GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ola / ondas / líquido
 GP.midi.filas({
   8: { canal: 1, rango: V.C.rangoArpegio },

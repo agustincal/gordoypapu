@@ -4,7 +4,8 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.10: corte de pantalla con borde duro (rampa pixelada en 2 celdas))
+// Actualizado: 21/10/2026 (v2.11: atraso de la mitad derecha en tres medidas: N13 200 ms · N23 500 ms · N33 1 s)
+//              21/10/2026 (v2.10: corte de pantalla con borde duro (rampa pixelada en 2 celdas))
 //              21/10/2026 (v2.9: bandas horizontales que se desalinean y se alinean (ref. Hernán Roperto):
 //              N21 bandas (al apagar convergen) · N31 bandas que respiran (se alinean solas, cíclico))
 //              21/10/2026 (v2.8: F4 se invierten las dos primeras: V1 = ola · V2 = ondas)
@@ -58,7 +59,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.10'
+  const VERSION = 'v2.11'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -98,8 +99,12 @@
     // toggles
     rotar90: false,           // toda la pantalla rotada 90°
     rotarMitad: false,        // la mitad derecha rotada 90° extra
-    delayMitad: false,        // la mitad derecha atrasada
-    delayMs: 200,             // cuánto atraso tiene la mitad derecha
+    delayMitad: false,        // N13: la mitad derecha atrasada (delayMs)
+    delayMs: 200,             // cuánto atraso con N13
+    delayMitad2: false,       // N23: más atraso (delayMs2)
+    delayMs2: 500,
+    delayMitad3: false,       // N33: mucho atraso (delayMs3)
+    delayMs3: 1000,           // si hay varios prendidos, manda el de más atraso
     // bandas (ref. Hernán Roperto): franjas horizontales espejadas arriba/abajo, cada una corrida distinto
     bandas: false,            // N21: se desalinean y derivan con la fase del arpegio; al apagar convergen
     bandasRespira: false,     // N31: se separan y se vuelven a alinear solas, cíclico, con la fase del arpegio
@@ -226,9 +231,15 @@
     viaje: viajeColor,
     bombo: S.bateria.bombo, caja: S.bateria.caja, hat: S.bateria.hat,
   })
+  // atraso que se está usando: el más grande de los prendidos (0 = ninguno)
+  const delayActual = () => Math.max(
+    C.delayMitad ? C.delayMs : 0,
+    C.delayMitad2 ? C.delayMs2 : 0,
+    C.delayMitad3 ? C.delayMs3 : 0,
+  )
   const leerHistorial = (ahora) => {
     if (!historial.length) return muestra(ahora)
-    const objetivo = ahora - C.delayMs
+    const objetivo = ahora - delayActual()
     let i = historial.findIndex(h => h.t >= objetivo)
     if (i === -1) i = historial.length - 1
     if (i <= 0) return historial[0]
@@ -275,7 +286,7 @@
     viajeColor += k * S.bajo.rate * C.colorama * 0.25   // F3 arriba y bajo a ritmo 1: una vuelta cada 4 s
 
     historial.push(muestra(ahora))
-    while (historial.length > 1 && ahora - historial[0].t > C.delayMs + 500) historial.shift()
+    while (historial.length > 1 && ahora - historial[0].t > Math.max(C.delayMs, C.delayMs2, C.delayMs3) + 500) historial.shift()
     atrasado = leerHistorial(ahora)
 
     // V2 mandala es otra cadena: si se entra o se sale de esa versión, se re-arma la escena
@@ -299,10 +310,10 @@
     caja:       () => S.bateria.caja,
     hat:        () => S.bateria.hat,
   }
-  // la mitad derecha lee lo mismo, salvo con delayMitad: ahí lee el historial
+  // la mitad derecha lee lo mismo, salvo con N13 / N23 / N33: ahí lee el historial
   const derecha = {}
   for (const [campo, fn] of Object.entries(vivo)) {
-    derecha[campo] = () => (C.delayMitad && atrasado ? atrasado[campo] : fn())
+    derecha[campo] = () => (delayActual() > 0 && atrasado ? atrasado[campo] : fn())
   }
 
   // F1: cantidad de celdas, exponencial en los dos sentidos.
