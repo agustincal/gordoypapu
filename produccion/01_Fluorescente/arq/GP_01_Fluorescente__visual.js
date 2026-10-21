@@ -6,7 +6,7 @@
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
 // Actualizado: 21/10/2026 (v2.1: en silencio el movimiento frena · F1 pixelado de doble
 //              sentido + 3 versiones (textura / todo / tiras) · F2 kaleid con 3 versiones
-//              (textura / mosaico / lados según el arpegio) — copia de trabajo,
+//              (textura / mandala / gira) — copia de trabajo,
 //              la versión que anda sigue en LIVE/arq)
 //              16/10/2026 (v2.0: versión LIVE — namespace propio, estados con
 //              GP_estados, duración por nota con note-off, rangos configurables)
@@ -70,7 +70,7 @@
     pixelado: 0.5,            // F1 doble sentido: 0 = bloques enormes · 0.5 = como antes · 1 = pixel muy fino (responde lento a propósito)
     verPixelado: 0,           // V1 (botón arriba de F1): 0 = textura · 1 = todo · 2 = tiras verticales
     kaleid: 0,                // F2: simetría extra
-    verKaleid: 0,             // V2 (botón arriba de F2): 0 = textura · 1 = mosaico · 2 = lados según el arpegio
+    verKaleid: 0,             // V2 (botón arriba de F2): 0 = textura · 1 = mandala · 2 = gira
     colorama: 0,              // cuánto viaja el color (fuerte: subir con cuidado)
     deformacion: 0,           // modulate del bajo (0 = recto)
     flash: 0,                 // cuánto flashea cada golpe de caja
@@ -234,6 +234,9 @@
     historial.push(muestra(ahora))
     while (historial.length > 1 && ahora - historial[0].t > C.delayMs + 500) historial.shift()
     atrasado = leerHistorial(ahora)
+
+    // V2 mandala es otra cadena: si se entra o se sale de esa versión, se re-arma la escena
+    if (salidaOut && (verK() === 1) !== armadoMandala) V.salida(salidaOut)
   }
 
   // ============================================================
@@ -278,27 +281,27 @@
   const pxTodoX   = (e) => (ver() === 0 ? SIN_PIXEL : celdas(e))
   const pxTodoY   = (e) => (ver() === 1 ? celdas(e) : SIN_PIXEL)
 
-  // versiones de F2 (como parámetros, sin cortes)
+  // versiones de F2
   //   V2 = 0 textura: lados del kaleid de la capa cruzada, 2 → 8
-  //        1 mosaico: la mitad entera se repite en grilla, 1 → 6 (kaleid de textura en la base, 2)
-  //        2 arpegio: cada nota cambia los lados (grave = pocos, agudo = muchos); F2 = cuánto influye, hasta 12
+  //        1 mandala: el kaleid toma la mitad entera (las franjas también se vuelven radiales), 2 → 8 lados.
+  //          Es otra cadena: al entrar o salir de esta versión se re-arma la escena (puede haber un saltito)
+  //        2 gira:    la textura con 4 lados fijos y el kaleid rota con la fase del arpegio
+  //          (en silencio frena con el resto); F2 = cuánto gira
   const verK = () => (C.verKaleid | 0)
-  const ladosKaleid = (e) => {
-    if (verK() === 1) return 2
-    if (verK() === 2) return 2 + C.kaleid * e.arpPitch() * 10
-    return 2 + C.kaleid * 6
-  }
-  const repeticiones = () => (verK() === 1 ? 1 + C.kaleid * 5 : 1)
+  const LADOS_GIRA = 4
+  const ladosTextura = () => (verK() === 0 ? 2 + C.kaleid * 6 : verK() === 2 ? LADOS_GIRA : 2)
+  const giroKaleid = (e) => (verK() === 2 ? e.arpPhase() * C.kaleid * 1.5 : 0)
 
-  const mitad = (e, anguloExtra) =>
-    osc(() => 3 + e.arpPitch() * 30, 0, 0)
+  const mitad = (e, anguloExtra, mandala) => {
+    let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
       .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
       .color(() => e.rgb()[0], () => e.rgb()[1], () => e.rgb()[2])
       .diff(
         osc(() => 20 + e.arpPitch() * 40, 0, 0)
           .scrollX(() => -e.arpPhase() * 0.1)
           .pixelate(() => pxTextura(e), () => pxTextura(e))
-          .kaleid(() => ladosKaleid(e))
+          .kaleid(() => ladosTextura())
+          .rotate(() => giroKaleid(e))   // V2 gira (en las otras: 0)
       )
       .colorama(() => 0.005 + C.colorama * 0.3)
       .luma()
@@ -309,19 +312,25 @@
       )
       .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
       .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))
-      .repeat(() => repeticiones(), () => repeticiones())   // V2 mosaico (en 1 = sin repetir)
-      .pixelate(() => pxTodoX(e), () => pxTodoY(e))   // V2 todo / V3 tiras (V1: no se nota)
+    if (mandala) c = c.kaleid(() => 2 + C.kaleid * 6)   // V2 mandala
+    return c
+      .pixelate(() => pxTodoX(e), () => pxTodoY(e))   // V1 todo / tiras (textura: no se nota)
       .rotate(anguloExtra)
+  }
 
   // máscaras duras que parten la pantalla en x = 0.5
   // (funciones: cada uso arma una cadena nueva; reusar la misma rompe el shader)
   const mascaraDerecha = () => gradient(0).r().thresh(0.5, 0.005)
   const mascaraIzquierda = () => gradient(0).r().thresh(0.5, 0.005).invert(1)
 
+  let salidaOut = null
+  let armadoMandala = false
   V.salida = (out) => {
-    mitad(vivo, () => 0)
+    salidaOut = out
+    armadoMandala = verK() === 1
+    mitad(vivo, () => 0, armadoMandala)
       .mask(mascaraIzquierda())
-      .add(mitad(derecha, () => (C.rotarMitad ? Math.PI / 2 : 0)).mask(mascaraDerecha()), 1)
+      .add(mitad(derecha, () => (C.rotarMitad ? Math.PI / 2 : 0), armadoMandala).mask(mascaraDerecha()), 1)
       .contrast(() => 1 + C.contraste * 2)
       .rotate(() => (C.rotar90 ? Math.PI / 2 : 0))
       .out(out)
