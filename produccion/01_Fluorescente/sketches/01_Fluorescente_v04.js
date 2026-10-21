@@ -78,8 +78,10 @@ V.init({
   verPulso: 0,       // V6 (botón arriba de F6): 0 = agranda · 1 = strobo · 2 = achica
   stroboGolpes: 4,   // strobo: destellos por golpe
   stroboMs: 60,      // strobo: ms de cada destello + pausa
-  velocidad: 0,      // F7: velocidad del scroll de la capa principal
-  contraste: 0,      // F8: realce general (antes estaba en FMASTER)
+  velocidad: 0,      // F7: cómo avanzan las franjas (el fader es la velocidad)
+  verVelocidad: 0,   // V7 (botón arriba de F7): 0 = continuo · 1 = a saltos · 2 = empuje del bombo
+  direccion: 0,      // F8: hacia dónde (en 0 no cambia nada)
+  verDireccion: 0,   // V8 (botón arriba de F8): 0 = ida y vuelta · 1 = choque en el centro · 2 = vertical
 
   // toggles
   rotar90: false,    // N11: toda la pantalla rotada 90°
@@ -119,7 +121,9 @@ const CONTROLES = {
   pulso:       'F6',
   verPulso:    'V6',
   velocidad:   'F7',
-  contraste:   'F8',
+  verVelocidad: 'V7',
+  direccion:   'F8',
+  verDireccion: 'V8',
   rotar90:     'N11',
   rotarMitad:  'N12',
   delayMitad:  'N13',
@@ -142,7 +146,7 @@ const ESTADOS = [
   /* 2 */ { nombre: 'entra la batería',   pulso: 0.6, flash: 0.4, velocidad: 0.3 },
   /* 3 */ { nombre: 'partido',            pulso: 0.6, delayMitad: true, kaleid: 0.3 },
   /* 4 */ { nombre: 'giro',               rotarMitad: true, deformacion: 0.4, colorama: 0.2 },
-  /* 5 */ { nombre: 'final',              como: 3, contraste: 0.5, fundido: 1 },
+  /* 5 */ { nombre: 'final',              como: 3, fundido: 1 },
 ]
 
 
@@ -164,12 +168,15 @@ const ESTADOS = [
 //   V4 (arriba de F4) = deformación: ola negro-blanco-negro que corre (apagado) / ondas (prendido) / líquido quieto (parpadea)
 //   V5 (arriba de F5) = flash de caja: flash (apagado) / strobo (prendido) / golpe a negro (parpadea)
 //   V6 (arriba de F6) = pulso de bombo: agranda (apagado) / strobo (prendido) / achica (parpadea)
+//   F7 = cómo avanzan las franjas · V7: continuo (apagado) / a saltos con el arpegio (prendido) / empuje del bombo (parpadea)
+//   F8 = hacia dónde (0 = nada) · V8: ida y vuelta con el bajo (apagado) / choque en el centro (prendido) / vertical (parpadea)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13', 'N21', 'N23', 'N31', 'N33'])
-GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3, F5: 3, F6: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ola / ondas / líquido
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3, F5: 3, F6: 3, F7: 3, F8: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ola / ondas / líquido
 //   V5 flash: flash / strobo / a negro · V6 pulso: agranda / strobo / achica
+//   V7 avance: continuo / a saltos / bombo · V8 dirección: ida y vuelta / choque / vertical
 GP.midi.filas({
   8: { canal: 1, rango: V.C.rangoArpegio },
   7: { canal: 10, pulso: 'vuelta' },

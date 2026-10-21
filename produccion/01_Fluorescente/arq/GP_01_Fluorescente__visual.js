@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.13: F7 velocidad sin saltos (el desplazamiento se acumula cuadro a cuadro) y
+// Actualizado: 21/10/2026 (v2.14: sale el contraste. Movimiento en dos faders: F7 cómo avanza (continuo /
+//              a saltos / empuje del bombo) · F8 hacia dónde (ida y vuelta / choque en el centro / vertical))
+//              21/10/2026 (v2.13: F7 velocidad sin saltos (el desplazamiento se acumula cuadro a cuadro) y
 //              sin costura (se corre con modulate, que no envuelve la imagen como scrollX))
 //              21/10/2026 (v2.12: F5 flash y F6 pulso con versiones: normal / strobo (4 golpes rápidos) /
 //              inverso (flash a negro · pulso que achica))
@@ -58,12 +60,12 @@
 //   GP.fluorescente.nota(voz, nota, vel, on)  desde su ruteo MIDI
 //   GP.fluorescente.golpe(pieza)              batería a mano: 'bombo' | 'caja' | 'hat'
 //   GP.fluorescente.soltar(voz)               suelta todo lo que suena en esa voz (ej: al mutear)
-// =============================================================
+// ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.13'
+  const VERSION = 'v2.14'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -101,8 +103,10 @@
     verPulso: 0,              // V6 (botón arriba de F6): 0 = agranda · 1 = strobo · 2 = achica
     stroboGolpes: 4,          // strobo: cuántos destellos por golpe
     stroboMs: 60,             // strobo: duración de cada destello + pausa (ms). 4 × 60 = 240 ms
-    velocidad: 0,             // velocidad del scroll de la capa principal
-    contraste: 0,             // realce general
+    velocidad: 0,             // F7: cómo avanzan las franjas principales (el fader es la velocidad)
+    verVelocidad: 0,          // V7 (botón arriba de F7): 0 = continuo · 1 = a saltos (cada nota del arpegio) · 2 = empuje del bombo
+    direccion: 0,             // F8: hacia dónde (en 0 no cambia nada)
+    verDireccion: 0,          // V8 (botón arriba de F8): 0 = ida y vuelta (bajo) · 1 = choque en el centro · 2 = vertical
     suavizadoPixelado: 0.1,   // más chico = el pixelado sigue al fader más lento
     // toggles
     rotar90: false,           // toda la pantalla rotada 90°
@@ -190,7 +194,8 @@
       v.energy = v01
       v.H.set(nota, ahora)
       v.tAtaque = ahora
-      if (voz === 'arpegio') S.rgbObjetivo = noteToRGB(nota)
+      if (voz === 'arpegio') { S.rgbObjetivo = noteToRGB(nota); mov.salto += 0.03 + C.velocidad * 0.12 }   // F7 V2: el paso de esta nota
+      if (voz === 'bajo') mov.sentido = -mov.sentido   // F8 V1: cada nota del bajo da vuelta el sentido
     } else {
       const t0 = v.H.get(nota)
       if (t0 != null) { v.lastDur = ahora - t0; v.H.delete(nota) }
@@ -233,8 +238,10 @@
 
   // V3 viaja: el color avanza con la velocidad del bajo (en silencio frena). Sin envolver: se envuelve al usarlo
   let viajeColor = 0
-  // F7: desplazamiento de las franjas principales, acumulado (cambiar F7 cambia la velocidad, no la posición)
-  let desplazamiento = 0
+  // F7 / F8: desplazamiento de las franjas principales, acumulado cuadro a cuadro
+  // (cambiar un fader cambia la velocidad, no la posición). Izquierda y derecha por separado (choque en el centro)
+  let desplazamiento = 0, desplDer = 0
+  const mov = { salto: 0, sentido: 1, multSentido: 1 }
 
   // historial corto para la mitad derecha atrasada
   let historial = []
@@ -245,7 +252,7 @@
     rgb: [S.rgb[0], S.rgb[1], S.rgb[2]],
     bassPitch: S.bajo.pitch, bassPhase: S.bajo.phase, bassEnergy: S.bajo.energy,
     viaje: viajeColor,
-    despl: desplazamiento,
+    despl: desplazamiento, desplDer: desplDer,
     bombo: S.bateria.bombo, caja: S.bateria.caja, hat: S.bateria.hat,
     stroboBombo: S.bateria.stroboBombo, stroboCaja: S.bateria.stroboCaja,
   })
@@ -269,7 +276,7 @@
       rgb: [m(a.rgb[0], b.rgb[0]), m(a.rgb[1], b.rgb[1]), m(a.rgb[2], b.rgb[2])],
       bassPitch: m(a.bassPitch, b.bassPitch), bassPhase: m(a.bassPhase, b.bassPhase), bassEnergy: m(a.bassEnergy, b.bassEnergy),
       viaje: m(a.viaje, b.viaje),
-      despl: m(a.despl, b.despl),
+      despl: m(a.despl, b.despl), desplDer: m(a.desplDer, b.desplDer),
       bombo: m(a.bombo, b.bombo), caja: m(a.caja, b.caja), hat: m(a.hat, b.hat),
       stroboBombo: b.stroboBombo, stroboCaja: b.stroboCaja,   // prendido/apagado: sin mezclar
     }
@@ -310,7 +317,30 @@
       if (C.bandasRespira && !respiraAntes && respiraSuave < 0.001) faseRespira = S.arpegio.phase
       respiraAntes = !!C.bandasRespira
     }
-    desplazamiento += k * S.arpegio.rate * (0.2 + C.velocidad * 0.8)   // misma velocidad que antes, sin saltos
+    {
+      // F7 cómo avanza
+      const vv = C.verVelocidad | 0
+      let vel
+      if (vv === 1) {            // a saltos: cada nota del arpegio deja un paso que se recorre en ~0.1 s
+        const tramo = mov.salto * clamp(k / 0.08)
+        mov.salto -= tramo
+        vel = k > 0 ? tramo / k : 0
+      } else if (vv === 2) {     // empuje del bombo: base lenta del arpegio + acelerón en cada bombo
+        mov.salto = 0
+        vel = S.arpegio.rate * 0.2 + S.bateria.bombo * (0.5 + C.velocidad * 2.5)
+      } else {                   // continuo (como antes)
+        mov.salto = 0
+        vel = S.arpegio.rate * (0.2 + C.velocidad * 0.8)
+      }
+      // F8 hacia dónde
+      const vd = C.verDireccion | 0
+      const objetivoSentido = vd === 0 && mov.sentido < 0 ? 1 - 2 * C.direccion : 1   // ida y vuelta: F8 = cuánto vuelve
+      mov.multSentido += (objetivoSentido - mov.multSentido) * clamp(k * 10)
+      const izq = vel * mov.multSentido
+      const der = vd === 1 ? vel * (1 - 2 * C.direccion) : izq                         // choque: F8 = cuánto va al revés
+      desplazamiento += k * izq
+      desplDer += k * der
+    }
     viajeColor += k * S.bajo.rate * C.colorama * 0.25   // F3 arriba y bajo a ritmo 1: una vuelta cada 4 s
 
     historial.push(muestra(ahora))
@@ -335,6 +365,7 @@
     bassEnergy: () => S.bajo.energy,
     viaje:      () => viajeColor,
     despl:      () => desplazamiento,
+    desplDer:   () => desplDer,
     bombo:      () => S.bateria.bombo,
     caja:       () => S.bateria.caja,
     hat:        () => S.bateria.hat,
@@ -428,10 +459,14 @@
     return e.bombo() * f
   }
 
-  const mitad = (e, anguloExtra, mandala) => {
+  // F8 V3 vertical: las franjas giran de verticales (0) a horizontales (1)
+  const giroFranjas = () => ((C.verDireccion | 0) === 2 ? C.direccion * Math.PI / 2 : 0)
+
+  const mitad = (e, anguloExtra, mandala, esDerecha = false) => {
     let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
       // F7: corre con modulate (suma x sin envolver) en vez de scrollX (envuelve y deja una costura)
-      .modulate(solid(1, 0, 0), () => e.despl())
+      .modulate(solid(1, 0, 0), () => (esDerecha ? e.desplDer() : e.despl()))
+      .rotate(() => giroFranjas())   // F8 V3 (en las otras: 0)
       .color(() => e.rgb()[0], () => e.rgb()[1], () => e.rgb()[2])
       .diff(
         osc(() => 20 + e.arpPitch() * 40, 0, 0)
@@ -480,8 +515,7 @@
     armadoMandala = verK() === 1
     mitad(vivo, () => 0, armadoMandala)
       .mask(mascaraIzquierda())
-      .add(mitad(derecha, () => (C.rotarMitad ? Math.PI / 2 : 0), armadoMandala).mask(mascaraDerecha()), 1)
-      .contrast(() => 1 + C.contraste * 2)
+      .add(mitad(derecha, () => (C.rotarMitad ? Math.PI / 2 : 0), armadoMandala, true).mask(mascaraDerecha()), 1)
       .rotate(() => (C.rotar90 ? Math.PI / 2 : 0))
       .out(out)
   }
