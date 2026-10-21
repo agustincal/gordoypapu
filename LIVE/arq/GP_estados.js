@@ -7,7 +7,8 @@
 // Depende de: GP_midi (faders, toggles, versiones, mutes, LEDs).
 //             GP_tools es opcional: si está cargado (ensayo) muestra el
 //             estado arriba a la derecha. En el show no se ve.
-// Actualizado: 2026-10-20 (v1.1: suspender, copiar estado, aviso de cambio, botones 87/88)
+// Actualizado: 2026-10-21 (v1.2: guardar capturas pasa a Ctrl+Alt+D)
+//              2026-10-20 (v1.1: suspender, copiar estado, aviso de cambio, botones 87/88)
 // ============================================================
 //
 // Un estado es una foto de la consola + ajustes de la canción:
@@ -61,7 +62,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.1'
+  const VERSION = 'v1.2'
 
   if (GP.estados && GP.estados._version === VERSION) return
 

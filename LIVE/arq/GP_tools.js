@@ -8,13 +8,14 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-20 (v1.9: informe de canción · ensayo con varios aparatos · canal de estados)
+// Actualizado: 2026-10-21 (v1.10: botonera de estados bajo el cartel — próximo/anterior/pausa/reiniciar · copiar/guardar/borrar)
+//              2026-10-20 (v1.9: informe de canción · ensayo con varios aparatos · canal de estados)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.9'
+  const VERSION = 'v1.10'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
