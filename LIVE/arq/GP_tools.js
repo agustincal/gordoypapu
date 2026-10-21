@@ -720,8 +720,38 @@
       cartelEl.textContent = texto
     },
     get activo() { return cartelActivo },
-    set activo(v) { cartelActivo = v; if (cartelEl) cartelEl.style.display = v ? '' : 'none' },
+    set activo(v) { cartelActivo = v; if (cartelEl) cartelEl.style.display = v ? '' : 'none'; if (botonesEstadosEl) botonesEstadosEl.style.display = v ? '' : 'none' },
   }
+
+  // Botones chicos pegados debajo del cartel: suspender · copiar · guardar.
+  // Hacen lo mismo que Ctrl+Alt+E / C / D (los atajos siguen). Sólo en ensayo:
+  // viven en GP_tools, que en el show no se carga.
+  const botonesEstadosEl = crearCaja('gpBotonesEstados', `
+    top: 62px; right: 8px; display: flex; gap: 4px; padding: 3px 4px;
+  `)
+  const BTN_EST = 'font:inherit; font-size:11px; padding:1px 6px; cursor:pointer;'
+  botonesEstadosEl.innerHTML = `
+    <button data-est="suspender" style="${BTN_EST}" title="suspender / reanudar los estados (Ctrl+Alt+E)">⏸</button>
+    <button data-est="copiar" style="${BTN_EST}" title="copiar el estado actual (Ctrl+Alt+C)">copiar</button>
+    <button data-est="guardar" style="${BTN_EST}" title="guardar las capturas en un .js (Ctrl+Alt+D)">guardar</button>
+  `
+  botonesEstadosEl.addEventListener('click', ev => {
+    const b = ev.target.closest('[data-est]')
+    if (!b) return
+    const E = GP.estados
+    if (!E) { console.warn('[GP tools] GP.estados no está cargado'); return }
+    if (b.dataset.est === 'suspender') E.suspender()
+    else if (b.dataset.est === 'copiar') E.copiar()
+    else if (b.dataset.est === 'guardar') E.guardarCapturas()
+    b.blur()   // que Espacio/Enter no vuelvan a apretarlo sin querer
+  })
+  // el ⏸ del cartel dice si está suspendido: el botón lo acompaña (también con el atajo o la consola)
+  if (window._gpBotonesEstadosReloj) clearInterval(window._gpBotonesEstadosReloj)
+  window._gpBotonesEstadosReloj = setInterval(() => {
+    const susp = !!(cartelEl && cartelEl.textContent.startsWith('⏸'))
+    const b = botonesEstadosEl.querySelector('[data-est="suspender"]')
+    if (b) b.style.background = susp ? '#fc0' : ''
+  }, 300)
 
   // compatibilidad con los sketches que llaman al ensayo.js viejo
   GP.ensayo = {
