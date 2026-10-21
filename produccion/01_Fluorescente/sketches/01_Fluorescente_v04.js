@@ -7,7 +7,7 @@
 // Actualizado: 21/10/2026 (v04: copia de trabajo de LIVE v01 · motor v2.1: en silencio el movimiento frena ·
 //              F1 pixelado de doble sentido (base 0.5) + V1 = textura / todo / tiras ·
 //              V2 = kaleid textura / mandala / gira · V3 = colorama fijo / altura del bajo / viaja con el bajo ·
-//              V4 = deformación ondas / líquido / remolino)
+//              V4 = deformación ondas / ola / líquido)
 //              16/10/2026 (v01: primera versión LIVE, con estados.
 //              Parte de produccion/01_Fluorescente_v03 — mismo look)
 // ============================================================
@@ -69,7 +69,7 @@ V.init({
   colorama: 0,       // F3: corrimiento de color (fuerte: subir con cuidado)
   verColorama: 0,    // V3 (botón arriba de F3): 0 = fijo · 1 = altura del bajo · 2 = viaja con el bajo
   deformacion: 0,    // F4: deformación del bajo (0 = recto)
-  verDeformacion: 0, // V4 (botón arriba de F4): 0 = ondas · 1 = líquido · 2 = remolino
+  verDeformacion: 0, // V4 (botón arriba de F4): 0 = ondas · 1 = ola · 2 = líquido
   empujonBajo: 0.4,  // cuánto suma cada nota del bajo (si es demasiado, bajalo: 0 = sólo F4)
   flash: 0,          // F5: cuánto flashea cada golpe de caja
   pulso: 0,          // F6: cuánto pulsa cada golpe de bombo
@@ -138,12 +138,12 @@ const ESTADOS = [
 //   F1 doble sentido: al medio = como antes · abajo = bloques enormes · arriba = pixel fino
 //   V2 (arriba de F2) = kaleid: textura (apagado) / mandala (prendido) / gira (parpadea)
 //   V3 (arriba de F3) = colorama: fijo (apagado) / altura del bajo (prendido) / viaja con el bajo (parpadea)
-//   V4 (arriba de F4) = deformación: ondas (apagado) / líquido (prendido) / remolino (parpadea)
+//   V4 (arriba de F4) = deformación: ondas (apagado) / ola negro-blanco-negro que corre (prendido) / líquido quieto (parpadea)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13'])
-GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ondas / líquido / remolino
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ondas / ola / líquido
 GP.midi.filas({
   8: { canal: 1, rango: V.C.rangoArpegio },
   7: { canal: 10, pulso: 'vuelta' },

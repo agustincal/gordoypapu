@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.6: F4 ondas sin desplazamiento (sólo el empuje del bajo, sin corte) ·
+// Actualizado: 21/10/2026 (v2.7: F4 versiones = ondas / ola negro-blanco-negro que corre con la fase /
+//              líquido quieto. Sale el remolino)
+//              21/10/2026 (v2.6: F4 ondas sin desplazamiento (sólo el empuje del bajo, sin corte) ·
 //              remolino con anillos fijos (no cambia con cada nota) y más fuerte arriba)
 //              21/10/2026 (v2.5: F4 ondas sin corte (cantidad entera de ondas) · remolino de verdad
 //              (anillos alrededor del centro, gira más cuanto más afuera))
@@ -52,7 +54,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.6'
+  const VERSION = 'v2.7'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -82,7 +84,7 @@
     colorama: 0,              // F3: corrimiento de color (fuerte: subir con cuidado)
     verColorama: 0,           // V3 (botón arriba de F3): 0 = fijo · 1 = altura del bajo · 2 = viaja con el bajo
     deformacion: 0,           // F4: deformación del bajo (0 = recto)
-    verDeformacion: 0,        // V4 (botón arriba de F4): 0 = ondas · 1 = líquido · 2 = remolino
+    verDeformacion: 0,        // V4 (botón arriba de F4): 0 = ondas · 1 = ola · 2 = líquido
     empujonBajo: 0.4,         // cuánto suma cada nota del bajo a la deformación (0 = nada, sólo F4)
     flash: 0,                 // cuánto flashea cada golpe de caja
     pulso: 0,                 // cuánto pulsa cada golpe de bombo
@@ -322,7 +324,7 @@
   }
 
   // versiones de F4 (como parámetros, sin cortes)
-  //   V4 = 0 ondas (quietas, las empuja el bajo) · 1 líquido · 2 remolino
+  //   V4 = 0 ondas (quietas, las empuja el bajo) · 1 ola negro-blanco-negro que corre · 2 líquido quieto
   //   cantidad = F4 × (0.5 + energía del bajo × empujonBajo)   (F4 en 0 = recto en las tres)
   const verD = () => (C.verDeformacion | 0)
   const deforma = (e, version) =>
@@ -347,16 +349,15 @@
         osc(() => 2 + e.bassPitch() * 6, 0, 0),
         () => deforma(e, 0)
       )
-      .modulate(   // V4 líquido: manchas de ruido que se arrastran con la fase del bajo
-        noise(() => 2 + e.bassPitch() * 6, 0)
-          .scrollX(() => e.bassPhase() * 0.1)
-          .scrollY(() => e.bassPhase() * 0.07),
+      .modulate(   // V4 ola: una sola onda negro → blanco → negro a lo ancho, que corre con la fase del bajo.
+        // Es exactamente un ciclo (2π) y empieza y termina en negro: al envolver en el borde empalma, sin corte
+        osc(Math.PI * 2, 0, 0)
+          .scrollX(() => -0.25 + e.bassPhase() * 0.1),   // -0.25 = arranca en negro
         () => deforma(e, 1)
       )
-      .modulateRotate(   // V4 remolino: anillos alrededor del centro; cada anillo gira distinto → espiral
-        osc(6, 0, 0).kaleid(64),   // anillos fijos (kaleid con muchos lados): no cambian con cada nota
-        () => deforma(e, 2) * 6,   // más fuerte arriba (antes 4)
-        () => -deforma(e, 2) * 3   // centra el giro: tuerce sin rotar la imagen entera
+      .modulate(   // V4 líquido: manchas de ruido quietas (no se mueven con la fase); la nota cambia el tamaño
+        noise(() => 2 + e.bassPitch() * 6, 0),
+        () => deforma(e, 2)
       )
       .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
       .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))
