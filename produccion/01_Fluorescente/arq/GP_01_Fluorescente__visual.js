@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.11: atraso de la mitad derecha en tres medidas: N13 200 ms · N23 500 ms · N33 1 s)
+// Actualizado: 21/10/2026 (v2.12: F5 flash y F6 pulso con versiones: normal / strobo (4 golpes rápidos) /
+//              inverso (flash a negro · pulso que achica))
+//              21/10/2026 (v2.11: atraso de la mitad derecha en tres medidas: N13 200 ms · N23 500 ms · N33 1 s)
 //              21/10/2026 (v2.10: corte de pantalla con borde duro (rampa pixelada en 2 celdas))
 //              21/10/2026 (v2.9: bandas horizontales que se desalinean y se alinean (ref. Hernán Roperto):
 //              N21 bandas (al apagar convergen) · N31 bandas que respiran (se alinean solas, cíclico))
@@ -59,7 +61,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.11'
+  const VERSION = 'v2.12'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -91,8 +93,12 @@
     deformacion: 0,           // F4: deformación del bajo (0 = recto)
     verDeformacion: 0,        // V4 (botón arriba de F4): 0 = ola · 1 = ondas · 2 = líquido
     empujonBajo: 0.4,         // cuánto suma cada nota del bajo a la deformación (0 = nada, sólo F4)
-    flash: 0,                 // cuánto flashea cada golpe de caja
-    pulso: 0,                 // cuánto pulsa cada golpe de bombo
+    flash: 0,                 // F5: cuánto flashea cada golpe de caja
+    verFlash: 0,              // V5 (botón arriba de F5): 0 = flash · 1 = strobo · 2 = golpe a negro
+    pulso: 0,                 // F6: cuánto pulsa cada golpe de bombo
+    verPulso: 0,              // V6 (botón arriba de F6): 0 = agranda · 1 = strobo · 2 = achica
+    stroboGolpes: 4,          // strobo: cuántos destellos por golpe
+    stroboMs: 60,             // strobo: duración de cada destello + pausa (ms). 4 × 60 = 240 ms
     velocidad: 0,             // velocidad del scroll de la capa principal
     contraste: 0,             // realce general
     suavizadoPixelado: 0.1,   // más chico = el pixelado sigue al fader más lento
@@ -152,7 +158,9 @@
   const S = {
     arpegio: nuevaVoz(),
     bajo: nuevaVoz(),
-    bateria: { bombo: 0, caja: 0, hat: 0 },
+    bateria: { bombo: 0, caja: 0, hat: 0, stroboBombo: 0, stroboCaja: 0 },
+    golpeT: { bombo: -Infinity, caja: -Infinity },   // instante y fuerza del último golpe (para el strobo)
+    golpeV: { bombo: 0, caja: 0 },
     rgb: [1, 0, 0],
     rgbObjetivo: [1, 0, 0],
   }
@@ -166,8 +174,8 @@
     if (voz === 'bateria') {
       if (!on) return
       const B = C.bateria
-      if (B.bombo.includes(nota)) S.bateria.bombo = v01
-      if (B.caja.includes(nota)) S.bateria.caja = v01
+      if (B.bombo.includes(nota)) V.golpe('bombo', v01)
+      if (B.caja.includes(nota)) V.golpe('caja', v01)
       if (B.hat.includes(nota)) S.bateria.hat = v01
       return
     }
@@ -188,7 +196,11 @@
   }
 
   // batería a mano: 'bombo' | 'caja' | 'hat'
-  V.golpe = (pieza, v01 = 1) => { if (pieza in S.bateria) S.bateria[pieza] = v01 }
+  V.golpe = (pieza, v01 = 1) => {
+    if (!(pieza in S.bateria)) return
+    S.bateria[pieza] = v01
+    if (pieza in S.golpeT) { S.golpeT[pieza] = performance.now(); S.golpeV[pieza] = v01 }
+  }
 
   // suelta todo lo que suena en una voz (al mutear, para que no quede una nota "sostenida" para siempre)
   V.soltar = (voz) => {
@@ -230,6 +242,7 @@
     bassPitch: S.bajo.pitch, bassPhase: S.bajo.phase, bassEnergy: S.bajo.energy,
     viaje: viajeColor,
     bombo: S.bateria.bombo, caja: S.bateria.caja, hat: S.bateria.hat,
+    stroboBombo: S.bateria.stroboBombo, stroboCaja: S.bateria.stroboCaja,
   })
   // atraso que se está usando: el más grande de los prendidos (0 = ninguno)
   const delayActual = () => Math.max(
@@ -252,6 +265,7 @@
       bassPitch: m(a.bassPitch, b.bassPitch), bassPhase: m(a.bassPhase, b.bassPhase), bassEnergy: m(a.bassEnergy, b.bassEnergy),
       viaje: m(a.viaje, b.viaje),
       bombo: m(a.bombo, b.bombo), caja: m(a.caja, b.caja), hat: m(a.hat, b.hat),
+      stroboBombo: b.stroboBombo, stroboCaja: b.stroboCaja,   // prendido/apagado: sin mezclar
     }
   }
 
@@ -269,6 +283,13 @@
 
     S.bateria.bombo *= Math.exp(-k / C.caidaBombo)
     S.bateria.caja  *= Math.exp(-k / C.caidaCaja)
+    // strobo: después de cada golpe, N destellos de stroboMs (mitad prendido, mitad apagado)
+    const strobo = (pieza) => {
+      const t = ahora - S.golpeT[pieza], per = Math.max(20, C.stroboMs)
+      return t >= 0 && t < C.stroboGolpes * per && (t % per) < per / 2 ? S.golpeV[pieza] : 0
+    }
+    S.bateria.stroboBombo = strobo('bombo')
+    S.bateria.stroboCaja = strobo('caja')
     S.bateria.hat   *= Math.exp(-k / C.caidaHat)
 
     for (let i = 0; i < 3; i++) S.rgb[i] += (S.rgbObjetivo[i] - S.rgb[i]) * clamp(k * 8)   // color con glissando
@@ -309,6 +330,8 @@
     bombo:      () => S.bateria.bombo,
     caja:       () => S.bateria.caja,
     hat:        () => S.bateria.hat,
+    stroboBombo: () => S.bateria.stroboBombo,
+    stroboCaja:  () => S.bateria.stroboCaja,
   }
   // la mitad derecha lee lo mismo, salvo con N13 / N23 / N33: ahí lee el historial
   const derecha = {}
@@ -381,6 +404,22 @@
     return n21 + n31
   }
 
+  // versiones de F5 y F6 (como parámetros, sin cortes)
+  //   V5 flash: 0 = brillo con cada caja · 1 = strobo (stroboGolpes destellos rápidos) · 2 = golpe a negro
+  //   V6 pulso: 0 = agranda con cada bombo · 1 = strobo · 2 = achica (zoom hacia afuera)
+  const flashCaja = (e) => {
+    const f = 0.3 + C.flash * 0.7, v = C.verFlash | 0
+    if (v === 1) return e.stroboCaja() * f
+    if (v === 2) return -e.caja() * f
+    return e.caja() * f
+  }
+  const pulsoBombo = (e) => {
+    const f = 0.3 + C.pulso * 0.7, v = C.verPulso | 0
+    if (v === 1) return e.stroboBombo() * f
+    if (v === 2) return -e.bombo() * f * 0.8   // achica (1.5 → 0.7 como mucho)
+    return e.bombo() * f
+  }
+
   const mitad = (e, anguloExtra, mandala) => {
     let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
       .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
@@ -410,8 +449,8 @@
         noise(() => 2 + e.bassPitch() * 6, 0),
         () => deforma(e, 2)
       )
-      .brightness(() => e.caja() * (0.3 + C.flash * 0.7))
-      .scale(() => 1.5 + e.bombo() * (0.3 + C.pulso * 0.7))
+      .brightness(() => flashCaja(e))   // F5 (V5: flash / strobo / a negro)
+      .scale(() => 1.5 + pulsoBombo(e))  // F6 (V6: agranda / strobo / achica)
       .modulateScrollX(fuenteBandas(), () => desalineoBandas(e))   // N21 / N31 bandas (en 0 = sin efecto)
     if (mandala) c = c.kaleid(() => 2 + C.kaleid * 6)   // V2 mandala
     return c

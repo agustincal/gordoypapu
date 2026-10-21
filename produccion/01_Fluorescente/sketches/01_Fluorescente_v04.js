@@ -73,7 +73,11 @@ V.init({
   verDeformacion: 0, // V4 (botón arriba de F4): 0 = ola · 1 = ondas · 2 = líquido
   empujonBajo: 0.4,  // cuánto suma cada nota del bajo (si es demasiado, bajalo: 0 = sólo F4)
   flash: 0,          // F5: cuánto flashea cada golpe de caja
+  verFlash: 0,       // V5 (botón arriba de F5): 0 = flash · 1 = strobo · 2 = golpe a negro
   pulso: 0,          // F6: cuánto pulsa cada golpe de bombo
+  verPulso: 0,       // V6 (botón arriba de F6): 0 = agranda · 1 = strobo · 2 = achica
+  stroboGolpes: 4,   // strobo: destellos por golpe
+  stroboMs: 60,      // strobo: ms de cada destello + pausa
   velocidad: 0,      // F7: velocidad del scroll de la capa principal
   contraste: 0,      // F8: realce general (antes estaba en FMASTER)
 
@@ -111,7 +115,9 @@ const CONTROLES = {
   deformacion: 'F4',
   verDeformacion: 'V4',
   flash:       'F5',
+  verFlash:    'V5',
   pulso:       'F6',
+  verPulso:    'V6',
   velocidad:   'F7',
   contraste:   'F8',
   rotar90:     'N11',
@@ -156,11 +162,14 @@ const ESTADOS = [
 //   V2 (arriba de F2) = kaleid: textura (apagado) / mandala (prendido) / gira (parpadea)
 //   V3 (arriba de F3) = colorama: fijo (apagado) / altura del bajo (prendido) / viaja con el bajo (parpadea)
 //   V4 (arriba de F4) = deformación: ola negro-blanco-negro que corre (apagado) / ondas (prendido) / líquido quieto (parpadea)
+//   V5 (arriba de F5) = flash de caja: flash (apagado) / strobo (prendido) / golpe a negro (parpadea)
+//   V6 (arriba de F6) = pulso de bombo: agranda (apagado) / strobo (prendido) / achica (parpadea)
 //   86 / 87 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13', 'N21', 'N23', 'N31', 'N33'])
-GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ola / ondas / líquido
+GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3, F5: 3, F6: 3 })   // V1 pixelado: textura / todo / tiras · V2 kaleid: textura / mandala / gira · V3 colorama: fijo / altura / viaja · V4 deformación: ola / ondas / líquido
+//   V5 flash: flash / strobo / a negro · V6 pulso: agranda / strobo / achica
 GP.midi.filas({
   8: { canal: 1, rango: V.C.rangoArpegio },
   7: { canal: 10, pulso: 'vuelta' },
