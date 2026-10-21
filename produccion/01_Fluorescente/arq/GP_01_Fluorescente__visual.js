@@ -4,7 +4,8 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.9: bandas horizontales que se desalinean y se alinean (ref. Hernán Roperto):
+// Actualizado: 21/10/2026 (v2.10: corte de pantalla con borde duro (rampa pixelada en 2 celdas))
+//              21/10/2026 (v2.9: bandas horizontales que se desalinean y se alinean (ref. Hernán Roperto):
 //              N21 bandas (al apagar convergen) · N31 bandas que respiran (se alinean solas, cíclico))
 //              21/10/2026 (v2.8: F4 se invierten las dos primeras: V1 = ola · V2 = ondas)
 //              21/10/2026 (v2.7: F4 versiones = ondas / ola negro-blanco-negro que corre con la fase /
@@ -57,7 +58,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.91'
+  const VERSION = 'v2.10'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -409,8 +410,9 @@
 
   // máscaras duras que parten la pantalla en x = 0.5
   // (funciones: cada uso arma una cadena nueva; reusar la misma rompe el shader)
-  const mascaraDerecha = () => gradient(0).r().thresh(0.5, 0.005)
-  const mascaraIzquierda = () => gradient(0).r().thresh(0.5, 0.005).invert(1)
+  // borde duro: pixelate(2, 1) deja sólo dos valores (0.25 / 0.75), así el corte cae seco en el píxel del medio
+  const mascaraDerecha = () => gradient(0).r().pixelate(2, 1).thresh(0.5, 0.1)
+  const mascaraIzquierda = () => gradient(0).r().pixelate(2, 1).thresh(0.5, 0.1).invert(1)
 
   let salidaOut = null
   let armadoMandala = false
