@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.12: F5 flash y F6 pulso con versiones: normal / strobo (4 golpes rápidos) /
+// Actualizado: 21/10/2026 (v2.13: F7 velocidad sin saltos (el desplazamiento se acumula cuadro a cuadro) y
+//              sin costura (se corre con modulate, que no envuelve la imagen como scrollX))
+//              21/10/2026 (v2.12: F5 flash y F6 pulso con versiones: normal / strobo (4 golpes rápidos) /
 //              inverso (flash a negro · pulso que achica))
 //              21/10/2026 (v2.11: atraso de la mitad derecha en tres medidas: N13 200 ms · N23 500 ms · N33 1 s)
 //              21/10/2026 (v2.10: corte de pantalla con borde duro (rampa pixelada en 2 celdas))
@@ -61,7 +63,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.12'
+  const VERSION = 'v2.13'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -231,6 +233,8 @@
 
   // V3 viaja: el color avanza con la velocidad del bajo (en silencio frena). Sin envolver: se envuelve al usarlo
   let viajeColor = 0
+  // F7: desplazamiento de las franjas principales, acumulado (cambiar F7 cambia la velocidad, no la posición)
+  let desplazamiento = 0
 
   // historial corto para la mitad derecha atrasada
   let historial = []
@@ -241,6 +245,7 @@
     rgb: [S.rgb[0], S.rgb[1], S.rgb[2]],
     bassPitch: S.bajo.pitch, bassPhase: S.bajo.phase, bassEnergy: S.bajo.energy,
     viaje: viajeColor,
+    despl: desplazamiento,
     bombo: S.bateria.bombo, caja: S.bateria.caja, hat: S.bateria.hat,
     stroboBombo: S.bateria.stroboBombo, stroboCaja: S.bateria.stroboCaja,
   })
@@ -264,6 +269,7 @@
       rgb: [m(a.rgb[0], b.rgb[0]), m(a.rgb[1], b.rgb[1]), m(a.rgb[2], b.rgb[2])],
       bassPitch: m(a.bassPitch, b.bassPitch), bassPhase: m(a.bassPhase, b.bassPhase), bassEnergy: m(a.bassEnergy, b.bassEnergy),
       viaje: m(a.viaje, b.viaje),
+      despl: m(a.despl, b.despl),
       bombo: m(a.bombo, b.bombo), caja: m(a.caja, b.caja), hat: m(a.hat, b.hat),
       stroboBombo: b.stroboBombo, stroboCaja: b.stroboCaja,   // prendido/apagado: sin mezclar
     }
@@ -304,6 +310,7 @@
       if (C.bandasRespira && !respiraAntes && respiraSuave < 0.001) faseRespira = S.arpegio.phase
       respiraAntes = !!C.bandasRespira
     }
+    desplazamiento += k * S.arpegio.rate * (0.2 + C.velocidad * 0.8)   // misma velocidad que antes, sin saltos
     viajeColor += k * S.bajo.rate * C.colorama * 0.25   // F3 arriba y bajo a ritmo 1: una vuelta cada 4 s
 
     historial.push(muestra(ahora))
@@ -327,6 +334,7 @@
     bassPhase:  () => S.bajo.phase,
     bassEnergy: () => S.bajo.energy,
     viaje:      () => viajeColor,
+    despl:      () => desplazamiento,
     bombo:      () => S.bateria.bombo,
     caja:       () => S.bateria.caja,
     hat:        () => S.bateria.hat,
@@ -422,7 +430,8 @@
 
   const mitad = (e, anguloExtra, mandala) => {
     let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
-      .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
+      // F7: corre con modulate (suma x sin envolver) en vez de scrollX (envuelve y deja una costura)
+      .modulate(solid(1, 0, 0), () => e.despl())
       .color(() => e.rgb()[0], () => e.rgb()[1], () => e.rgb()[2])
       .diff(
         osc(() => 20 + e.arpPitch() * 40, 0, 0)
