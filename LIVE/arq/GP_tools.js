@@ -735,15 +735,15 @@
   const RENGLON = 'display:flex; gap:4px; justify-content:flex-end;'
   botonesEstadosEl.innerHTML = `
     <div style="${RENGLON}">
-      <button data-est="siguiente" style="${BTN_EST}" title="estado siguiente (botón 88)">próximo</button>
-      <button data-est="anterior" style="${BTN_EST}" title="estado anterior (botón 87)">anterior</button>
-      <button data-est="suspender" style="${BTN_EST}" title="pausar / reanudar los estados (Ctrl+Alt+E)">pausa</button>
-      <button data-est="reiniciar" style="${BTN_EST}" title="volver al inicio: GP.estados.reiniciar() (antes de dar ▶ a un ensayo)">reiniciar</button>
+      <button data-est="siguiente" style="${BTN_EST}" title="próximo estado (botón 88)">⏭&#xFE0E;</button>
+      <button data-est="anterior" style="${BTN_EST}" title="estado anterior (botón 87)">⏮&#xFE0E;</button>
+      <button data-est="suspender" style="${BTN_EST}" title="pausar / reanudar los estados (Ctrl+Alt+E)">⏸&#xFE0E;</button>
+      <button data-est="reiniciar" style="${BTN_EST}" title="volver al inicio: GP.estados.reiniciar() (antes de dar ▶ a un ensayo)">⟲</button>
     </div>
     <div style="${RENGLON}">
-      <button data-est="copiar" style="${BTN_EST}" title="copiar el estado actual (Ctrl+Alt+C)">copiar</button>
-      <button data-est="guardar" style="${BTN_EST}" title="guardar las capturas en un .js (Ctrl+Alt+D)">guardar</button>
-      <button data-est="borrar" style="${BTN_EST}" title="borrar la lista de capturas de esta canción">borrar</button>
+      <button data-est="copiar" style="${BTN_EST}" title="copiar el estado actual (Ctrl+Alt+C)">⧉&#xFE0E;</button>
+      <button data-est="guardar" style="${BTN_EST}" title="guardar las capturas en un .js (Ctrl+Alt+D)">⤓&#xFE0E;</button>
+      <button data-est="borrar" style="${BTN_EST}" title="borrar la lista de capturas de esta canción">✕&#xFE0E;</button>
     </div>
   `
   botonesEstadosEl.addEventListener('click', ev => {
