@@ -723,31 +723,43 @@
     set activo(v) { cartelActivo = v; if (cartelEl) cartelEl.style.display = v ? '' : 'none'; if (botonesEstadosEl) botonesEstadosEl.style.display = v ? '' : 'none' },
   }
 
-  // Botones chicos pegados debajo del cartel: suspender · copiar · guardar · reiniciar.
-  // Hacen lo mismo que Ctrl+Alt+E / C / D y GP.estados.reiniciar() (los atajos siguen). Sólo en ensayo:
+  // Botones chicos pegados debajo del cartel, en dos renglones:
+  //   próximo · anterior · pausa · reiniciar
+  //   copiar · guardar · borrar
+  // Pausa/copiar/guardar = Ctrl+Alt+E / C / D (los atajos siguen). Sólo en ensayo:
   // viven en GP_tools, que en el show no se carga.
   const botonesEstadosEl = crearCaja('gpBotonesEstados', `
-    top: 62px; right: 8px; display: flex; gap: 4px; padding: 3px 4px;
+    top: 62px; right: 8px; display: flex; flex-direction: column; gap: 4px; padding: 3px 4px;
   `)
   const BTN_EST = 'font:inherit; font-size:11px; padding:1px 6px; cursor:pointer;'
+  const RENGLON = 'display:flex; gap:4px; justify-content:flex-end;'
   botonesEstadosEl.innerHTML = `
-    <button data-est="suspender" style="${BTN_EST}" title="suspender / reanudar los estados (Ctrl+Alt+E)">⏸</button>
-    <button data-est="copiar" style="${BTN_EST}" title="copiar el estado actual (Ctrl+Alt+C)">copiar</button>
-    <button data-est="guardar" style="${BTN_EST}" title="guardar las capturas en un .js (Ctrl+Alt+D)">guardar</button>
-    <button data-est="reiniciar" style="${BTN_EST}" title="volver al inicio: GP.estados.reiniciar() (antes de dar ▶ a un ensayo)">reiniciar</button>
+    <div style="${RENGLON}">
+      <button data-est="siguiente" style="${BTN_EST}" title="estado siguiente (botón 88)">próximo</button>
+      <button data-est="anterior" style="${BTN_EST}" title="estado anterior (botón 87)">anterior</button>
+      <button data-est="suspender" style="${BTN_EST}" title="pausar / reanudar los estados (Ctrl+Alt+E)">pausa</button>
+      <button data-est="reiniciar" style="${BTN_EST}" title="volver al inicio: GP.estados.reiniciar() (antes de dar ▶ a un ensayo)">reiniciar</button>
+    </div>
+    <div style="${RENGLON}">
+      <button data-est="copiar" style="${BTN_EST}" title="copiar el estado actual (Ctrl+Alt+C)">copiar</button>
+      <button data-est="guardar" style="${BTN_EST}" title="guardar las capturas en un .js (Ctrl+Alt+D)">guardar</button>
+      <button data-est="borrar" style="${BTN_EST}" title="borrar la lista de capturas de esta canción">borrar</button>
+    </div>
   `
   botonesEstadosEl.addEventListener('click', ev => {
     const b = ev.target.closest('[data-est]')
     if (!b) return
     const E = GP.estados
     if (!E) { console.warn('[GP tools] GP.estados no está cargado'); return }
-    if (b.dataset.est === 'suspender') E.suspender()
-    else if (b.dataset.est === 'copiar') E.copiar()
-    else if (b.dataset.est === 'guardar') E.guardarCapturas()
-    else if (b.dataset.est === 'reiniciar') E.reiniciar()
+    const acciones = {
+      siguiente: () => E.siguiente(), anterior: () => E.anterior(),
+      suspender: () => E.suspender(), reiniciar: () => E.reiniciar(),
+      copiar: () => E.copiar(), guardar: () => E.guardarCapturas(), borrar: () => E.borrarCapturas(),
+    }
+    if (acciones[b.dataset.est]) acciones[b.dataset.est]()
     b.blur()   // que Espacio/Enter no vuelvan a apretarlo sin querer
   })
-  // el ⏸ del cartel dice si está suspendido: el botón lo acompaña (también con el atajo o la consola)
+  // el ⏸ del cartel dice si está en pausa: el botón lo acompaña (también con el atajo o la consola)
   if (window._gpBotonesEstadosReloj) clearInterval(window._gpBotonesEstadosReloj)
   window._gpBotonesEstadosReloj = setInterval(() => {
     const susp = !!(cartelEl && cartelEl.textContent.startsWith('⏸'))
