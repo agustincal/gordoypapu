@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.15: movimiento menos suavizado y ajustable: reaccionRitmo 0.33→0.1 s ·
+// Actualizado: 21/10/2026 (v2.16: arreglo: al salir del choque la mitad derecha quedaba corrida para siempre
+//              (pantalla partida). Ahora vuelve a alinearse con la izquierda en ~0.3 s)
+//              21/10/2026 (v2.15: movimiento menos suavizado y ajustable: reaccionRitmo 0.33→0.1 s ·
 //              pasoSalto ~0.08 s · empuje del bombo con caída propia 0.15 s · cambio de sentido instantáneo)
 //              21/10/2026 (v2.14: sale el contraste. Movimiento en dos faders: F7 cómo avanza (continuo /
 //              a saltos / empuje del bombo) · F8 hacia dónde (ida y vuelta / choque en el centro / vertical))
@@ -67,7 +69,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.15'
+  const VERSION = 'v2.16'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -347,6 +349,8 @@
       const der = vd === 1 ? vel * (1 - 2 * C.direccion) : izq                         // choque: F8 = cuánto va al revés
       desplazamiento += k * izq
       desplDer += k * der
+      // fuera del choque, la derecha vuelve a alinearse con la izquierda (si no, quedaba corrida y la pantalla partida)
+      if (vd !== 1) desplDer += (desplazamiento - desplDer) * clamp(k / 0.1)
     }
     viajeColor += k * S.bajo.rate * C.colorama * 0.25   // F3 arriba y bajo a ritmo 1: una vuelta cada 4 s
 
