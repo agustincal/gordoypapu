@@ -4,7 +4,9 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.14: sale el contraste. Movimiento en dos faders: F7 cómo avanza (continuo /
+// Actualizado: 21/10/2026 (v2.15: movimiento menos suavizado y ajustable: reaccionRitmo 0.33→0.1 s ·
+//              pasoSalto ~0.08 s · empuje del bombo con caída propia 0.15 s · cambio de sentido instantáneo)
+//              21/10/2026 (v2.14: sale el contraste. Movimiento en dos faders: F7 cómo avanza (continuo /
 //              a saltos / empuje del bombo) · F8 hacia dónde (ida y vuelta / choque en el centro / vertical))
 //              21/10/2026 (v2.13: F7 velocidad sin saltos (el desplazamiento se acumula cuadro a cuadro) y
 //              sin costura (se corre con modulate, que no envuelve la imagen como scrollX))
@@ -65,7 +67,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.14'
+  const VERSION = 'v2.15'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -86,6 +88,9 @@
     caidaEnergia: 0.35, caidaBombo: 0.25, caidaCaja: 0.2, caidaHat: 0.1,
     silencio: 0.6,            // segundos sin notas (ni sostenidas ni ataques) para frenar el movimiento
     caidaRitmo: 1.5,          // segundos que tarda en frenar hasta quedar quieto
+    reaccionRitmo: 0.1,       // s: qué tan rápido la velocidad sigue al ritmo de las notas (antes 0.33)
+    pasoSalto: 0.025,         // F7 V2: s de cada paso (constante; ~3× = lo que tarda en frenar)
+    caidaEmpuje: 0.15,        // F7 V3: s de caída del acelerón del bombo (aparte del pulso de F6)
     maxSostenida: 8,          // segundos: una nota sostenida más que esto se da por suelta (en el ensayo hubo de 4 s)
     // faders
     pixelado: 0.5,            // F1 doble sentido: 0 = bloques enormes · 0.5 = como antes · 1 = pixel muy fino (responde lento a propósito)
@@ -207,6 +212,7 @@
     if (!(pieza in S.bateria)) return
     S.bateria[pieza] = v01
     if (pieza in S.golpeT) { S.golpeT[pieza] = performance.now(); S.golpeV[pieza] = v01 }
+    if (pieza === 'bombo') mov.empuje = v01   // F7 V3
   }
 
   // suelta todo lo que suena en una voz (al mutear, para que no quede una nota "sostenida" para siempre)
@@ -231,7 +237,7 @@
     // silencio: nada sostenido y hace rato que no hay ataques → la velocidad cae a 0
     const enSilencio = tNueva < 0 && ahora - v.tAtaque > C.silencio * 1000
     if (enSilencio) v.rate += (0 - v.rate) * clamp(k * 3 / Math.max(0.01, C.caidaRitmo))   // ~95% frenado en caidaRitmo s
-    else v.rate += (msToRate(ms) - v.rate) * clamp(k * 3)  // suaviza el ritmo
+    else v.rate += (msToRate(ms) - v.rate) * clamp(k / Math.max(0.01, C.reaccionRitmo))  // suaviza el ritmo
     v.phase += k * v.rate                                  // fase acumulada: sin saltos
     v.energy *= Math.exp(-k / C.caidaEnergia)
   }
@@ -241,7 +247,7 @@
   // F7 / F8: desplazamiento de las franjas principales, acumulado cuadro a cuadro
   // (cambiar un fader cambia la velocidad, no la posición). Izquierda y derecha por separado (choque en el centro)
   let desplazamiento = 0, desplDer = 0
-  const mov = { salto: 0, sentido: 1, multSentido: 1 }
+  const mov = { salto: 0, sentido: 1, multSentido: 1, empuje: 0 }
 
   // historial corto para la mitad derecha atrasada
   let historial = []
@@ -322,12 +328,12 @@
       const vv = C.verVelocidad | 0
       let vel
       if (vv === 1) {            // a saltos: cada nota del arpegio deja un paso que se recorre en ~0.1 s
-        const tramo = mov.salto * clamp(k / 0.08)
+        const tramo = mov.salto * clamp(k / Math.max(0.005, C.pasoSalto))
         mov.salto -= tramo
         vel = k > 0 ? tramo / k : 0
       } else if (vv === 2) {     // empuje del bombo: base lenta del arpegio + acelerón en cada bombo
         mov.salto = 0
-        vel = S.arpegio.rate * 0.2 + S.bateria.bombo * (0.5 + C.velocidad * 2.5)
+        vel = S.arpegio.rate * 0.2 + mov.empuje * (0.5 + C.velocidad * 2.5)
       } else {                   // continuo (como antes)
         mov.salto = 0
         vel = S.arpegio.rate * (0.2 + C.velocidad * 0.8)
@@ -335,7 +341,8 @@
       // F8 hacia dónde
       const vd = C.verDireccion | 0
       const objetivoSentido = vd === 0 && mov.sentido < 0 ? 1 - 2 * C.direccion : 1   // ida y vuelta: F8 = cuánto vuelve
-      mov.multSentido += (objetivoSentido - mov.multSentido) * clamp(k * 10)
+      mov.multSentido = objetivoSentido   // instantáneo
+      mov.empuje *= Math.exp(-k / Math.max(0.01, C.caidaEmpuje))
       const izq = vel * mov.multSentido
       const der = vd === 1 ? vel * (1 - 2 * C.direccion) : izq                         // choque: F8 = cuánto va al revés
       desplazamiento += k * izq

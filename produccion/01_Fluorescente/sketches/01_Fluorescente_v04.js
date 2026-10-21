@@ -82,6 +82,9 @@ V.init({
   verVelocidad: 0,   // V7 (botón arriba de F7): 0 = continuo · 1 = a saltos · 2 = empuje del bombo
   direccion: 0,      // F8: hacia dónde (en 0 no cambia nada)
   verDireccion: 0,   // V8 (botón arriba de F8): 0 = ida y vuelta · 1 = choque en el centro · 2 = vertical
+  reaccionRitmo: 0.1, // s: qué tan rápido el movimiento sigue al ritmo de las notas (más alto = más suave)
+  pasoSalto: 0.025,   // F7 V2: s de cada paso (más alto = más suave)
+  caidaEmpuje: 0.15,  // F7 V3: s de caída del acelerón del bombo
 
   // toggles
   rotar90: false,    // N11: toda la pantalla rotada 90°
