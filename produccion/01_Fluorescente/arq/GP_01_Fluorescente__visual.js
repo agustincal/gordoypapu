@@ -4,7 +4,8 @@
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.2: F2 con versiones textura / mandala / gira; desde ahora cada cambio sube la versión)
+// Actualizado: 21/10/2026 (v2.3: F3 colorama con versiones textura fija / altura del bajo / viaja con el bajo)
+//              21/10/2026 (v2.2: F2 con versiones textura / mandala / gira; desde ahora cada cambio sube la versión)
 //              21/10/2026 (v2.1: en silencio el movimiento frena · F1 pixelado de doble
 //              sentido + 3 versiones (textura / todo / tiras) · F2 kaleid con 3 versiones
 //              (textura / mandala / gira) — copia de trabajo,
@@ -45,7 +46,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.2'
+  const VERSION = 'v2.3'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -72,7 +73,8 @@
     verPixelado: 0,           // V1 (botón arriba de F1): 0 = textura · 1 = todo · 2 = tiras verticales
     kaleid: 0,                // F2: simetría extra
     verKaleid: 0,             // V2 (botón arriba de F2): 0 = textura · 1 = mandala · 2 = gira
-    colorama: 0,              // cuánto viaja el color (fuerte: subir con cuidado)
+    colorama: 0,              // F3: corrimiento de color (fuerte: subir con cuidado)
+    verColorama: 0,           // V3 (botón arriba de F3): 0 = fijo · 1 = altura del bajo · 2 = viaja con el bajo
     deformacion: 0,           // modulate del bajo (0 = recto)
     flash: 0,                 // cuánto flashea cada golpe de caja
     pulso: 0,                 // cuánto pulsa cada golpe de bombo
@@ -188,6 +190,9 @@
     v.energy *= Math.exp(-k / C.caidaEnergia)
   }
 
+  // V3 viaja: el color avanza con la velocidad del bajo (en silencio frena). Sin envolver: se envuelve al usarlo
+  let viajeColor = 0
+
   // historial corto para la mitad derecha atrasada
   let historial = []
   let atrasado = null
@@ -196,6 +201,7 @@
     arpPitch: S.arpegio.pitch, arpPhase: S.arpegio.phase, arpEnergy: S.arpegio.energy,
     rgb: [S.rgb[0], S.rgb[1], S.rgb[2]],
     bassPitch: S.bajo.pitch, bassPhase: S.bajo.phase, bassEnergy: S.bajo.energy,
+    viaje: viajeColor,
     bombo: S.bateria.bombo, caja: S.bateria.caja, hat: S.bateria.hat,
   })
   const leerHistorial = (ahora) => {
@@ -211,6 +217,7 @@
       arpPitch: m(a.arpPitch, b.arpPitch), arpPhase: m(a.arpPhase, b.arpPhase), arpEnergy: m(a.arpEnergy, b.arpEnergy),
       rgb: [m(a.rgb[0], b.rgb[0]), m(a.rgb[1], b.rgb[1]), m(a.rgb[2], b.rgb[2])],
       bassPitch: m(a.bassPitch, b.bassPitch), bassPhase: m(a.bassPhase, b.bassPhase), bassEnergy: m(a.bassEnergy, b.bassEnergy),
+      viaje: m(a.viaje, b.viaje),
       bombo: m(a.bombo, b.bombo), caja: m(a.caja, b.caja), hat: m(a.hat, b.hat),
     }
   }
@@ -231,6 +238,7 @@
     for (let i = 0; i < 3; i++) S.rgb[i] += (S.rgbObjetivo[i] - S.rgb[i]) * clamp(k * 8)   // color con glissando
 
     pixeladoSuave += (C.pixelado - pixeladoSuave) * C.suavizadoPixelado
+    viajeColor += k * S.bajo.rate * C.colorama * 0.25   // F3 arriba y bajo a ritmo 1: una vuelta cada 4 s
 
     historial.push(muestra(ahora))
     while (historial.length > 1 && ahora - historial[0].t > C.delayMs + 500) historial.shift()
@@ -252,6 +260,7 @@
     bassPitch:  () => S.bajo.pitch,
     bassPhase:  () => S.bajo.phase,
     bassEnergy: () => S.bajo.energy,
+    viaje:      () => viajeColor,
     bombo:      () => S.bateria.bombo,
     caja:       () => S.bateria.caja,
     hat:        () => S.bateria.hat,
@@ -293,6 +302,17 @@
   const ladosTextura = () => (verK() === 0 ? 2 + C.kaleid * 6 : verK() === 2 ? LADOS_GIRA : 2)
   const giroKaleid = (e) => (verK() === 2 ? e.arpPhase() * C.kaleid * 1.5 : 0)
 
+  // versiones de F3 (como parámetros, sin cortes)
+  //   V3 = 0 fijo:   el corrimiento lo da sólo F3 (como antes)
+  //        1 altura: cada nota del bajo fija el corrimiento (grave = poco, agudo = mucho) y queda hasta la próxima; F3 = rango
+  //        2 viaja:  el color recorre la rueda mientras suena el bajo (notas cortas = más rápido; en silencio frena); F3 = velocidad
+  const verC = () => (C.verColorama | 0)
+  const corrimiento = (e) => {
+    if (verC() === 1) return 0.005 + C.colorama * 0.3 * e.bassPitch()
+    if (verC() === 2) return 0.005 + (e.viaje() % 1)
+    return 0.005 + C.colorama * 0.3
+  }
+
   const mitad = (e, anguloExtra, mandala) => {
     let c = osc(() => 3 + e.arpPitch() * 30, 0, 0)
       .scrollX(() => e.arpPhase() * (0.2 + C.velocidad * 0.8))
@@ -304,7 +324,7 @@
           .kaleid(() => ladosTextura())
           .rotate(() => giroKaleid(e))   // V2 gira (en las otras: 0)
       )
-      .colorama(() => 0.005 + C.colorama * 0.3)
+      .colorama(() => corrimiento(e))
       .luma()
       .modulate(
         osc(() => 2 + e.bassPitch() * 6, 0, 0)
