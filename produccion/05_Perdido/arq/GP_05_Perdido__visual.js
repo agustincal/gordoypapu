@@ -5,7 +5,10 @@
 //      modular (Sandin Image Processor / LZX): el video entra, pasa por 8 etapas
 //      en fila y sale. Cada etapa es una columna del Akai.
 // Depende de: GP_midi (LEDs y faders), GP_estados (opcional), GP_tools (opcional, panel)
-// Actualizado: 2026-10-22 (v1.0: primera versión)
+// Actualizado: 2026-10-22 (v1.2: el video se elige por nombre ('lluvia') o número; los estados usan el nombre
+//              para que el fundido no pase por los videos del medio)
+//              2026-10-22 (v1.1: SHIFT + fader = contraste de la columna · los faders los maneja el motor, con toma suave)
+//              2026-10-22 (v1.0: primera versión)
 // ============================================================
 //
 // La idea en el Akai
@@ -20,6 +23,7 @@
 //   SHIFT + botón de abajo = modo de la etapa: Transformación ↔ Mezcla.
 //   82 bajo · 83 batería · 84 melodía · 85 extra = entradas MIDI (prendida / apagada)
 //   86 = modo asignación (pad → entrada)
+//   SHIFT + fader = contraste de esa etapa (al medio = neutro)
 //   SHIFT + 82..85 = video 1..4 · SHIFT solo (tocar y soltar) = ocultar código y paneles
 //   87 / 88 estados (GP_estados) · 89 grabador (GP_tools) · FMASTER fundido a negro (GP_midi)
 //
@@ -50,7 +54,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.0'
+  const VERSION = 'v1.2'
 
   if (GP.perdido && GP.perdido._version === VERSION) return
 
@@ -65,7 +69,8 @@
   const DEFAULTS = {
     bpm: 70,                    // tempo propio si no llega clock MIDI
     videos: [],                 // URLs de los videos (hasta 4: s0..s3)
-    video: 0,                   // cuál se ve (0..3) · SHIFT + 82..85
+    video: 0,                   // cuál se ve: nombre del archivo sin .mp4 ('lluvia') o número 0..3 · SHIFT + 82..85
+                                //   en los estados usá el nombre: un número se fundiría pasando por los del medio
     encuadre: 'llenar',         // 'llenar' (recorta, sin deformar) · 'repetir' (entero, repetido) · 'estirar'
     velVideo: 1,                // velocidad de reproducción del video
 
@@ -74,6 +79,11 @@
     cadena: ['-', '-', '-', '-', '-', '-', '-', '-'],
     modo: 'TTTTTTTT',           // T transformación · M mezcla, una letra por etapa
     f1: 0.5, f2: 0.5, f3: 0.5, f4: 0.5, f5: 0.5, f6: 0.5, f7: 0.5, f8: 0.5,   // intensidad de cada etapa (F1..F8)
+    c1: 0, c2: 0, c3: 0, c4: 0, c5: 0, c6: 0, c7: 0, c8: 0,                   // contraste a la salida de cada etapa (SHIFT + F1..F8)
+                                                                              //   -1 lavado · 0 neutro · 1 duro
+    contrasteMax: 1.6,          // cuánto llega el contraste en los extremos (1.6 → ×0.33 / ×3)
+    suavizarFader: 0.08,        // segundos que tarda un valor en seguir al fader
+    tomaSuave: 0.04,            // después de usar SHIFT, el fader vuelve a mandar recién cuando pasa por su valor
 
     // cómo responden los módulos a la música
     reposo: 0.25,               // con entrada asignada: cuánto queda del efecto cuando no suena (0..1)
@@ -281,7 +291,7 @@
   }
 
   let aplicado = { cadena: null, modo: null, video: null, encuadre: null }
-  const firma = () => JSON.stringify([C.cadena, C.modo, C.video, C.encuadre])
+  const firma = () => JSON.stringify([C.cadena, C.modo, videoIdx(), C.encuadre])
   let ultimaFirma = ''
 
   // texto de C → columnas
@@ -314,16 +324,29 @@
   // ============================================================
   const salidaDe = x => typeof x === 'string' ? window[x] : x
   const fuenteDe = n => window['s' + Math.max(0, Math.min(3, n | 0))]
+  // nombre corto de cada video: el archivo sin carpeta ni extensión ('…/lluvia.mp4?x' → 'lluvia')
+  const nombreVideo = i => String((C.videos || [])[i] || '').split(/[?#]/)[0].split('/').pop().replace(/\.[a-z0-9]+$/i, '').toLowerCase()
+  const videoIdx = () => {
+    const v = C.video
+    if (typeof v === 'string' && !/^\d+$/.test(v)) {
+      const i = (C.videos || []).findIndex((_, k) => nombreVideo(k) === v.toLowerCase())
+      if (i >= 0) return i
+      if (!videoIdx._avisado) { videoIdx._avisado = true; console.warn(`[GP perdido] no hay un video "${v}" (${(C.videos || []).map((_, k) => nombreVideo(k)).join(', ')})`) }
+      return 0
+    }
+    return Math.max(0, Math.min(3, Math.round(Number(v) || 0)))
+  }
+  V.videoActual = () => ({ numero: videoIdx(), nombre: nombreVideo(videoIdx()) })
 
   const aspecto = () => {
-    const s = fuenteDe(C.video)
+    const s = fuenteDe(videoIdx())
     const v = s && s.src
     const vw = v && (v.videoWidth || v.width), vh = v && (v.videoHeight || v.height)
     const W = (typeof width !== 'undefined' && width) || 1280, H = (typeof height !== 'undefined' && height) || 720
     return vw && vh ? (vw / vh) / (W / H) : 1     // < 1: el video es más angosto que la pantalla
   }
   const fuente = () => {
-    const s = src(fuenteDe(C.video))
+    const s = src(fuenteDe(videoIdx()))
     if (C.encuadre === 'estirar') return s
     const a = aspecto()
     if (C.encuadre === 'repetir') return s.scale(1, Math.min(1, a), Math.min(1, 1 / a))
@@ -368,8 +391,9 @@
           // la memoria copia lo que entra a esta etapa cada vez que hay un golpe
           src(mem).blend(entrada(), () => col.captura > 0 ? 1 : 0).out(mem)
         }
-        if (col.modo === 'M') fab = () => entrada().blend(mod.fx(entrada, p), () => col.int)
-        else fab = () => mod.fx(entrada, p)
+        const con = () => Math.pow(2, Math.max(-1, Math.min(1, Number(C['c' + (i + 1)]) || 0)) * C.contrasteMax)
+        if (col.modo === 'M') fab = () => entrada().blend(mod.fx(entrada, p), () => col.int).contrast(con)
+        else fab = () => mod.fx(entrada, p).contrast(con)
       }
       fab().out(salida)
       for (const o of libres) solid(0, 0, 0, 1).out(o)          // los buffers que sobran no gastan
@@ -410,7 +434,7 @@
           if (v && v !== antes && v.videoWidth) {
             try { v.playbackRate = C.velVideo } catch (_) {}
             console.info(`[GP perdido] video ${i + 1} listo (${v.videoWidth}×${v.videoHeight})`)
-            if (i === (C.video | 0)) compilar()
+            if (i === videoIdx()) compilar()
             return
           }
           if (performance.now() - t0 > 30000) { console.warn(`[GP perdido] el video ${i + 1} no cargó: ${url}`); return }
@@ -422,10 +446,12 @@
   }
   V.video = (n) => {
     const total = Math.max(1, Math.min(4, (C.videos || []).length))
-    C.video = ((n | 0) % total + total) % total
+    const i = typeof n === 'string' && !/^\d+$/.test(n) ? (C.video = n, videoIdx()) : ((n | 0) % total + total) % total
+    C.video = nombreVideo(i) || i          // por nombre: así una captura de estado lo guarda como texto
     ultimaFirma = firma()
+    aplicado.video = i
     compilar()
-    console.info(`[GP perdido] video ${C.video + 1}`)
+    console.info(`[GP perdido] video ${i + 1} · ${nombreVideo(i)}`)
     return V
   }
 
@@ -614,6 +640,7 @@
         : d1 >= 82 && d1 <= 89 ? `botón de la derecha ${d1}` : d1 === 98 ? 'SHIFT' : `nota ${d1}`
       console.log(`[Akai] ${on ? 'on ' : off ? 'off' : '   '} ${que}  · [${[...data].join(', ')}]`)
     }
+    if (tipo === 0xb0 && d1 >= 48 && d1 <= 55) { moverFader(d1 - 48); return }
     if (d1 === 98 && (on || off)) {
       if (on) { A.shift = true; A.shiftUsado = false; A.shiftT = performance.now() }
       else {
@@ -637,6 +664,39 @@
       pintarEntrada(ent)
       console.info(`[GP perdido] entrada ${ent} ${e.on ? 'prendida' : 'APAGADA'}`)
     }
+  }
+
+  // ============================================================
+  // Faders: F1..F8 = intensidad · SHIFT + F1..F8 = contraste
+  //   El fader manda desde que lo movés (llega suave al valor). Al entrar a un estado,
+  //   el estado vuelve a mandar hasta que lo muevas otra vez.
+  //   Toma suave: si usaste SHIFT con ese fader, quedó en la posición del contraste;
+  //   la intensidad no salta: el fader vuelve a mandar cuando pasa por el valor que tenía.
+  // ============================================================
+  const FD = window._perdidoFaders || (window._perdidoFaders = Array.from({ length: 8 }, () => ({ mano: false, obj: 0, cMano: false, cObj: 0, pick: false, ultimo: null })))
+  const moverFader = (i) => {
+    const raw = GP.midi && GP.midi.fader ? GP.midi.fader('F' + (i + 1)) : 0
+    const x = clamp01(raw / 127)
+    const fd = FD[i]
+    if (A.shift) {
+      A.shiftUsado = true
+      fd.cMano = true
+      fd.cObj = x * 2 - 1
+      fd.pick = true
+      fd.ultimo = x
+      return
+    }
+    const actual = Number(C['f' + (i + 1)]) || 0
+    if (fd.pick) {
+      const cruzo = fd.ultimo != null && (fd.ultimo - actual) * (x - actual) <= 0
+      fd.ultimo = x
+      if (!cruzo && Math.abs(x - actual) > C.tomaSuave) return
+      fd.pick = false
+      console.info(`[GP perdido] F${i + 1} vuelve a mandar la intensidad`)
+    }
+    fd.mano = true
+    fd.obj = x
+    fd.ultimo = x
   }
 
   // todo lo que entra por MIDI (llamar desde GP.midi.alMensaje)
@@ -681,12 +741,18 @@
       const videoAntes = aplicado.video
       aplicarCadena()
       escribirCadena()
-      aplicado.video = C.video
+      aplicado.video = videoIdx()
       compilar()
       pintarTodo()
-      if (videoAntes !== C.video) console.info(`[GP perdido] video ${(C.video | 0) + 1}`)
+      if (videoAntes !== videoIdx()) console.info(`[GP perdido] video ${videoIdx() + 1} · ${nombreVideo(videoIdx())}`)
     }
 
+    const kf = 1 - Math.exp(-dt / Math.max(0.005, C.suavizarFader))
+    for (let c = 0; c < 8; c++) {
+      const fd = FD[c]
+      if (fd.mano) C['f' + (c + 1)] = (Number(C['f' + (c + 1)]) || 0) + (fd.obj - (Number(C['f' + (c + 1)]) || 0)) * kf
+      if (fd.cMano) C['c' + (c + 1)] = (Number(C['c' + (c + 1)]) || 0) + (fd.cObj - (Number(C['c' + (c + 1)]) || 0)) * kf
+    }
     for (let c = 0; c < 8; c++) {
       const col = cols[c]
       const v = C['f' + (c + 1)]
@@ -715,6 +781,7 @@
 
   // golpe a todas las etapas (cambio de estado)
   V.alEntrarEstado = () => {
+    FD.forEach(fd => { fd.mano = false; fd.cMano = false })     // el estado vuelve a mandar hasta que muevas el fader
     if (!C.golpeAlCambiar) return
     for (let c = 0; c < 8; c++) { cols[c].env = 1; cols[c].autoEnv = 1; cols[c].r = Math.random(); cols[c].s = Math.random() * 2 - 1; cols[c].captura = 2 }
   }
@@ -741,10 +808,13 @@
       const f = FAMILIAS[col.fam]
       const barra = '▮'.repeat(Math.round(col.int * 8)).padEnd(8, '·')
       const pulso = (col.entrada ? col.env : col.autoEnv) > 0.4 ? '●' : ' '
-      return `${n} ${col.modo} ${(f.id + ' · ' + f.variantes[col.var].id).padEnd(21)} ${barra} ${pulso} ${col.entrada || 'sola'}`
+      const cv = Number(C['c' + (c + 1)]) || 0
+      const con = Math.abs(cv) < 0.02 ? '    ' : `c${cv > 0 ? '+' : '-'}${Math.abs(cv).toFixed(1)}`
+      const pk = FD[c].pick ? '↕' : ' '
+      return `${n} ${col.modo} ${(f.id + ' · ' + f.variantes[col.var].id).padEnd(21)} ${barra}${pk} ${con} ${pulso} ${col.entrada || 'sola'}`
     })
     const entradas = NOMBRES_ENTRADA().map(nm => `${nm}${inp(nm).on ? '' : ' (apagada)'}`).join(' · ')
-    const cab = `PERDIDO · video ${(C.video | 0) + 1} · ${Math.round(bpmActual())} bpm${hayClock() ? ' (clock)' : ''}${A.asignar ? '  · ASIGNACIÓN' + (A.armado ? ` → ${FAMILIAS[A.armado.f].id} col ${A.armado.c + 1}: tocá 82-85` : ': elegí un pad') : ''}`
+    const cab = `PERDIDO · video ${videoIdx() + 1} ${nombreVideo(videoIdx())} · ${Math.round(bpmActual())} bpm${hayClock() ? ' (clock)' : ''}${A.asignar ? '  · ASIGNACIÓN' + (A.armado ? ` → ${FAMILIAS[A.armado.f].id} col ${A.armado.c + 1}: tocá 82-85` : ': elegí un pad') : ''}`
     hud.textContent = [cab, ...lineas, entradas].join('\n')
   }
 
@@ -772,7 +842,7 @@
     cargarVideos()
     aplicarCadena()
     escribirCadena()
-    aplicado.video = C.video
+    aplicado.video = videoIdx()
     return V
   }
 
