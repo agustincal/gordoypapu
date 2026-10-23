@@ -7,7 +7,9 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 23/10/2026 (v3.1: versiones por fader con los botones 64-71, tomadas de los
+// Actualizado: 23/10/2026 (v3.3: F3 V2 = mosaico — el fader elige cuántas caras: 0 nada · 2 espejo … 6 hexágono)
+//              23/10/2026 (v3.2: el imán es sólo el fader F7, siempre activo — sin el toggle usaIman / N12)
+//              23/10/2026 (v3.1: versiones por fader con los botones 64-71, tomadas de los
 //              efectos de Perdido · curva pareja de pixelado · invertir con el canal 2 / fila 6 ·
 //              color con el canal 9 / fila 5 · F8 feedback · recompila al cambiar de versión)
 //              16/10/2026 (v3.0: versión LIVE — los estados, el takeover de faders y el ruteo
@@ -35,7 +37,7 @@
 // (salvo el pixelado, que tiene la curva nueva):
 //   verJitter     0 temblor · 1 rasgado (con cada recuadro) · 2 franjas
 //   verPixelado   0 pixelado · 1 bloques (con cada recuadro) · 2 poster
-//   verMarco      0 marco del recuadro · 1 + caleidoscopio en toda la pantalla
+//   verMarco      0 marco del recuadro · 1 + mosaico en toda la pantalla (fader: 0 nada → 1 hexágono)
 //   verTinte      0 tríada · 1 tono · 2 canales (RGB corrido)
 //   verMalaSenal  0 banda + costura · 1 vhs · 2 rueda (rolling vertical)
 //   verFeedback   0 túnel · 1 giro · 2 sandin (cambia de color)
@@ -45,7 +47,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.1'
+  const VERSION = 'v3.3'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -60,11 +62,11 @@
     // faders
     jitter: 0,          // F1: distorsión / temblor del recuadro
     pixelado: 0,        // F2: pixelado (fuerte: usarlo poco)
-    marco: 0,           // F3: tamaño del marco del recuadro (en V2, además, caleidoscopio)
+    marco: 0,           // F3: tamaño del marco del recuadro (en V2, además, mosaico)
     tinte: 0,           // F4: cuánto tiñe el color de la paleta
     malaSenal: 0,       // F5: mala señal de TV
     zoom: 0,            // F6: zoom del contenido adentro del marco
-    iman: 0,            // F7: imán (sólo con usaIman y voz en el mic)
+    iman: 0,            // F7: imán con la voz del mic (siempre activo: en 0 no hace nada)
     feedback: 0,        // F8: feedback sobre el collage (0 = nada)
     // versiones (botones 64-71, a través de GP_estados)
     verJitter: 0,
@@ -75,7 +77,6 @@
     verFeedback: 0,
     // toggles
     usaBarrido: false,  // N11: el recuadro entra barriendo desde afuera
-    usaIman: true,      // N12: la voz deforma la imagen con el imán
     siguenRitmo: false, // N13: jitter y mala señal laten con los disparos (en vez de quedar parejos)
     // color
     colorBase: 0,       // 0 a 1 = un color de la rueda; cada recuadro toma uno de su tríada
@@ -375,7 +376,7 @@
     return base + (destino - base) * g() * Math.min(1, C.pixelado * 2)
   }
   const escalaExtra = () => 1 + Math.pow(C.zoom, 3) * 40 * rect.escalaAparicion
-  const imanFuerza = () => (C.usaIman ? voz() * C.iman * C.iman : 0)
+  const imanFuerza = () => voz() * C.iman * C.iman
 
   const iman = () => shape(64, 0.2, 0.9)
     .scroll(() => 0.015 * Math.sin(time * 0.4), () => 0.015 * Math.cos(time * 0.3))
@@ -403,6 +404,10 @@
     if (v === 2) return src(out).scale(() => 1 + 0.015 * f()).hue(() => 0.04 * f())
     return src(out).scale(() => 1 + 0.04 * f())
   }
+
+  // F3 V2, mosaico: con el fader en 0 no hace nada; al subir, 2 caras (espejo), 3, 4, 5 y arriba 6 (hexágono)
+  const mosaicoLados = () => 2 + Math.round(clamp01(C.marco) * 4)
+  const mosaicoMezcla = () => clamp01(C.marco / 0.05)
 
   const firma = () => Object.keys(CUANTAS).map(ver).join('')
 
@@ -445,9 +450,9 @@
       .modulate(iman(), imanFuerza)
       .out(out)
 
-    // --- 2. salida final (o1): caleidoscopio, mala señal, color del canal 9, invertir ---
+    // --- 2. salida final (o1): mosaico, mala señal, color del canal 9, invertir ---
     let fin = vM === 1
-      ? src(out).blend(src(out).kaleid(4).rotate(() => time * 0.03), () => C.marco)
+      ? src(out).blend(src(out).kaleid(mosaicoLados).rotate(() => time * 0.03), mosaicoMezcla)
       : src(out)
 
     // F5 mala señal

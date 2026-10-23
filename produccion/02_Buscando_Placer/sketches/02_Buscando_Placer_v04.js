@@ -13,6 +13,8 @@
 //              23/10/2026 (v04, producción, sobre LIVE v02): versiones por fader (botones 64-71) ·
 //              imán ↔ mala señal (imán F7, mala señal F5) · F8 feedback · canal 2 / fila 6 = invertir ·
 //              canal 9 / fila 5 = color · pixelado con curva pareja
+//              23/10/2026 (motor v3.2): el imán es sólo F7, siempre activo; N12 queda libre
+//              23/10/2026 (motor v3.3): F3 V2 = mosaico (fader: 0 nada → 1 hexágono)
 // ============================================================
 
 // ---- carga de scripts ----
@@ -78,16 +80,15 @@ V.init({
   // faders
   jitter: 0,           // F1: distorsión / temblor del recuadro
   pixelado: 0.05,      // F2: pixelado. Fuerte: alto sólo en 1-2 momentos de la canción (curva nueva: revisar los estados 8 y 12)
-  marco: 0,            // F3: tamaño del marco del recuadro (V2: además, caleidoscopio en toda la pantalla)
+  marco: 0,            // F3: tamaño del marco del recuadro (V2: además, mosaico en toda la pantalla: 0 nada → 1 hexágono)
   tinte: 0,            // F4: cuánto tiñe el color
   malaSenal: 0,        // F5: mala señal de TV (por defecto se toca a mano)
   zoom: 0,             // F6: zoom del contenido (además, cada recuadro aparece con zoom)
-  iman: 0,             // F7: imán con la voz
+  iman: 0,             // F7: imán con la voz (siempre activo: el fader en 0 lo apaga)
   feedback: 0,         // F8: feedback sobre el collage (V1 túnel · V2 giro · V3 sandin)
 
   // toggles
   usaBarrido: false,   // N11: el recuadro entra barriendo
-  usaIman: true,       // N12: la voz deforma la imagen
   siguenRitmo: false,  // N13: jitter y mala señal laten con los recuadros
 
   colorBase: 0,        // color de la rueda (0 a 1); cada recuadro toma uno de su tríada
@@ -117,12 +118,11 @@ const CONTROLES = {
   // versiones: el botón redondo arriba de cada fader pasa a la siguiente (V1 → V2 → V3)
   verJitter:    'V1',  // F1: temblor · rasgado · franjas
   verPixelado:  'V2',  // F2: pixelado · bloques · poster
-  verMarco:     'V3',  // F3: marco · marco + caleidoscopio
+  verMarco:     'V3',  // F3: marco · marco + mosaico
   verTinte:     'V4',  // F4: tríada · tono · canales
   verMalaSenal: 'V5',  // F5: banda · vhs · rueda
   verFeedback:  'V8',  // F8: túnel · giro · sandin
   usaBarrido:  'N11',
-  usaIman:     'N12',
   siguenRitmo: 'N13',
   // mutes por fila (true = muteado): un canal muteado no hace nada (los pads a mano siguen andando)
   muteCanal1:  'M8',
@@ -149,15 +149,15 @@ const BASE_CANALES = { muteCanal1: false, muteCanal10: true, muteCanal2: false, 
 // ============================================================
 const ESTADOS = [
   /*  1 */ { nombre: 'arranque simple',               pixelado: 0, malaSenal: 0.10, siguenRitmo: true },
-  /*  2 */ { nombre: 'sigue simple, crece un poco',   marco: 0.28, zoom: 0.90, usaIman: false, colorBase: 0.08, siguenRitmo: true },
-  /*  3 */ { nombre: 'simple, crece más',             marco: 0.36, zoom: 0.08, usaIman: false, colorBase: 0.15 },
+  /*  2 */ { nombre: 'sigue simple, crece un poco',   marco: 0.28, zoom: 0.90, colorBase: 0.08, siguenRitmo: true },
+  /*  3 */ { nombre: 'simple, crece más',             marco: 0.36, zoom: 0.08, colorBase: 0.15 },
   /*  4 */ { nombre: 'repite el 3',                   como: 3 },
   /*  5 */ { nombre: 'cambio fuerte',                 jitter: 0.60, pixelado: 0.10, marco: 0.55, tinte: 0.40, iman: 0.30, zoom: 0.65, usaBarrido: true, colorBase: 0.40 },
   /*  6 */ { nombre: 'se calma',                      jitter: 0.10, marco: 0.45, tinte: 0.15, iman: 0.10, zoom: 0.10, colorBase: 0.45 },
   /*  7 */ { nombre: 'sube la intensidad',            jitter: 0.35, pixelado: 0.10, marco: 0.60, tinte: 0.35, iman: 0.35, zoom: 0.15, usaBarrido: true, colorBase: 0.52 },
   /*  8 */ { nombre: 'momento mágico',                jitter: 0.75, pixelado: 0.75, marco: 0.65, tinte: 0.45, iman: 0.45, zoom: 0.70, usaBarrido: true, colorBase: 0.60 },
   /*  9 */ { nombre: 'bajada fuerte',                 jitter: 0.10, marco: 0.35, tinte: 0.15, iman: 0.10, zoom: 0.10, colorBase: 0.68 },
-  /* 10 */ { nombre: 'mínimo, casi apagado',          marco: 0.20, tinte: 0.05, zoom: 0.05, usaIman: false, colorBase: 0.75 },
+  /* 10 */ { nombre: 'mínimo, casi apagado',          marco: 0.20, tinte: 0.05, zoom: 0.05, colorBase: 0.75 },
   /* 11 */ { nombre: 'se siente que viene el pico',   jitter: 0.45, pixelado: 0.10, marco: 0.55, tinte: 0.35, iman: 0.40, zoom: 0.15, usaBarrido: true, colorBase: 0.83 },
   /* 12 */ { nombre: 'explota al máximo',             jitter: 1.00, pixelado: 0.75, marco: 1.00, tinte: 0.85, iman: 1.00, zoom: 0.80, usaBarrido: true, colorBase: 0.90 },
   /* 13 */ { nombre: 'cierre',                        jitter: 0.20, marco: 0.50, tinte: 0.30, iman: 0.20, zoom: 0.10, colorBase: 0.97 },
@@ -175,13 +175,13 @@ const ESTADOS = [
 //   fila 4 → libre
 //   Filas 8 y 7: cada nota de un canal activo = un recuadro nuevo. Cualquier pad a mano = un recuadro
 //   (soltarlo antes de que termine de entrar lo deja caer en su lugar).
-//   N11 / N12 / N13 = barrido / imán / jitter y mala señal laten con los recuadros
+//   N11 / N13 = barrido / jitter y mala señal laten con los recuadros (N12 libre: el imán es sólo F7)
 //   F1 jitter · F2 pixelado · F3 marco · F4 tinte · F5 mala señal · F6 zoom · F7 imán · F8 feedback
 //   Botones redondos 64-71 (arriba de cada fader) = versión del efecto (F1, F2, F3, F4, F5, F8)
 //   87 / 88 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N12', 'N13'])
+GP.midi.buttons(['N11', 'N13'])
 GP.midi.versiones({ F1: 3, F2: 3, F3: 2, F4: 3, F5: 3, F8: 3 })   // igual que V.CUANTAS del motor
 GP.midi.filas({
   8: { canal: 1, rango: [26, 61] },
