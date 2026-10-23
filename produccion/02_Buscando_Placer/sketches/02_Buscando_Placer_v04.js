@@ -15,6 +15,8 @@
 //              canal 9 / fila 5 = color · pixelado con curva pareja
 //              23/10/2026 (motor v3.2): el imán es sólo F7, siempre activo; N12 queda libre
 //              23/10/2026 (motor v3.3): F3 V2 = mosaico (fader: 0 nada → 1 hexágono)
+//              23/10/2026: 7 estados de prueba (ESTADOS_PRUEBA) para el ensayo de 3:48; los 13 de la canción
+//              quedan en ESTADOS_CANCION. Canales 2 y 9 muteados de base; se abren en las partes donde entran.
 // ============================================================
 
 // ---- carga de scripts ----
@@ -132,10 +134,10 @@ const CONTROLES = {
 }
 
 // base de los mutes: los recuadros los dispara sólo el canal 1 (bajo); el bombo queda muteado.
-// El canal 2 invierte y el 9 cambia el color: de base los dos activos.
-// Para probar opciones por estado, anotá el mute en ese estado: { ..., muteCanal2: true } = ahí no invierte.
+// El canal 2 (invierte) y el 9 (color) quedan muteados de base: cada estado los abre donde entran
+// ({ ..., muteCanal2: false } = en ese estado invierte).
 // En vivo: 83 / 84 / 85 los prenden o apagan hasta el próximo cambio de estado.
-const BASE_CANALES = { muteCanal1: false, muteCanal10: true, muteCanal2: false, muteCanal9: false }
+const BASE_CANALES = { muteCanal1: false, muteCanal10: true, muteCanal2: true, muteCanal9: true }
 
 
 // ============================================================
@@ -147,7 +149,7 @@ const BASE_CANALES = { muteCanal1: false, muteCanal10: true, muteCanal2: false, 
 // Reglas: pixelado alto sólo en 1-2 momentos · zoom alto sólo en acentos ·
 //         mala señal se toca a mano · un estado que repite a otro copia su color.
 // ============================================================
-const ESTADOS = [
+const ESTADOS_CANCION = [
   /*  1 */ { nombre: 'arranque simple',               pixelado: 0, malaSenal: 0.10, siguenRitmo: true },
   /*  2 */ { nombre: 'sigue simple, crece un poco',   marco: 0.28, zoom: 0.90, colorBase: 0.08, siguenRitmo: true },
   /*  3 */ { nombre: 'simple, crece más',             marco: 0.36, zoom: 0.08, colorBase: 0.15 },
@@ -162,6 +164,37 @@ const ESTADOS = [
   /* 12 */ { nombre: 'explota al máximo',             jitter: 1.00, pixelado: 0.75, marco: 1.00, tinte: 0.85, iman: 1.00, zoom: 0.80, usaBarrido: true, colorBase: 0.90 },
   /* 13 */ { nombre: 'cierre',                        jitter: 0.20, marco: 0.50, tinte: 0.30, iman: 0.20, zoom: 0.10, colorBase: 0.97 },
 ]
+
+// ============================================================
+// ESTADOS DE PRUEBA — las 7 partes del ensayo de 3:48 (ensayo/ensayo 3/…_toma3m47).
+// Cada parte prueba algunas versiones nuevas. Antes de dar ▶ al reproductor: GP.estados.reiniciar()
+//   parte 1  0:01  bombo solo, el bajo casi no toca
+//   parte 2  0:18  entra el bajo (poco)
+//   parte 3  0:53  bajo completo + teclado (canal 2)
+//   parte 4  1:29  bajo con notas largas + canal 9
+//   parte 5  2:04  bajo completo + canal 9 + teclado (desde 2:20)
+//   parte 6  2:39  bajo completo, el canal 9 se apaga
+//   parte 7  3:14  bajo completo, cierre
+// Versiones: 0 = V1 · 1 = V2 · 2 = V3
+// ============================================================
+const ESTADOS_PRUEBA = [
+  /* 1 */ { nombre: '1 · intro: túnel (F8 V1)',
+            feedback: 0.3, verFeedback: 0, malaSenal: 0.1, siguenRitmo: true, colorBase: 0.00 },
+  /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2)',
+            marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, colorBase: 0.08 },
+  /* 3 */ { nombre: '3 · teclado: invierte + bloques (F2 V2) + canales (F4 V3)', muteCanal2: false,
+            marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20 },
+  /* 4 */ { nombre: '4 · notas largas: color + mosaico (F3 V2) + sandin (F8 V3)', muteCanal9: false,
+            marco: 0.5, verMarco: 1, zoom: 0.2, feedback: 0.4, verFeedback: 2, colorBase: 0.40, fundido: 1 },
+  /* 5 */ { nombre: '5 · todo: invierte + color + rasgado (F1 V2) + rueda (F5 V3)', muteCanal2: false, muteCanal9: false,
+            marco: 0.6, jitter: 0.6, verJitter: 1, malaSenal: 0.4, verMalaSenal: 2, tinte: 0.3, iman: 0.5, usaBarrido: true, colorBase: 0.55 },
+  /* 6 */ { nombre: '6 · baja: tono (F4 V2) + poster (F2 V3)',
+            marco: 0.4, jitter: 0.1, tinte: 0.5, verTinte: 1, pixelado: 0.4, verPixelado: 2, colorBase: 0.70 },
+  /* 7 */ { nombre: '7 · cierre: giro (F8 V2) + pixelado fuerte (curva nueva)',
+            marco: 0.5, tinte: 0.2, malaSenal: 0.15, pixelado: 0.75, feedback: 0.35, verFeedback: 1, colorBase: 0.85 },
+]
+
+const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 13 de la canción
 
 
 // ============================================================
