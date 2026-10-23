@@ -8,7 +8,9 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-22 (v1.11: video en MP4 · audio de la grabación = la canción del reproductor si está cargada, si no el mic)
+// Actualizado: 2026-10-23 (v1.12: reproductor con línea de tiempo, estados marcados, pausa y bucle del estado ·
+//              cajas rediseñadas; REC sale de abajo a la derecha (ahí van las barras del mic de Hydra))
+//              2026-10-22 (v1.11: video en MP4 · audio de la grabación = la canción del reproductor si está cargada, si no el mic)
 //              2026-10-21 (v1.10: botonera de estados bajo el cartel — próximo/anterior/pausa/reiniciar · copiar/guardar/borrar)
 //              2026-10-20 (v1.9: informe de canción · ensayo con varios aparatos · canal de estados)
 // ============================================================
@@ -16,7 +18,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.11'
+  const VERSION = 'v1.12'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -67,15 +69,21 @@
     const el = document.createElement('div')
     el.id = id
     el.style.cssText = `
-      position: fixed; z-index: 2147483647;
-      background: rgba(0,0,0,0.7); color: #fff;
-      font: 11px/1.4 monospace; padding: 5px 8px; border-radius: 4px;
+      position: fixed; z-index: 2147483647; box-sizing: border-box;
+      background: rgba(0,0,0,0.65); color: #ddd;
+      font: 11px/1.4 monospace; padding: 4px 8px; border-radius: 4px;
       ${css}
     `
     document.body.appendChild(el)
     elementos.push(el)
     return el
   }
+  // mismo estilo para todos los botones de las cajas
+  const BTN = 'font:11px/1 monospace; color:#ddd; background:#1d1d1d; border:1px solid #555; border-radius:3px; padding:3px 7px; cursor:pointer;'
+  // abajo a la derecha quedan libres 100 × 80 px para las barras del mic de Hydra (a.show())
+  const MARGEN_DER = 116
+  const ALTO_FILA = 28
+
   T._reinsertar = () => elementos.forEach(el => {
     if (!document.body.contains(el)) document.body.appendChild(el)
   })
@@ -334,7 +342,7 @@
   }
 
   // ============================================================
-  // 2. Grabador: MIDI + micrófono + video de Hydra (abajo a la derecha)
+  // 2. Grabador: MIDI + audio + video de Hydra (indicador abajo, a la izquierda de las barras del mic)
   // ============================================================
   // estados: listo → grabando → guardando → guardado → listo
   // (detener ya incluye guardar)
@@ -352,11 +360,12 @@
   let terminados = Promise.resolve()
 
   const indicador = crearCaja('gpRecIndicador', `
-    bottom: 8px; right: 8px; font: bold 13px/1.4 monospace; pointer-events: none;
+    bottom: 8px; right: ${MARGEN_DER}px; height: ${ALTO_FILA}px; display: flex; align-items: center;
+    font: bold 11px/1 monospace; pointer-events: none;
   `)
 
   const ESTILOS = {
-    listo:     { fondo: 'rgba(0,0,0,0.7)', texto: '○ REC listo' },
+    listo:     { fondo: 'rgba(0,0,0,0.65)', texto: '○ REC listo' },
     grabando:  { fondo: 'rgba(200,0,0,0.85)', texto: '● GRABANDO' },
     iniciando: { fondo: 'rgba(200,0,0,0.5)', texto: '● iniciando…' },
     guardando: { fondo: 'rgba(170,150,0,0.85)', texto: '… GUARDANDO' },
@@ -615,39 +624,42 @@
   pintarIndicador()
 
   // ============================================================
-  // 3. Reproductor de ensayo (abajo a la izquierda, compacto)
+  // 3. Reproductor de ensayo (abajo, a lo ancho)
   // ============================================================
+  //   fila de abajo:   [midi] [audio]  ▶/⏸  ■  🔁   1:23 / 3:40 · estado 5        ○ REC
+  //   arriba de eso:   línea de tiempo con una marca por estado (canal 16)
+  //   · clic en la línea = ir a ese momento (la canción, el MIDI y el estado)
+  //   · clic cerca de una marca = ir justo al comienzo de ese estado
+  //   · 🔁 = repetir la parte del estado en el que está la canción (para diseñarlo)
+  //   · ▶ desde el principio hace GP.estados.reiniciar() solo
   let midiEnsayo = null
   let audioEl = null
   let salidas = []
-  let programados = []
 
   const ensayoEl = crearCaja('gpEnsayoPanel', `
-    bottom: 8px; left: 8px; display: flex; align-items: center; gap: 6px;
+    bottom: 8px; left: 8px; height: ${ALTO_FILA}px; display: flex; align-items: center; gap: 5px;
   `)
-  // botones midi / audio: gris = vacío · verde = cargado
-  const BOTON = `cursor:pointer; border:1px solid #888; border-radius:3px; padding:1px 6px;`
   ensayoEl.innerHTML = `
-    <label data-carga="midi" style="${BOTON}" title="cargar .json de MIDI">
-      midi<input type="file" accept=".json" style="display:none">
-    </label>
-    <label data-carga="audio" style="${BOTON}" title="cargar audio (.webm / .mp3 / .wav)">
-      audio<input type="file" accept=".webm,audio/*,video/webm" style="display:none">
-    </label>
-    <button data-accion="play" style="font:inherit; padding:0 6px;">▶</button>
-    <button data-accion="stop" style="font:inherit; padding:0 6px;">■</button>
-    <span data-estado></span>
+    <label data-carga="midi" style="${BTN}" title="cargar .json de MIDI">midi<input type="file" accept=".json" style="display:none"></label>
+    <label data-carga="audio" style="${BTN}" title="cargar audio (.webm / .mp3 / .wav)">audio<input type="file" accept=".webm,audio/*,video/webm" style="display:none"></label>
+    <button data-accion="play" style="${BTN}" title="reproducir / pausa">▶&#xFE0E;</button>
+    <button data-accion="stop" style="${BTN}" title="detener y volver al principio">■&#xFE0E;</button>
+    <button data-accion="bucle" style="${BTN}" title="repetir la parte del estado actual">🔁&#xFE0E;</button>
+    <span data-estado style="margin-left:4px; white-space:nowrap;"></span>
   `
   const estadoEnsayo = ensayoEl.querySelector('[data-estado]')
-  const setEnsayo = t => { estadoEnsayo.textContent = t }
+  let avisoEnsayo = ''              // texto extra (ej: sin puerto) que queda al lado del reloj
+  const setEnsayo = t => { avisoEnsayo = t; pintarReloj() }
   const botonMidi = ensayoEl.querySelector('[data-carga="midi"]')
   const botonAudio = ensayoEl.querySelector('[data-carga="audio"]')
+  const botonPlay = ensayoEl.querySelector('[data-accion="play"]')
+  const botonBucle = ensayoEl.querySelector('[data-accion="bucle"]')
 
   const marcar = (boton, estadoCarga, nombreArchivo = '') => {
     const colores = {
-      vacio:  { fondo: 'transparent', borde: '#888', texto: '#fff' },
-      ok:     { fondo: '#0a0',        borde: '#0c0', texto: '#000' },
-      error:  { fondo: '#b00',        borde: '#e00', texto: '#fff' },
+      vacio:  { fondo: '#1d1d1d', borde: '#555', texto: '#ddd' },
+      ok:     { fondo: '#0a0',    borde: '#0c0', texto: '#000' },
+      error:  { fondo: '#b00',    borde: '#e00', texto: '#fff' },
     }[estadoCarga]
     boton.style.background = colores.fondo
     boton.style.borderColor = colores.borde
@@ -656,50 +668,151 @@
   }
 
   const duracion = ms => {
-    const s = Math.round(ms / 1000)
+    const s = Math.max(0, Math.floor(ms / 1000))
     return `${Math.floor(s / 60)}:${dosDigitos(s % 60)}`
   }
-  const resumenEnsayo = () => midiEnsayo ? duracion(midiEnsayo[midiEnsayo.length - 1][0]) : ''
 
-  botonMidi.querySelector('input').addEventListener('change', (e) => {
-    const file = e.target.files[0]
-    e.target.value = ''   // permite volver a elegir el mismo archivo
-    if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const crudo = JSON.parse(reader.result)
-        // las grabaciones viejas tienen mensajes duplicados (bug de reevaluar): se limpian
-        const vistos = new Set()
-        midiEnsayo = crudo.filter(([ms, n, b]) => {
-          const k = `${Math.round(ms * 10)}|${n}|${b.join(',')}`
-          if (vistos.has(k)) return false
-          vistos.add(k); return true
-        })
-        const quitados = crudo.length - midiEnsayo.length
-        if (quitados) console.info(`GP.tools: ${quitados} mensajes duplicados quitados de ${file.name}`)
-        marcar(botonMidi, 'ok', file.name)
-        setEnsayo(resumenEnsayo())
-      } catch (err) {
-        midiEnsayo = null
-        marcar(botonMidi, 'error', file.name)
-        setEnsayo('json inválido')
-      }
+  // ---- línea de tiempo ----
+  const lineaEl = crearCaja('gpLineaTiempo', `
+    bottom: ${8 + ALTO_FILA + 4}px; left: 8px; right: ${MARGEN_DER}px; height: 26px; padding: 3px 8px;
+    cursor: pointer;
+  `)
+  lineaEl.innerHTML = `
+    <div data-pista style="position:relative; height:100%;">
+      <div data-tramos style="position:absolute; inset:9px 0 3px 0;"></div>
+      <div data-bucle style="position:absolute; top:9px; bottom:3px; background:rgba(255,200,0,0.28); display:none;"></div>
+      <div data-avance style="position:absolute; top:9px; bottom:3px; left:0; background:rgba(0,200,0,0.35);"></div>
+      <div data-marcas style="position:absolute; inset:0;"></div>
+      <div data-cabeza style="position:absolute; top:6px; bottom:0; width:2px; background:#fff; left:0;"></div>
+    </div>
+  `
+  const pistaEl = lineaEl.querySelector('[data-pista]')
+  const avanceEl = lineaEl.querySelector('[data-avance]')
+  const cabezaEl = lineaEl.querySelector('[data-cabeza]')
+  const bucleEl = lineaEl.querySelector('[data-bucle]')
+
+  // ---- motor del reproductor ----
+  // Un reloj propio (pos en ms de la canción) y un programador que manda el MIDI
+  // de a poquito (60 ms adelante, con la hora exacta de cada mensaje). Así se
+  // puede pausar, saltar y repetir sin que se acumulen envíos.
+  const ADELANTE = 60
+  let msgs = []                     // [ms, aparato, bytes] ordenados
+  let marcas = []                   // ms de cada cambio de estado (canal de estados)
+  let total = 0                     // duración en ms
+  let ruta = new Map()              // aparato grabado → puerto de ensayo
+  let sonando = new Map()           // notas prendidas, para soltarlas al pausar o saltar
+  let reproduciendo = false
+  let posBase = 0, tBase = 0        // pos = posBase + (ahora - tBase)
+  let posPausa = 0
+  let cursor = 0                    // próximo mensaje a mandar
+  let bucle = null                  // { desde, hasta } o null
+
+  const pos = () => reproduciendo ? posBase + (performance.now() - tBase) : posPausa
+  const esEstados = (nombre, st) => {
+    if ((st & 0xf0) !== 0x90 || st >= 0xf0) return false
+    const canal = (st & 0x0f) + 1
+    if (GP.estados && GP.estados.esCanalEstados) return GP.estados.esCanalEstados(nombre, canal)
+    return canal === 16 && !/apc|akai_?ensayo/i.test(nombre)
+  }
+  // estado en el que está la canción en un momento: cuántas marcas pasaron
+  const estadoEn = (ms) => { let n = 0; while (n < marcas.length && marcas[n] <= ms) n++; return n }
+
+  const prepararEnsayo = () => {
+    msgs = midiEnsayo ? [...midiEnsayo].sort((x, y) => x[0] - y[0]) : []
+    marcas = []
+    const anti = (GP.estados && GP.estados.config && GP.estados.config.antirrebote) || 150
+    let ultima = -1e9
+    for (const [ms, n, b] of msgs) {
+      if (b[2] > 0 && esEstados(n, b[0]) && ms - ultima >= anti) { marcas.push(ms); ultima = ms }
     }
-    reader.readAsText(file)
-  })
+    const durAudio = audioEl && isFinite(audioEl.duration) ? audioEl.duration * 1000 : 0
+    total = Math.max(msgs.length ? msgs[msgs.length - 1][0] : 0, durAudio, 1)
+    dibujarLinea()
+  }
 
-  botonAudio.querySelector('input').addEventListener('change', (e) => {
-    const file = e.target.files[0]
-    e.target.value = ''
-    if (!file) return
-    if (audioEl) audioEl.pause()
-    audioEl = new Audio(URL.createObjectURL(file))   // sin barra: lo maneja ▶/■
-    try { enrutarEnsayo(audioEl) } catch (err) { console.warn('GP.tools: audio del ensayo sin AudioContext', err) }
-    audioEl.onended = () => setEnsayo(`fin ${resumenEnsayo()}`)
-    audioEl.onerror = () => { audioEl = null; marcar(botonAudio, 'error', file.name) }
-    marcar(botonAudio, 'ok', file.name)
-  })
+  const dibujarLinea = () => {
+    // sin midi cargado la línea no se ve (pero la caja existe, así "mostrar paneles" no la descoloca)
+    const hay = msgs.length > 0
+    pistaEl.style.display = hay ? '' : 'none'
+    lineaEl.style.background = hay ? 'rgba(0,0,0,0.65)' : 'transparent'
+    lineaEl.style.pointerEvents = hay ? '' : 'none'
+    if (!hay) return
+    const tramos = lineaEl.querySelector('[data-tramos]')
+    const capa = lineaEl.querySelector('[data-marcas]')
+    // tramos alternados (se ve dónde empieza y termina cada estado) + marcas con número
+    const bordes = [0, ...marcas, total]
+    tramos.innerHTML = bordes.slice(0, -1).map((d, i) => {
+      const izq = d / total * 100, ancho = (bordes[i + 1] - d) / total * 100
+      return `<div style="position:absolute; top:0; bottom:0; left:${izq}%; width:${ancho}%; background:${i % 2 ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.18)'};"></div>`
+    }).join('')
+    capa.innerHTML = marcas.map((m, i) => {
+      const izq = m / total * 100
+      const titulo = `estado ${i + 1} · ${duracion(m)}`
+      return `<div title="${titulo.replace(/"/g, '&quot;')}" style="position:absolute; left:${izq}%; top:0; bottom:0; width:1px; background:rgba(255,255,255,0.75);">
+        <span style="position:absolute; top:-2px; left:2px; font-size:9px; line-height:1; color:#bbb;">${i + 1}</span></div>`
+    }).join('')
+    pintarBucle()
+    pintarReloj()
+  }
+  const pintarBucle = () => {
+    bucleEl.style.display = bucle ? '' : 'none'
+    if (bucle) { bucleEl.style.left = `${bucle.desde / total * 100}%`; bucleEl.style.width = `${(bucle.hasta - bucle.desde) / total * 100}%` }
+    botonBucle.style.background = bucle ? '#fc0' : '#1d1d1d'
+    botonBucle.style.color = bucle ? '#000' : '#ddd'
+  }
+  const pintarReloj = () => {
+    const p = Math.min(pos(), total)
+    if (msgs.length) {
+      const x = `${p / total * 100}%`
+      avanceEl.style.width = x
+      cabezaEl.style.left = x
+    }
+    const est = marcas.length ? ` · estado ${estadoEn(p)}/${marcas.length}` : ''
+    estadoEnsayo.textContent = msgs.length
+      ? `${duracion(p)} / ${duracion(total)}${est}${avisoEnsayo ? ' · ' + avisoEnsayo : ''}`
+      : (avisoEnsayo || '')
+    const icono = reproduciendo ? '⏸\uFE0E' : '▶\uFE0E'
+    if (botonPlay.textContent !== icono) botonPlay.textContent = icono
+  }
+
+  // suelta lo que quedó sonando (después de lo que ya estaba programado)
+  const soltarTodo = () => {
+    const t = performance.now() + ADELANTE + 5
+    for (const [k, salida] of sonando) {
+      const [, canal, nota] = k.split('|').map(Number)
+      try { salida.send([0x80 | canal, nota, 0], t) } catch (_) {}
+    }
+    sonando.clear()
+    for (const o of salidas) { try { if (o.clear) o.clear() } catch (_) {} }
+  }
+
+  const programar = () => {
+    if (!reproduciendo) return
+    const p = pos()
+    const limite = bucle ? Math.min(p + ADELANTE, bucle.hasta - 1) : p + ADELANTE
+    while (cursor < msgs.length && msgs[cursor][0] <= limite) {
+      const [ms, n, bytes] = msgs[cursor++]
+      const salida = ruta.get(n)
+      if (!salida) continue
+      try { salida.send(bytes, tBase + (ms - posBase)) } catch (_) {}
+      const tipo = bytes[0] & 0xf0
+      const k = `${salida.name}|${bytes[0] & 0x0f}|${bytes[1]}`
+      if (tipo === 0x90 && bytes[2] > 0) sonando.set(k, salida)
+      else if (tipo === 0x80 || tipo === 0x90) sonando.delete(k)
+    }
+    if (bucle && p >= bucle.hasta) { irA(bucle.desde, { fijarEstado: false }); return }
+    if (!bucle && p >= total) { pausar(); posPausa = total; setEnsayo('fin'); }
+    if (audioEl && reproduciendo && !audioEl.paused && Math.abs(audioEl.currentTime * 1000 - p) > 120) {
+      try { audioEl.currentTime = p / 1000 } catch (_) {}   // si el audio se corrió, lo acomoda
+    }
+  }
+
+  const arrancarReloj = () => {
+    if (window._gpEnsayoReloj) clearInterval(window._gpEnsayoReloj)
+    let vuelta = 0
+    window._gpEnsayoReloj = setInterval(() => { programar(); if (++vuelta % 5 === 0) pintarReloj() }, 20)
+  }
+  arrancarReloj()
 
   const buscarSalidas = async () => {
     const acc = await T.accesoMidi()
@@ -732,90 +845,186 @@
     return r
   }
 
-  const detenerProgramados = () => {
-    programados.forEach(id => clearTimeout(id))
-    programados = []
+  const armarRuta = async () => {
+    if (!(await buscarSalidas())) { setEnsayo('sin puertos loopMIDI'); return false }
+    ruta = new Map()
+    for (const [, n] of msgs) if (!ruta.has(n)) ruta.set(n, salidaPara(n))
+    const faltan = [...ruta].filter(([, o]) => !o).map(([n]) => n)
+    console.info('GP.tools ensayo:', [...ruta].map(([n, o]) => `${n} → ${o ? o.name : 'SIN PUERTO'}`).join(' · '))
+    if (faltan.length) {
+      console.warn(`GP.tools ensayo: no hay puerto para ${faltan.join(', ')}. Creá en loopMIDI un puerto "<palabra>_Ensayo" con una palabra de ese nombre (ej: ${soloLetras(faltan[0]).slice(0, 8)}_Ensayo) y reiniciá Chrome entero.`)
+      setEnsayo(`sin puerto: ${faltan.map(n => n.slice(0, 12)).join(', ')}`)
+    } else setEnsayo('')
+    return true
   }
 
-  const detenerEnsayo = () => {
-    detenerProgramados()
-    if (audioEl) { audioEl.pause(); audioEl.currentTime = 0 }
-  }
-
-  ensayoEl.querySelector('[data-accion="play"]').addEventListener('click', async () => {
-    try {
-      if (!midiEnsayo) { setEnsayo('falta midi'); return }
-      if (!(await buscarSalidas())) { setEnsayo('sin puertos loopMIDI'); return }
-
-      detenerEnsayo()   // nunca se suman dos reproducciones
-      const ruta = new Map()       // aparato grabado → puerto de ensayo
-      for (const [, n] of midiEnsayo) if (!ruta.has(n)) ruta.set(n, salidaPara(n))
-      const faltan = [...ruta].filter(([, o]) => !o).map(([n]) => n)
-      let enviados = 0
-      midiEnsayo.forEach(([ms, nombreOriginal, bytes]) => {
-        const salida = ruta.get(nombreOriginal)
-        if (!salida) return
-        programados.push(setTimeout(() => salida.send(bytes), ms))
-        enviados++
-      })
-      if (audioEl) { try { enrutarEnsayo(audioEl); contexto() } catch (_) {} audioEl.play() }
-      console.info('GP.tools ensayo:', [...ruta].map(([n, o]) => `${n} → ${o ? o.name : 'SIN PUERTO'}`).join(' · '))
-      if (faltan.length) {
-        console.warn(`GP.tools ensayo: no hay puerto para ${faltan.join(', ')}. Creá en loopMIDI un puerto "<palabra>_Ensayo" con una palabra de ese nombre (ej: ${soloLetras(faltan[0]).slice(0, 8)}_Ensayo) y reiniciá Chrome entero.`)
-        setEnsayo(`▶ ${resumenEnsayo()} · sin puerto: ${faltan.map(n => n.slice(0, 12)).join(', ')}`)
-      } else setEnsayo(`▶ ${resumenEnsayo()}`)
-    } catch (err) {
-      setEnsayo(`error: ${err.message}`)
-      console.error('GP.tools ensayo:', err)
+  // ir a un momento de la canción. fijarEstado: poner los estados en el que corresponde
+  const irA = (ms, { fijarEstado = true } = {}) => {
+    ms = Math.max(0, Math.min(total, ms))
+    soltarTodo()
+    // desde el principio: también el mensaje del ms 0; si no, sólo lo que viene después
+    cursor = 0
+    while (cursor < msgs.length && (ms === 0 ? msgs[cursor][0] < 0 : msgs[cursor][0] <= ms)) cursor++
+    if (reproduciendo) { posBase = ms; tBase = performance.now() } else posPausa = ms
+    if (audioEl) { try { audioEl.currentTime = ms / 1000 } catch (_) {} }
+    if (fijarEstado && GP.estados) {
+      // un instante después, por si un cambio de estado ya programado (de los 60 ms
+      // de adelanto) todavía estaba en camino: el que manda es el del salto
+      const n = estadoEn(ms)
+      clearTimeout(irA._t)
+      irA._t = setTimeout(() => { if (n === 0) GP.estados.reiniciar(); else GP.estados.ir(n, 'reproductor') }, ADELANTE + 15)
     }
+    if (bucle && fijarEstado) ponerBucle()
+    pintarReloj()
+  }
+
+  const reproducir = async () => {
+    if (!midiEnsayo) { setEnsayo('falta midi'); return }
+    if (!(await armarRuta())) return
+    if (audioEl) { try { enrutarEnsayo(audioEl); contexto() } catch (_) {} }
+    const desde = posPausa >= total ? 0 : posPausa
+    reproduciendo = true
+    posBase = desde; tBase = performance.now()
+    if (desde === 0) {                 // desde el principio: estados al inicio, ya
+      irA(0, { fijarEstado: false })
+      if (GP.estados) GP.estados.reiniciar()
+    }
+    // al reanudar, el cursor sigue donde quedó (lo ya mandado no se repite)
+    if (audioEl) { try { audioEl.currentTime = desde / 1000; await audioEl.play() } catch (_) {} }
+    pintarReloj()
+  }
+  const pausar = () => {
+    if (!reproduciendo) return
+    posPausa = pos()
+    reproduciendo = false
+    soltarTodo()
+    if (audioEl) audioEl.pause()
+    pintarReloj()
+  }
+  const detener = () => {
+    pausar()
+    posPausa = 0
+    if (audioEl) { try { audioEl.currentTime = 0 } catch (_) {} }
+    setEnsayo('')
+  }
+
+  // bucle: la parte del estado en el que está la canción
+  const ponerBucle = () => {
+    const n = estadoEn(pos())
+    bucle = { desde: n === 0 ? 0 : marcas[n - 1], hasta: n < marcas.length ? marcas[n] : total }
+    pintarBucle()
+  }
+  const alternarBucle = () => {
+    if (bucle) { bucle = null; pintarBucle(); return }
+    if (!marcas.length) { setEnsayo('sin estados en el midi'); return }
+    ponerBucle()
+  }
+
+  // ---- carga de archivos ----
+  botonMidi.querySelector('input').addEventListener('change', (e) => {
+    const file = e.target.files[0]
+    e.target.value = ''   // permite volver a elegir el mismo archivo
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = () => {
+      try {
+        const crudo = JSON.parse(reader.result)
+        // las grabaciones viejas tienen mensajes duplicados (bug de reevaluar): se limpian
+        const vistos = new Set()
+        midiEnsayo = crudo.filter(([ms, n, b]) => {
+          const k = `${Math.round(ms * 10)}|${n}|${b.join(',')}`
+          if (vistos.has(k)) return false
+          vistos.add(k); return true
+        })
+        const quitados = crudo.length - midiEnsayo.length
+        if (quitados) console.info(`GP.tools: ${quitados} mensajes duplicados quitados de ${file.name}`)
+        detener(); bucle = null
+        prepararEnsayo()
+        marcar(botonMidi, 'ok', file.name)
+        setEnsayo('')
+      } catch (err) {
+        midiEnsayo = null
+        prepararEnsayo()
+        marcar(botonMidi, 'error', file.name)
+        setEnsayo('json inválido')
+      }
+    }
+    reader.readAsText(file)
   })
 
-  ensayoEl.querySelector('[data-accion="stop"]').addEventListener('click', () => {
-    detenerEnsayo()
-    setEnsayo(`■ ${resumenEnsayo()}`)
+  botonAudio.querySelector('input').addEventListener('change', (e) => {
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    if (audioEl) audioEl.pause()
+    audioEl = new Audio(URL.createObjectURL(file))   // sin barra: lo maneja la línea de tiempo
+    try { enrutarEnsayo(audioEl) } catch (err) { console.warn('GP.tools: audio del ensayo sin AudioContext', err) }
+    audioEl.onloadedmetadata = () => prepararEnsayo()
+    audioEl.onerror = () => { audioEl = null; marcar(botonAudio, 'error', file.name) }
+    marcar(botonAudio, 'ok', file.name)
   })
 
+  // ---- botones y línea ----
+  botonPlay.addEventListener('click', () => { (reproduciendo ? pausar : reproducir)(); botonPlay.blur() })
+  // ■ = todo al principio: la canción y los estados
+  ensayoEl.querySelector('[data-accion="stop"]').addEventListener('click', (e) => { detener(); if (GP.estados) GP.estados.reiniciar(); e.currentTarget.blur() })
+  botonBucle.addEventListener('click', () => { alternarBucle(); botonBucle.blur() })
+  lineaEl.addEventListener('click', (e) => {
+    if (!msgs.length) return
+    const r = pistaEl.getBoundingClientRect()
+    const x = Math.max(0, Math.min(r.width, e.clientX - r.left))
+    let ms = x / r.width * total
+    // cerca de una marca (6 px): justo al comienzo de ese estado
+    for (const m of marcas) if (Math.abs(m / total * r.width - x) <= 6) { ms = m; break }
+    irA(ms)
+  })
+
+  // desde la consola
+  T.ensayo = {
+    reproducir, pausar, detener,
+    ir: (ms) => irA(ms),
+    irEstado: (n) => irA(n <= 0 ? 0 : marcas[Math.min(n, marcas.length) - 1]),
+    bucle: (v = !bucle) => { if (!!v !== !!bucle) alternarBucle(); return !!bucle },
+    get pos() { return pos() },
+    get marcas() { return marcas.slice() },
+    get reproduciendo() { return reproduciendo },
+  }
+
   // ============================================================
-  // 4. Cartel (arriba a la derecha) — ej: número de estado
+  // 4. Estados (arriba a la derecha): cartel + botonera en una sola caja
   // ============================================================
-  let cartelEl = null
+  //   3/13 · estribillo
+  //   ⏭ ⏮ ⏸ ⟲  ·  ⧉ ⤓ ✕
+  // ⏸ / ⧉ / ⤓ = Ctrl+Alt+E / C / D. Sólo en ensayo: vive en GP_tools, que en el show no se carga.
+  { const viejo = document.getElementById('gpBotonesEstados'); if (viejo) viejo.remove() }   // de la v1.10
+  const estadosEl = crearCaja('gpOverlayEstado', `
+    top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+  `)
+  estadosEl.innerHTML = `
+    <div data-texto style="font: bold 13px/1.3 monospace; color:#fff; white-space:nowrap; display:none;"></div>
+    <div style="display:flex; gap:4px; align-items:center;">
+      <button data-est="siguiente" style="${BTN}" title="próximo estado (botón 88)">⏭&#xFE0E;</button>
+      <button data-est="anterior" style="${BTN}" title="estado anterior (botón 87)">⏮&#xFE0E;</button>
+      <button data-est="suspender" style="${BTN}" title="pausar / reanudar los estados (Ctrl+Alt+E)">⏸&#xFE0E;</button>
+      <button data-est="reiniciar" style="${BTN}" title="volver al inicio">⟲</button>
+      <span style="width:6px;"></span>
+      <button data-est="copiar" style="${BTN}" title="copiar el estado actual (Ctrl+Alt+C)">⧉&#xFE0E;</button>
+      <button data-est="guardar" style="${BTN}" title="guardar las capturas en un .js (Ctrl+Alt+D)">⤓&#xFE0E;</button>
+      <button data-est="borrar" style="${BTN}" title="borrar la lista de capturas de esta canción">✕&#xFE0E;</button>
+    </div>
+  `
+  const textoEstadoEl = estadosEl.querySelector('[data-texto]')
   let cartelActivo = true
   T.cartel = {
     mostrar(texto) {
       if (!cartelActivo) return
-      if (!cartelEl) cartelEl = crearCaja('gpOverlayEstado', `
-        top: 8px; right: 8px; font: bold 28px/1 monospace; padding: 10px 16px; pointer-events: none;
-      `)
-      cartelEl.textContent = texto
+      textoEstadoEl.textContent = texto
+      textoEstadoEl.style.display = texto ? '' : 'none'
     },
     get activo() { return cartelActivo },
-    set activo(v) { cartelActivo = v; if (cartelEl) cartelEl.style.display = v ? '' : 'none'; if (botonesEstadosEl) botonesEstadosEl.style.display = v ? '' : 'none' },
+    set activo(v) { cartelActivo = v; estadosEl.style.display = v ? '' : 'none' },
   }
-
-  // Botones chicos pegados debajo del cartel, en dos renglones:
-  //   próximo · anterior · pausa · reiniciar
-  //   copiar · guardar · borrar
-  // Pausa/copiar/guardar = Ctrl+Alt+E / C / D (los atajos siguen). Sólo en ensayo:
-  // viven en GP_tools, que en el show no se carga.
-  const botonesEstadosEl = crearCaja('gpBotonesEstados', `
-    top: 62px; right: 8px; display: flex; flex-direction: column; gap: 4px; padding: 3px 4px;
-  `)
-  const BTN_EST = 'font:inherit; font-size:11px; padding:1px 6px; cursor:pointer;'
-  const RENGLON = 'display:flex; gap:4px; justify-content:flex-end;'
-  botonesEstadosEl.innerHTML = `
-    <div style="${RENGLON}">
-      <button data-est="siguiente" style="${BTN_EST}" title="próximo estado (botón 88)">⏭&#xFE0E;</button>
-      <button data-est="anterior" style="${BTN_EST}" title="estado anterior (botón 87)">⏮&#xFE0E;</button>
-      <button data-est="suspender" style="${BTN_EST}" title="pausar / reanudar los estados (Ctrl+Alt+E)">⏸&#xFE0E;</button>
-      <button data-est="reiniciar" style="${BTN_EST}" title="volver al inicio: GP.estados.reiniciar() (antes de dar ▶ a un ensayo)">⟲</button>
-    </div>
-    <div style="${RENGLON}">
-      <button data-est="copiar" style="${BTN_EST}" title="copiar el estado actual (Ctrl+Alt+C)">⧉&#xFE0E;</button>
-      <button data-est="guardar" style="${BTN_EST}" title="guardar las capturas en un .js (Ctrl+Alt+D)">⤓&#xFE0E;</button>
-      <button data-est="borrar" style="${BTN_EST}" title="borrar la lista de capturas de esta canción">✕&#xFE0E;</button>
-    </div>
-  `
-  botonesEstadosEl.addEventListener('click', ev => {
+  estadosEl.addEventListener('click', ev => {
     const b = ev.target.closest('[data-est]')
     if (!b) return
     const E = GP.estados
@@ -828,12 +1037,12 @@
     if (acciones[b.dataset.est]) acciones[b.dataset.est]()
     b.blur()   // que Espacio/Enter no vuelvan a apretarlo sin querer
   })
-  // el ⏸ del cartel dice si está en pausa: el botón lo acompaña (también con el atajo o la consola)
+  // el botón ⏸ se pinta de amarillo mientras los estados están en pausa (con el atajo o la consola también)
   if (window._gpBotonesEstadosReloj) clearInterval(window._gpBotonesEstadosReloj)
   window._gpBotonesEstadosReloj = setInterval(() => {
-    const susp = !!(cartelEl && cartelEl.textContent.startsWith('⏸'))
-    const b = botonesEstadosEl.querySelector('[data-est="suspender"]')
-    if (b) b.style.background = susp ? '#fc0' : ''
+    const susp = GP.estados ? !!GP.estados.suspendido : textoEstadoEl.textContent.startsWith('⏸')
+    const b = estadosEl.querySelector('[data-est="suspender"]')
+    if (b) { b.style.background = susp ? '#fc0' : '#1d1d1d'; b.style.color = susp ? '#000' : '#ddd' }
   }, 300)
 
   // compatibilidad con los sketches que llaman al ensayo.js viejo

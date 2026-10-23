@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-22 · GP_midi v1.6 · GP_tools v1.11 · GP_estados v1.1 (ver su manual)
+Actualizado: 2026-10-23 · GP_midi v1.6 · GP_tools v1.12 · GP_estados v1.2 (ver su manual)
 
 ---
 
@@ -241,7 +241,14 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
   - Para elegirlo a mano: `GP.tools.init({ audio: 'mic' })` · `'ensayo'` · `'ambos'` (canción + mic mezclados) · `'auto'` (el de siempre).
   - Si querés grabar un ensayo real después de haber usado el reproductor, recargá la página (F5) para que no quede la canción cargada, o usá `audio: 'mic'`.
 - El MIDI se graba con la hora real de llegada (no se corre si el navegador se traba).
-- Reproductor (abajo a la izquierda): botones `midi` / `audio` (verde = cargado, rojo = error), ▶ ■. Limpia solos los duplicados de grabaciones viejas.
+- **Pantalla de ensayo** (todo fuera del canvas: no sale en la proyección ni en el video):
+  - arriba a la izquierda: panel MIDI · arriba a la derecha: estado actual + botonera de estados;
+  - abajo, a lo ancho: **línea de tiempo** y, debajo, el **reproductor** y el **REC**;
+  - abajo a la derecha quedan libres 100 × 80 px para las barras del mic de Hydra (`a.show()`).
+- **Reproductor:** `midi` / `audio` (verde = cargado, rojo = error) · ▶ / ⏸ (pausa) · ■ (todo al principio: canción y estados) · 🔁 (bucle) · reloj `1:23 / 3:40 · estado 5/13`. Limpia solos los duplicados de grabaciones viejas.
+- **Línea de tiempo:** una marca numerada por cada cambio de estado (canal 16) del `.json`. **Clic en la línea** = ir a ese momento (canción, MIDI y estado juntos); **clic cerca de una marca** = justo al comienzo de ese estado. ▶ desde el principio hace `GP.estados.reiniciar()` solo.
+- **🔁 Bucle:** repite la parte del estado en el que está la canción (de su cambio de estado al siguiente), sin pasar al próximo estado. Para diseñar un estado escuchándolo en loop; combinado con ⏸ de estados y ⧉ copiar. Clic en otra parte de la línea con el bucle prendido = el bucle pasa a ese estado.
+- Consola: `GP.tools.ensayo.irEstado(5)` · `.ir(83000)` (ms) · `.bucle()` · `.pausar()` · `.reproducir()` · `.pos` · `.marcas`.
 - **Puertos loopMIDI:** uno por aparato grabado, llamado `<palabra>_Ensayo`, donde la palabra está en el nombre del aparato. Ya existen `korg_Ensayo` (padKONTROL) y `akai_Ensayo` (APC). Para un aparato nuevo, ej "Arturia KeyStep 37" → `keystep_Ensayo`. Después de crearlos, reiniciar Chrome entero.
 - `GP.tools.rutaEnsayo()` muestra a qué puerto va cada aparato del .json cargado (o `GP.tools.rutaEnsayo(['Arturia KeyStep 37'])`). Al dar ▶, si un aparato no tiene puerto, el panel dice `sin puerto: …` y la consola explica cómo crearlo.
 - `GP.tools.init({ grabarVideo: false })` para sólo MIDI + audio; `videoBitrate: 4e6` para archivos más livianos.
