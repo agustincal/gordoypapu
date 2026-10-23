@@ -10,7 +10,7 @@
 //              (N11 rotar 90 · N12/N13/N14 voces arpegio/bajo/batería · N15 rotar mitad · N16 atraso).
 //              De LIVE: versiones V1–V8, F1 doble sentido, F5/F6 strobo e inversos, F7 cómo avanza,
 //              F8 hacia dónde, bandas N21/N31, atrasos largos N26/N36, borde duro, estados y tools.
-//              Las v03 y v04 quedan como estaban.)
+//              Las v03 y v04 quedan como estaban. Filas: 8 = canal 1 · 7 = canal 10 · 6 = canal 9)
 // ============================================================
 
 // ---- carga de scripts ----
@@ -164,7 +164,7 @@ const ESTADOS = [
 // AKAI — mapa LIVE (mismo orden de canales que Vociferan)
 //   fila 8 → canal 1, arpegio. Tocás un pad = una nota de arpegio (grave a la izquierda). Mute: botón 82
 //   fila 7 → canal 10, batería. A mano: col 1-3 bombo · col 4-6 caja · col 7-8 hat. Mute: botón 83
-//   fila 6 → canal 2, bajo (en el ensayo no llegó: se puede tocar a mano). Mute: botón 84
+//   fila 6 → canal 9, bajo (22/10: pasa del canal 2 al 9). Mute: botón 84
 //   fila 5 → libre
 //   Mutear una fila congela esa voz: deja de recibir notas pero no se apaga de golpe.
 //   Fila 1 (como la v03):
@@ -192,7 +192,7 @@ GP.midi.versiones({ F1: 3, F2: 3, F3: 3, F4: 3, F5: 3, F6: 3, F7: 3, F8: 3 })   
 GP.midi.filas({
   8: { canal: 1, rango: [25, 36] },   // pads: las notas del ensayo (25–35) repartidas en la fila
   7: { canal: 10, pulso: 'vuelta' },
-  6: { canal: 2, rango: V.C.rangoBajo },
+  6: { canal: 9, rango: V.C.rangoBajo },
   5: null,
 })
 const VOZ_DE_FILA = { 8: 'arpegio', 6: 'bajo' }
