@@ -167,5 +167,5 @@ En `GP.estados.config` (igual para todas las canciones; se cambia en `GP_estados
 | `avisoMs` | 500 | parpadeo de 87/88 al cambiar de estado |
 | `fundido` | 0.3 s | fundido por defecto |
 | `umbralToque` | 3 | cuánto hay que mover un fader (0..127) para tomar el control |
-| `mezclaToque` | 0.25 s | transición del valor del estado al del fader |
-| `suavizado` | 0.1 s | suavizado del fader físico |
+| `mezclaToque` | 0.12 s | transición del valor del estado al del fader |
+| `suavizado` | 0.04 s | suavizado del fader físico |
