@@ -8,7 +8,10 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-23 (v1.12: reproductor con línea de tiempo, estados marcados, pausa y bucle del estado ·
+// Actualizado: 2026-10-23 (v1.14: el Shift (98) pasa a GP_midi (anda sin GP_tools); las cajas se anotan para ocultarse con él)
+//              2026-10-23 (v1.13: Shift (98) oculta todo en cualquier canción · al volver a mostrar, las cajas no se desarman ·
+//              Ctrl+Shift+H de Hydra: las cajas se ocultan y vuelven junto con el código)
+//              2026-10-23 (v1.12: reproductor con línea de tiempo, estados marcados, pausa y bucle del estado ·
 //              cajas rediseñadas; REC sale de abajo a la derecha (ahí van las barras del mic de Hydra))
 //              2026-10-22 (v1.11: video en MP4 · audio de la grabación = la canción del reproductor si está cargada, si no el mic)
 //              2026-10-21 (v1.10: botonera de estados bajo el cartel — próximo/anterior/pausa/reiniciar · copiar/guardar/borrar)
@@ -18,7 +21,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.12'
+  const VERSION = 'v1.14'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -89,10 +92,42 @@
   })
 
   let panelesVisibles = true
+  // se ocultan con visibility (no con display): al volver a mostrarlas, cada caja conserva su forma
   T.paneles = (visible = !panelesVisibles) => {
-    panelesVisibles = visible
-    elementos.forEach(el => { el.style.display = visible ? '' : 'none' })
+    panelesVisibles = !!visible
+    elementos.forEach(el => { el.style.visibility = visible ? '' : 'hidden' })
   }
+  // ocultar todo (Shift 98) lo maneja GP_midi: acá sólo anotamos las cajas para que se oculten con él.
+  // Estado compartido (mismo código en GP_midi.js): no importa cuál se carga primero.
+  const ocu = window._gpOcultar || (window._gpOcultar = { visible: true, bins: false, oyentes: {} })
+  ocu.oyentes.tools = (visible) => T.paneles(visible)
+
+  // Ctrl+Shift+H de Hydra ("hide all") vuelve a dibujar la página y se lleva las
+  // cajas. Las volvemos a poner solas, y se ocultan / muestran junto con el código.
+  const hayEditorHydra = () => !!document.querySelector('.CodeMirror, .cm-editor, #editor-container')
+  const reponerCajas = () => {
+    let falto = false
+    for (const el of elementos) if (!document.body.contains(el)) { document.body.appendChild(el); falto = true }
+    return falto
+  }
+  // sólo sigue al editor cuando el editor aparece o desaparece (así no pisa un
+  // ocultar hecho con Shift o Ctrl+Alt+P si Hydra re-dibuja por otra cosa)
+  let editorAntes = hayEditorHydra()
+  const seguirEditor = () => {
+    const ahora = hayEditorHydra()
+    if (ahora !== editorAntes) { editorAntes = ahora; T.paneles(ahora) }
+  }
+  if (window._gpToolsObs) window._gpToolsObs.disconnect()
+  if (typeof MutationObserver !== 'undefined') {
+    window._gpToolsObs = new MutationObserver(() => { reponerCajas(); seguirEditor() })
+    window._gpToolsObs.observe(document.body, { childList: true })
+  }
+  if (window._gpToolsHydraH) window.removeEventListener('keydown', window._gpToolsHydraH, true)
+  window._gpToolsHydraH = (e) => {
+    if (!(e.ctrlKey && e.shiftKey && e.code === 'KeyH')) return
+    setTimeout(() => { reponerCajas(); seguirEditor() }, 150)   // después de que Hydra re-dibuja
+  }
+  window.addEventListener('keydown', window._gpToolsHydraH, true)
 
   // ============================================================
   // 1. Panel MIDI (arriba a la izquierda)

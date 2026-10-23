@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-23 · GP_midi v1.6 · GP_tools v1.12 · GP_estados v1.2 (ver su manual)
+Actualizado: 2026-10-23 · GP_midi v1.9 · GP_tools v1.14 · GP_estados v1.2 (ver su manual)
 
 ---
 
@@ -35,12 +35,12 @@ await GP.midi.start()
 | Zona | Notas | Uso | LED |
 |---|---|---|---|
 | Filas 1–3 de la grilla | 0–23 | **toggle** y pads propios de la canción (`GP.midi.buttons`) | verde = habilitado · rojo parpadeo = prendido · apagado = sin uso |
-| Filas 4–8 de la grilla | 24–63 | **disparo**: sólo muestran lo que entra, una fila por canal (`GP.midi.filas`) | verde reposo · amarillo = suena el canal · rojo parpadeo = lo tocás · amarillo al soltar |
+| Filas 4–8 de la grilla | 24–63 | **disparo**: sólo muestran lo que entra, una fila por canal (`GP.midi.filas`) | **activa** = verde, y la nota que suena se apaga · **muteada** = apagada, y la nota que suena se prende en verde (ves que hay notas, pero no dispara) · **rojo** = lo tocás vos |
 | Botones redondos de abajo (arriba de cada fader) | 64–71 | **versión** del efecto de F1..F8 (`GP.midi.versiones`) | apagado = v1 · prendido = v2 · parpadea = v3 |
-| Columna derecha 82–86 | 82 (fila 8) … 86 (fila 4) | **mute** del canal de esa fila | apagado = no llegó nada · prendido = recibiendo · parpadea = muteado |
+| Columna derecha 82–86 | 82 (fila 8) … 86 (fila 4) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
 | 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
 | 89 | | **grabador** (GP_tools): toque = grabar / detener+guardar | prendido = listo · parpadea = grabando · apagado = guardando |
-| 98 (Shift) | | convención: ocultar código y paneles (lo arma cada sketch) — **no tiene LED** | |
+| 98 (Shift) | | **ocultar / mostrar todo** (código, barras del mic y paneles) en cualquier canción. Lo maneja GP_midi: **anda también en el show, sin GP_tools** — **no tiene LED** | |
 | Faders | CC 48–55 | `F1`..`F8` (0..127) | — |
 | FMASTER | CC 56 | **fundido a negro** en todos los sketches (ver 3.1) | — |
 
@@ -146,13 +146,22 @@ GP.midi.setButton('N11', true)        // prender/apagar desde código (ej: al ca
 
 ## 6. Filas de disparo (4–8) y mute por canal
 
-Cada fila representa **un aparato + un canal**. Las notas de ese canal la prenden en amarillo; tocando los pads, disparás a mano. El botón de la derecha mutea el canal: la fila deja de mostrar y de disparar lo que viene del aparato, y queda sólo tu mano.
+Cada fila representa **un aparato + un canal**. Tocando los pads, disparás a mano (rojo). El botón de la derecha mutea el canal: la fila deja de disparar lo que viene del aparato, y queda sólo tu mano.
+
+De un vistazo ves qué filas están activas en cada parte:
+
+| Fila | En reposo | Nota que suena | La tocás vos |
+|---|---|---|---|
+| activa | verde | se apaga | rojo |
+| muteada | apagada | verde | rojo |
+
+Una fila sin canal (sólo a mano) no se mutea: siempre está activa (verde). Una fila `null` queda apagada y libre.
 
 Con varias consolas y teclados, dos aparatos pueden mandar por el mismo canal (casi todos vienen en canal 1). Para separarlos se usa `puerto`.
 
 ```js
 GP.midi.filas({
-  8: { puerto: /padkontrol/i, canal: 10, pulso: 'vuelta' },  // cada nota avanza un pad, alterna rojo / verde
+  8: { puerto: /padkontrol/i, canal: 10, pulso: 'vuelta' },  // cada golpe marca el pad siguiente
   7: { puerto: /padkontrol/i, canal: 1,  rango: [25, 48] },  // mini-teclado: grave a la izquierda
   6: { puerto: /keystep/i,    canal: 1,  rango: [48, 72] },  // otro aparato, mismo canal
   5: { canal: 2, notas: [36, 38, 42, 46] },                  // sin puerto: cualquier aparato menos el Akai
@@ -169,7 +178,7 @@ Opciones de cada fila:
 | `rango: [min, max]` | reparte esas notas en las 8 columnas |
 | `notas: [37, 49, …]` | cada nota en su columna fija (las que no están caen por `rango` o `nota % 8`) |
 | `pulso: true` | cualquier nota prende toda la fila |
-| `pulso: 'vuelta'` | cada nota avanza un pad: una vuelta los pinta de rojo, la siguiente de verde (estético; `columna` del evento = posición) |
+| `pulso: 'vuelta'` | cada golpe marca el pad siguiente mientras suena (como cualquier nota: se apaga si la fila está activa, verde si está muteada); después del 8 vuelve al 1 (`columna` del evento = posición) |
 | `{}` sin canal | fila sólo para disparo a mano |
 
 Un solo evento para todo disparo:
@@ -177,7 +186,7 @@ Un solo evento para todo disparo:
 ```js
 GP.midi.alDisparo(({ fila, columna, nota, vel, on, origen }) => {
   // origen: 'canal' (vino del Korg) | 'akai' (lo tocaste vos)
-  // con la fila muteada sólo llegan los 'akai'
+  // con la fila muteada sólo llegan los 'akai' (la luz igual muestra las notas del canal)
 })
 ```
 
@@ -185,7 +194,7 @@ GP.midi.alDisparo(({ fila, columna, nota, vel, on, origen }) => {
 - El mute y el "ya llegó" se conservan al reevaluar (mientras la fila siga con el mismo aparato y canal).
 - El canal de estados (16) no se pone en una fila: lo maneja GP_estados (si lo ponés, la consola avisa).
 - El mute corta **notas**, no el **clock** (el ritmo por clock sigue).
-- Tiempos ajustables: `GP.midi.tiempos.recienMs` (amarillo al soltar, 300) y `minSuenaMs` (amarillo mínimo de una nota, 90).
+- Tiempo ajustable: `GP.midi.tiempos.minSuenaMs` (lo mínimo que se marca una nota muy corta, 90 ms).
 
 ### Datos de los ensayos (16/10, una sola consola — antes del cableado nuevo)
 
@@ -208,6 +217,10 @@ GP.midi.alMensaje((nombre, data, info) => {
 ```
 
 Sketch sin GP_midi (sólo GP_tools): `GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })`.
+
+**Ocultar todo desde código:** `GP.midi.ocultarTodo()` alterna (lo mismo que el Shift 98) · `GP.midi.ocultarTodo(true)` oculta · `(false)` muestra · `GP.midi.oculto()` dice cómo está.
+Si el motor de la canción ya maneja el 98 (Vociferan, James: su `toggleCodigo`), GP_midi no lo repite: se pone al día y oculta lo que falte (barras del mic, paneles).
+Otro módulo con cosas en pantalla se anota con `GP.midi.alOcultar('id', visible => {...})` (así lo hace GP_tools con sus cajas).
 
 ---
 
@@ -232,6 +245,7 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 ## 9. Grabador y ensayo (GP_tools)
 
 - **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
+- **Ocultar todo:** **Shift (98)** del Akai (lo maneja GP_midi, ver sección 7): las cajas de GP_tools se ocultan y vuelven con él. **Ctrl+Shift+H** de Hydra también: las cajas se ocultan y vuelven junto con el código (antes Hydra se las llevaba y no volvían).
 - Graba MIDI + audio + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.mp4`.
 - **Video en MP4** (H.264 en Chrome). Si el navegador no puede, sale `.webm` como antes. `GP.tools.init({ formatoVideo: 'webm' })` para forzar WebM.
 - **De dónde sale el audio** (el `_audio.webm` y el sonido del video), automático:

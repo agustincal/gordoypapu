@@ -5,7 +5,14 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-20 (v1.6: filas de disparo 4-8 · varios aparatos · APC por nombre exacto)
+// Actualizado: 2026-10-23 (v1.9: filas de disparo en negativo — activa = verde y las notas que suenan se apagan ·
+//              muteada = apagada y las notas que suenan en verde · a mano = rojo)
+//              2026-10-23 (v1.8: Shift (98) = ocultar / mostrar todo, en cualquier canción y sin GP_tools ·
+//              GP.midi.ocultarTodo() · modo pulso 'vuelta' también apagado en reposo: cada golpe prende el
+//              pad siguiente en amarillo mientras suena)
+//              2026-10-23 (v1.7: filas de disparo apagadas en reposo · muteadas siguen mostrando las notas ·
+//              mute sólo en filas con canal)
+//              2026-10-20 (v1.6: filas de disparo 4-8 · varios aparatos · APC por nombre exacto)
 // ============================================================
 //
 // Cómo funcionan los LEDs
@@ -21,21 +28,24 @@
 // Zonas de la grilla (igual en todos los sketches)
 // ------------------------------------------------
 //   filas 1-3 → TOGGLE   (GP.midi.buttons)  verde = habilitado · rojo parpadeo = prendido
-//   filas 4-8 → DISPARO  (GP.midi.filas)    verde = en reposo · amarillo = suena el canal
-//                                            rojo parpadeo = lo tocás · amarillo al soltar
+//   filas 4-8 → DISPARO  (GP.midi.filas)    así ves qué filas están activas en cada parte:
+//                                            activa  = verde · la nota que suena se apaga
+//                                            muteada = apagada · la nota que suena en verde
+//                                            rojo = lo tocás vos (activa o muteada)
 //   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85, 4→86) = MUTE del canal
-//     apagado = no llegó nada · prendido = recibiendo · parpadea = muteado
+//     apagado = no llegó nada (o la fila no tiene canal) · prendido = recibiendo · parpadea = muteado
 //   87 / 88 = estado anterior / siguiente (GP_estados)
 //   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
 //     apagado = versión 1 · prendido = versión 2 · parpadea = versión 3
 //   89 = grabador (GP_tools)
+//   98 (Shift, sin LED) = ocultar / mostrar todo: código, barras del mic y paneles
 //
 // ============================================================
 
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.6'
+  const VERSION = 'v1.9'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -228,17 +238,22 @@
   const FILAS_DISPARO = [4, 5, 6, 7, 8]
   const notaDe = (fila, col) => (fila - 1) * 8 + col          // fila 1..8, col 0..7
   const botonMute = fila => 90 - fila                          // 8→82 ... 4→86
-  const LED_DISPARO = { reposo: COLOR.verde, suena: COLOR.amarillo, mano: COLOR.rojoParpadeo, recien: COLOR.amarillo }
+  // activa: verde y la nota que suena se apaga · muteada: al revés · a mano: rojo
+  const LED_DISPARO = {
+    activa: { reposo: COLOR.verde, suena: COLOR.apagado },
+    muteada: { reposo: COLOR.apagado, suena: COLOR.verde },
+    mano: COLOR.rojo,
+  }
   const LED_MUTE = { nada: 0, recibe: 1, muteado: 2 }          // botones redondos: 0 / 1 / 2 parpadeo
   const tiempos = { recienMs: 300, minSuenaMs: 90 }
 
   // persistente entre reevaluaciones: mute y "ya llegó" por fila
-  const filas = {}        // fila → { cfg, mute, visto, pads: [ {mano, korg:Set, hasta, timer} x8 ] }
+  const filas = {}        // fila → { cfg, mute, visto, pads: [ {mano, korg:Map, hasta, timer} x8 ], vuelta }
   let alDisparo = null
 
   const nuevaFila = () => ({ cfg: null, mute: false, visto: false,
-    pads: Array.from({ length: 8 }, () => ({ mano: false, korg: new Map(), hasta: 0, timer: null, color: null })),
-    vuelta: { pos: -1, n: 0 } })
+    pads: Array.from({ length: 8 }, () => ({ mano: false, korg: new Map(), hasta: 0, timer: null })),
+    vuelta: { pos: -1, donde: new Map() } })   // modo 'vuelta': pad actual y en qué pad suena cada nota
 
   const pintarPad = (fila, col) => {
     const f = filas[fila]
@@ -246,22 +261,22 @@
     if (!f || !f.cfg) { fijar(capaBoton, nota, null); return }
     const p = f.pads[col]
     const ahora = performance.now()
-    let v = p.color != null ? p.color : LED_DISPARO.reposo   // en modo 'vuelta' cada pad tiene su color
+    const modo = f.mute ? LED_DISPARO.muteada : LED_DISPARO.activa
+    let v = modo.reposo
     if (p.mano) v = LED_DISPARO.mano
-    else if (p.korg.size) v = LED_DISPARO.suena
-    else if (ahora < p.hasta) v = LED_DISPARO.recien
+    else if (p.korg.size || ahora < p.hasta) v = modo.suena   // hasta: notas muy cortas se ven un mínimo
     fijar(capaBoton, nota, v)
   }
   const pintarFila = (fila) => { for (let c = 0; c < 8; c++) pintarPad(fila, c) }
   const pintarMute = (fila) => {
     const f = filas[fila]
     const n = botonMute(fila)
-    if (!f || !f.cfg) { fijar(capaBoton, n, null); return }
+    if (!f || !f.cfg || f.cfg.canal == null) { fijar(capaBoton, n, null); return }   // sin canal: apagado
     fijar(capaBoton, n, f.mute ? LED_MUTE.muteado : f.visto ? LED_MUTE.recibe : LED_MUTE.nada)
   }
 
-  // amarillo "recién tocado / recién sonó": vuelve a verde solo
-  const amarilloHasta = (fila, col, ms) => {
+  // "suena" un mínimo de tiempo (notas muy cortas) y después vuelve solo
+  const suenaHasta = (fila, col, ms) => {
     const p = filas[fila].pads[col]
     p.hasta = Math.max(p.hasta, performance.now() + ms)
     clearTimeout(p.timer)
@@ -308,44 +323,51 @@
   const notaDeCanal = (fila, nota, vel, on) => {
     const f = filas[fila]
     if (!f.visto) { f.visto = true; pintarMute(fila) }
-    if (f.mute) return                                  // muteado: ni luz ni disparo
+    // muteada: la luz sigue mostrando las notas (así sabés que suenan), pero no dispara
     if (f.cfg.pulso === 'vuelta') {
-      // cada nota avanza un pad; una vuelta pinta de rojo, la siguiente de verde
-      if (!on) return
+      // cada golpe marca el pad siguiente mientras suena (activa: se apaga · muteada: verde); después del 8, el 1
       const vu = f.vuelta
+      const antes = vu.donde.get(nota)
+      if (antes != null) {   // esa nota deja su pad anterior (aunque no haya llegado su note-off)
+        f.pads[antes].korg.delete(nota)
+        vu.donde.delete(nota)
+        pintarPad(fila, antes)
+      }
+      if (!on) return
       vu.pos = (vu.pos + 1) % 8
-      if (vu.pos === 0) vu.n++
-      f.pads[vu.pos].color = vu.n % 2 ? COLOR.rojo : COLOR.verde
+      const p = f.pads[vu.pos]
+      p.korg.set(nota, performance.now())
+      vu.donde.set(nota, vu.pos)
+      suenaHasta(fila, vu.pos, tiempos.minSuenaMs)
       pintarPad(fila, vu.pos)
-      emitir({ fila, columna: vu.pos, nota, vel, on, origen: 'canal' })
+      if (!f.mute) emitir({ fila, columna: vu.pos, nota, vel, on, origen: 'canal' })
       return
     }
     const cols = columnasDe(f.cfg, nota)
     for (const col of cols) {
       const p = f.pads[col]
-      if (on) { p.korg.set(nota, performance.now()); amarilloHasta(fila, col, tiempos.minSuenaMs) }
+      if (on) { p.korg.set(nota, performance.now()); suenaHasta(fila, col, tiempos.minSuenaMs) }
       else p.korg.delete(nota)
       pintarPad(fila, col)
     }
-    emitir({ fila, columna: cols.length === 1 ? cols[0] : null, nota, vel, on, origen: 'canal' })
+    if (!f.mute) emitir({ fila, columna: cols.length === 1 ? cols[0] : null, nota, vel, on, origen: 'canal' })
   }
 
   // pad de disparo tocado a mano en el Akai
   const padDeMano = (fila, col, vel, on) => {
     const f = filas[fila]
     const p = f.pads[col]
-    p.mano = on
-    if (!on) amarilloHasta(fila, col, tiempos.recienMs)
+    p.mano = on            // al soltar vuelve al color de la fila (o al de "suena" si el canal está sonando ahí)
     pintarPad(fila, col)
     emitir({ fila, columna: col, nota: notaDeColumna(f.cfg, col), vel, on, origen: 'akai' })
   }
 
   const alternarMute = (fila, valor) => {
     const f = filas[fila]
-    if (!f || !f.cfg) return
+    if (!f || !f.cfg || f.cfg.canal == null) return   // fila sin canal: no se mutea
     f.mute = valor == null ? !f.mute : !!valor
-    if (f.mute) for (let c = 0; c < 8; c++) { f.pads[c].korg.clear(); pintarPad(fila, c) }   // suelta lo que estaba sonando
     pintarMute(fila)
+    pintarFila(fila)   // la fila entera cambia: activa = verde · muteada = apagada
     console.info(`[GP MIDI] fila ${fila} (canal ${f.cfg.canal}) ${f.mute ? 'MUTEADA' : 'activa'}`)
   }
 
@@ -418,6 +440,44 @@
     el.style.opacity = (1 - brillo).toFixed(3)
   }
 
+  // ============================================================
+  // Ocultar / mostrar todo (Shift 98 del Akai · GP.midi.ocultarTodo)
+  // Oculta el código de Hydra, las barras del mic y lo que se anote con
+  // GP.midi.alOcultar (las cajas de GP_tools). Anda con o sin GP_tools.
+  // Si el motor de la canción ya maneja el 98 (su toggleCodigo), no lo
+  // repite: sólo se pone al día y completa lo que falte.
+  // ============================================================
+  const PARTES_EDITOR = '.CodeMirror, #editor-container, #toolbar, #menu, #info-container, #modal'
+  // estado compartido (mismo código en GP_tools.js): sobrevive a reevaluar y al orden de carga
+  const ocu = window._gpOcultar || (window._gpOcultar = { visible: true, bins: false, oyentes: {} })
+
+  const firmaEditor = () => [...document.querySelectorAll(PARTES_EDITOR)]
+    .map(el => `${el.style.visibility}/${el.style.display}`).join('|')
+  const editorVisible = () => {
+    const el = document.querySelector('.CodeMirror, #editor-container')
+    return !el || (el.style.visibility !== 'hidden' && el.style.display !== 'none')
+  }
+  // barras del mic de Hydra (a.show / a.hide): al volver, sólo si estaban a la vista
+  const ponerBins = (visible) => {
+    try {
+      const A = typeof a !== 'undefined' ? a : null   // a = audio de Hydra
+      if (!A || !A.canvas || !A.hide) return
+      if (!visible) { ocu.bins = A.canvas.style.display !== 'none'; A.hide() }
+      else if (ocu.bins) { ocu.bins = false; A.show() }
+    } catch (_) {}
+  }
+  const avisarOcultar = (visible) => {
+    for (const id in ocu.oyentes) {
+      try { ocu.oyentes[id](visible) } catch (err) { console.error(`[GP MIDI] ocultar · ${id}:`, err) }
+    }
+  }
+  const ocultarTodo = (visible = !ocu.visible) => {
+    ocu.visible = !!visible
+    document.querySelectorAll(PARTES_EDITOR).forEach(el => { el.style.visibility = ocu.visible ? '' : 'hidden' })
+    ponerBins(ocu.visible)
+    avisarOcultar(ocu.visible)
+  }
+
   let alMensaje = null
 
   const procesar = (nombre, data) => {
@@ -464,8 +524,24 @@
       if (fila) muteado = filas[fila].mute
     }
 
+    // Shift (98) del Akai
+    const esShift = esOn && d1 === 98 && st < 0xf0 && canal === cfg.canal && cfg.akai.test(nombre)
+    const firmaAntes = esShift ? firmaEditor() : null
+
     // el sketch recibe TODO (korg incluido); info.muteado avisa si ese canal está muteado
-    if (alMensaje) alMensaje(nombre, data, { muteado })
+    if (alMensaje) {
+      try { alMensaje(nombre, data, { muteado }) } catch (err) { console.error('[GP MIDI] alMensaje del sketch:', err) }
+    }
+
+    if (esShift) {
+      if (firmaEditor() === firmaAntes) ocultarTodo()
+      else {
+        // lo hizo el motor de la canción: nos ponemos al día y completamos (barras del mic, paneles)
+        ocu.visible = editorVisible()
+        ponerBins(ocu.visible)
+        avisarOcultar(ocu.visible)
+      }
+    }
   }
 
   const alCambiarPuertos = (acc) => {
@@ -552,8 +628,8 @@
       if (f.cfg && f.cfg.canal === canalEstados) console.warn(`[GP MIDI] fila ${fila}: el canal ${canalEstados} es el de los estados, no hace falta mostrarlo`)
       const mismoOrigen = antes && f.cfg && antes.canal === f.cfg.canal && String(antes.puerto) === String(f.cfg.puerto)
       if (!mismoOrigen) { f.mute = false; f.visto = false }
-      for (const p of f.pads) { p.mano = false; p.korg.clear(); p.color = null }
-      f.vuelta = { pos: -1, n: 0 }
+      for (const p of f.pads) { p.mano = false; p.korg.clear() }
+      f.vuelta = { pos: -1, donde: new Map() }
       pintarFila(fila)
       pintarMute(fila)
     }
@@ -644,6 +720,13 @@
   // capa sistema (grabador, avisos). null = soltar la nota
   M.ledSistema = (nota, valor) => { fijar(capaSistema, nota, valor); return M }
   M.repintar = () => { repintar(); return M }
+
+  // ocultar / mostrar todo (lo mismo que el Shift 98): código, barras del mic y paneles.
+  //   GP.midi.ocultarTodo() alterna · (true) oculta · (false) muestra
+  M.ocultarTodo = (oculto = ocu.visible) => { ocultarTodo(!oculto); return M }
+  M.oculto = () => !ocu.visible
+  // otro módulo que tenga cosas en pantalla: GP.midi.alOcultar('id', visible => {...}). Mismo id = reemplaza.
+  M.alOcultar = (id, fn) => { if (fn) ocu.oyentes[id] = fn; else delete ocu.oyentes[id]; return M }
 
   M.show = function (value = true) {
     if (GP.tools && GP.tools.paneles) GP.tools.paneles(!!value)
