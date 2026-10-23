@@ -8,14 +8,15 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-21 (v1.10: botonera de estados bajo el cartel — próximo/anterior/pausa/reiniciar · copiar/guardar/borrar)
+// Actualizado: 2026-10-22 (v1.11: video en MP4 · audio de la grabación = la canción del reproductor si está cargada, si no el mic)
+//              2026-10-21 (v1.10: botonera de estados bajo el cartel — próximo/anterior/pausa/reiniciar · copiar/guardar/borrar)
 //              2026-10-20 (v1.9: informe de canción · ensayo con varios aparatos · canal de estados)
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.10'
+  const VERSION = 'v1.11'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -29,6 +30,12 @@
   const cfg = {
     cancion: 'sin_nombre',  // va en el nombre de los archivos grabados
     grabarVideo: true,      // false = sólo MIDI + audio
+    formatoVideo: 'mp4',    // 'mp4' (si Chrome no puede, sale .webm) · 'webm'
+    // de dónde sale el audio de la grabación (archivo de audio y sonido del video):
+    //   'auto'   = si hay un audio cargado en el reproductor de ensayo, esa canción
+    //              (directo, a volumen completo); si no, el micrófono (ensayo real)
+    //   'mic' · 'ensayo' · 'ambos' (canción + mic mezclados)
+    audio: 'auto',
     fps: 30,                // cuadros por segundo del video
     videoBitrate: 6e6,      // 6 Mbps · subilo si se ve pixelado, bajalo si pesa mucho
     padGrabador: 89,
@@ -442,6 +449,38 @@
 
   const esperar = ms => new Promise(r => setTimeout(r, ms))
 
+  // ---- audio del reproductor de ensayo, para grabarlo directo ----
+  // El audio del reproductor pasa por un AudioContext: suena igual por los
+  // parlantes y además se puede grabar sin micrófono. (audioEl se declara más
+  // abajo, en el reproductor; estas funciones se usan después de cargar.)
+  let ctxAudio = null
+  let busEnsayo = null
+  const contexto = () => {
+    if (!ctxAudio) {
+      ctxAudio = new (window.AudioContext || window.webkitAudioContext)()
+      busEnsayo = ctxAudio.createGain()
+      busEnsayo.connect(ctxAudio.destination)
+    }
+    if (ctxAudio.state === 'suspended') ctxAudio.resume().catch(() => {})
+    return ctxAudio
+  }
+  const enrutarEnsayo = (el) => {
+    if (!el || el._gpFuente) return
+    const ctx = contexto()
+    el._gpFuente = ctx.createMediaElementSource(el)
+    el._gpFuente.connect(busEnsayo)
+  }
+  const hayAudioEnsayo = () => !!audioEl
+
+  // mime de video en orden de preferencia (MP4 con H.264 en Chrome; si no, WebM)
+  const MIMES_VIDEO = {
+    mp4: ['video/mp4;codecs=avc1.640028,mp4a.40.2', 'video/mp4;codecs=avc1.42E01F,mp4a.40.2',
+          'video/mp4;codecs=avc1,mp4a.40.2', 'video/mp4;codecs=avc1,opus', 'video/mp4'],
+    webm: ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'],
+  }
+  const extension = mime => /mp4/i.test(mime) ? 'mp4' : 'webm'
+  let mezcla = null   // destino de audio de la grabación cuando sale del AudioContext
+
   T.grabador = {
     alCambiar: null,
     get estado() { return estado },
@@ -454,32 +493,58 @@
       recAudio = recVideo = null
       micStream = null
       videoTrack = null
+      mezcla = null
       partes = ['midi']
       const esperas = []
 
-      // micrófono sin procesar (sin cancelación de eco ni control de volumen: es música)
-      try {
-        micStream = await navigator.mediaDevices.getUserMedia({
-          audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
-        })
-        recAudio = nuevoGrabador(micStream, ['audio/webm;codecs=opus', 'audio/webm'],
-          {}, chunksAudio, esperas)
-        partes.push('mic')
-      } catch (err) {
-        console.warn('GP.tools: no se pudo grabar el mic (¿permiso?):', err)
+      // ¿de dónde sale el audio?
+      const modo = cfg.audio === 'auto' ? (hayAudioEnsayo() ? 'ensayo' : 'mic') : cfg.audio
+      const quiereMic = modo === 'mic' || modo === 'ambos'
+      const quiereEnsayo = (modo === 'ensayo' || modo === 'ambos') && hayAudioEnsayo()
+      if ((modo === 'ensayo' || modo === 'ambos') && !hayAudioEnsayo()) {
+        console.warn('GP.tools: audio "ensayo" pero no hay audio cargado en el reproductor')
       }
 
-      // video del canvas de Hydra, con el audio del mic adentro
+      // micrófono sin procesar (sin cancelación de eco ni control de volumen: es música)
+      if (quiereMic) {
+        try {
+          micStream = await navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }
+          })
+        } catch (err) {
+          console.warn('GP.tools: no se pudo grabar el mic (¿permiso?):', err)
+        }
+      }
+      let pistaAudio = null
+      if (quiereEnsayo) {
+        // la canción del reproductor, directo (y el mic mezclado si es 'ambos')
+        const ctx = contexto()
+        enrutarEnsayo(audioEl)
+        mezcla = ctx.createMediaStreamDestination()
+        busEnsayo.connect(mezcla)
+        if (micStream) ctx.createMediaStreamSource(micStream).connect(mezcla)
+        pistaAudio = mezcla.stream
+        partes.push(micStream ? 'canción+mic' : 'canción')
+      } else if (micStream) {
+        pistaAudio = micStream
+        partes.push('mic')
+      }
+      if (pistaAudio) {
+        recAudio = nuevoGrabador(pistaAudio, ['audio/webm;codecs=opus', 'audio/webm'],
+          {}, chunksAudio, esperas)
+      }
+
+      // video del canvas de Hydra, con el mismo audio adentro
       if (cfg.grabarVideo) {
         const canvas = canvasHydra()
         if (canvas) {
           try {
             videoTrack = canvas.captureStream(cfg.fps).getVideoTracks()[0]
-            const pistas = [videoTrack, ...(micStream ? micStream.getAudioTracks() : [])]
-            recVideo = nuevoGrabador(new MediaStream(pistas),
-              ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'],
+            const pistas = [videoTrack, ...(pistaAudio ? pistaAudio.getAudioTracks() : [])]
+            const mimes = cfg.formatoVideo === 'webm' ? MIMES_VIDEO.webm : [...MIMES_VIDEO.mp4, ...MIMES_VIDEO.webm]
+            recVideo = nuevoGrabador(new MediaStream(pistas), mimes,
               { videoBitsPerSecond: cfg.videoBitrate }, chunksVideo, esperas)
-            partes.push('video')
+            partes.push(`video ${extension(recVideo.mimeType)}`)
           } catch (err) {
             console.warn('GP.tools: no se pudo grabar el video:', err)
           }
@@ -502,6 +567,7 @@
       if (recAudio && recAudio.state !== 'inactive') recAudio.stop()
       if (recVideo && recVideo.state !== 'inactive') recVideo.stop()
       if (micStream) micStream.getTracks().forEach(t => t.stop())
+      if (mezcla && busEnsayo) { try { busEnsayo.disconnect(mezcla) } catch (_) {} }
       if (videoTrack) videoTrack.stop()
       console.log(`GP.tools: detenido · ${grabacion.length} mensajes MIDI · ${reloj()}`)
       return guardar()   // detener incluye guardar
@@ -530,7 +596,8 @@
       }
       if (chunksVideo.length) {
         await esperar(400)
-        bajar(new Blob(chunksVideo, { type: 'video/webm' }), `${base}_video.webm`)
+        const mime = (recVideo && recVideo.mimeType) || 'video/webm'
+        bajar(new Blob(chunksVideo, { type: mime.split(';')[0] }), `${base}_video.${extension(mime)}`)
       }
       console.log(`GP.tools: guardado ${base}`)
       setEstado('guardado')
@@ -628,6 +695,7 @@
     if (!file) return
     if (audioEl) audioEl.pause()
     audioEl = new Audio(URL.createObjectURL(file))   // sin barra: lo maneja ▶/■
+    try { enrutarEnsayo(audioEl) } catch (err) { console.warn('GP.tools: audio del ensayo sin AudioContext', err) }
     audioEl.onended = () => setEnsayo(`fin ${resumenEnsayo()}`)
     audioEl.onerror = () => { audioEl = null; marcar(botonAudio, 'error', file.name) }
     marcar(botonAudio, 'ok', file.name)
@@ -690,7 +758,7 @@
         programados.push(setTimeout(() => salida.send(bytes), ms))
         enviados++
       })
-      if (audioEl) audioEl.play()
+      if (audioEl) { try { enrutarEnsayo(audioEl); contexto() } catch (_) {} audioEl.play() }
       console.info('GP.tools ensayo:', [...ruta].map(([n, o]) => `${n} → ${o ? o.name : 'SIN PUERTO'}`).join(' · '))
       if (faltan.length) {
         console.warn(`GP.tools ensayo: no hay puerto para ${faltan.join(', ')}. Creá en loopMIDI un puerto "<palabra>_Ensayo" con una palabra de ese nombre (ej: ${soloLetras(faltan[0]).slice(0, 8)}_Ensayo) y reiniciá Chrome entero.`)

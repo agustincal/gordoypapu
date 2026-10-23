@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-20 · GP_midi v1.6 · GP_tools v1.9 · GP_estados v1.1 (ver su manual)
+Actualizado: 2026-10-22 · GP_midi v1.6 · GP_tools v1.11 · GP_estados v1.1 (ver su manual)
 
 ---
 
@@ -232,7 +232,14 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 ## 9. Grabador y ensayo (GP_tools)
 
 - **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
-- Graba MIDI + mic + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.webm`.
+- Graba MIDI + audio + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.mp4`.
+- **Video en MP4** (H.264 en Chrome). Si el navegador no puede, sale `.webm` como antes. `GP.tools.init({ formatoVideo: 'webm' })` para forzar WebM.
+- **De dónde sale el audio** (el `_audio.webm` y el sonido del video), automático:
+  - **hay un audio cargado en el reproductor de ensayo** → graba esa canción directo, a volumen completo (no pasa por el aire ni por el mic);
+  - **no hay audio cargado** (ensayo real con la banda) → graba el **micrófono**.
+  - El indicador lo dice: `midi+canción+video mp4` o `midi+mic+video mp4`.
+  - Para elegirlo a mano: `GP.tools.init({ audio: 'mic' })` · `'ensayo'` · `'ambos'` (canción + mic mezclados) · `'auto'` (el de siempre).
+  - Si querés grabar un ensayo real después de haber usado el reproductor, recargá la página (F5) para que no quede la canción cargada, o usá `audio: 'mic'`.
 - El MIDI se graba con la hora real de llegada (no se corre si el navegador se traba).
 - Reproductor (abajo a la izquierda): botones `midi` / `audio` (verde = cargado, rojo = error), ▶ ■. Limpia solos los duplicados de grabaciones viejas.
 - **Puertos loopMIDI:** uno por aparato grabado, llamado `<palabra>_Ensayo`, donde la palabra está en el nombre del aparato. Ya existen `korg_Ensayo` (padKONTROL) y `akai_Ensayo` (APC). Para un aparato nuevo, ej "Arturia KeyStep 37" → `keystep_Ensayo`. Después de crearlos, reiniciar Chrome entero.
