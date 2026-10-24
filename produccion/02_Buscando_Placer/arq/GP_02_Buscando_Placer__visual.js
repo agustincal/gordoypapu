@@ -7,7 +7,11 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 24/10/2026 (v3.6: F5 rehecho con referencias — vhs: colores corridos, ondas horizontales,
+// Actualizado: 24/10/2026 (v3.7: F5 ajustes — V1 saltos de toda la pantalla en X, más seguidos cuanto más
+//              fader (reemplaza al scroll continuo, que saltaba al mover el fader) · V2 ondas que bajan
+//              constantes, desparejas, con bandas más finas · V3 rueda a la mitad de velocidad y ondulación
+//              quieta que baja despacio, al revés de la rueda)
+//              24/10/2026 (v3.6: F5 rehecho con referencias — vhs: colores corridos, ondas horizontales,
 //              líneas de barrido y franja de tracking · rueda: además de rodar, interferencia con líneas
 //              rasgadas en franjas, ondulación y nieve)
 //              24/10/2026 (v3.5: el canal 2 / fila 6 da un tirón de glitch en toda la pantalla (reemplaza
@@ -48,7 +52,7 @@
 //   verPixelado   0 pixelado · 1 bloques (con cada recuadro) · 2 poster
 //   verMarco      0 marco del recuadro · 1 + mosaico en toda la pantalla (fader: 0 nada → 1 hexágono)
 //   verTinte      0 tríada · 1 tono · 2 canales (RGB corrido)
-//   verMalaSenal  0 banda + costura · 1 vhs (colores corridos, ondas, tracking) · 2 rueda (rueda + interferencia)
+//   verMalaSenal  0 saltos + banda + costura · 1 vhs (colores corridos, ondas, tracking) · 2 rueda (rueda + interferencia)
 //   verFeedback   0 túnel · 1 giro · 2 sandin (cambia de color)
 //   verAparicion  0 zoom del contenido (F6) · 1 el marco se abre · 2 se abre desde una línea, como una tele
 //
@@ -64,7 +68,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.6'
+  const VERSION = 'v3.7'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -120,6 +124,15 @@
     // tirón de glitch (canal 2 / fila 6): bandas de ruido que corren las líneas de toda la pantalla
     tiron: 0.02,        // fuerza (anda en cualquier versión de F5, aunque el fader esté en 0)
     tironCaida: 0.3,    // segundos que tarda en apagarse después de soltar la nota (o el pad)
+    // mala señal F5
+    saltosMin: 0.7,     // V1: saltos por segundo con el fader apenas arriba…
+    saltosMax: 12,      // …y con el fader al máximo
+    saltoMin: 0.8,      // V1: tamaño de cada salto, en anchos de canvas (0.8 a 1.5 ≈ 1500 a 2800 px)
+    saltoMax: 1.5,
+    saltoMuerto: 0.07,  // V1: se descartan los saltos a menos de esto de 1 (darían la vuelta sin notarse)
+    vhsBaja: 0.2,       // V2: velocidad con que bajan las ondas (fracción de pantalla por segundo)
+    ruedaVel: 0.3,      // V3: vueltas por segundo de la rueda con el fader al máximo
+    ruedaOndaBaja: 0.04, // V3: velocidad con que baja la ondulación (lenta, al revés de la rueda)
     // color con el canal 9 / fila 5
     color9: 0.6,        // cuánto gira el color (1 = media vuelta entre el primer pad y el último)
     color9Vel: 0.15,    // segundos para llegar al color de cada nota
@@ -389,6 +402,7 @@
   // ============================================================
   let tPrev = performance.now()
   let rueda = 0
+  const salto = { x: 0, reloj: 0 }    // mala señal V1: posición en X de toda la pantalla y reloj hasta el próximo salto
   let fbVel = 1                        // F8: 1 = normal · 0 = frenado (silencio)
   let salidaArgs = null, firmaArmada = ''
 
@@ -402,8 +416,22 @@
     col9.actual += (col9.objetivo - col9.actual) * (1 - Math.exp(-dt / Math.max(0.01, C.color9Vel)))
 
     // rueda (mala señal V3): avanza con el fader; con el fader abajo vuelve a la vuelta entera más cercana
-    if (ver('verMalaSenal') === 2 && C.malaSenal > 0.02) rueda += dt * C.malaSenal * 0.6 * segunRitmo()
+    if (ver('verMalaSenal') === 2 && C.malaSenal > 0.02) rueda += dt * C.malaSenal * C.ruedaVel * segunRitmo()
     else rueda += (Math.round(rueda) - rueda) * (1 - Math.exp(-dt / 0.3))
+
+    // saltos (mala señal V1): toda la pantalla salta en X; con el fader abajo salta pocas veces por segundo
+    // (saltosMin), arriba muchas (saltosMax). Cada salto mide entre saltoMin y saltoMax canvas, sin la franja
+    // muerta alrededor de 1 (un canvas entero da la vuelta y no se nota). Con el fader en 0 vuelve al centro.
+    if (ver('verMalaSenal') === 0 && C.malaSenal > 0.02) {
+      salto.reloj += dt * C.saltosMin * Math.pow(C.saltosMax / C.saltosMin, C.malaSenal)
+      if (salto.reloj >= 1) {
+        salto.reloj = 0
+        let d
+        do d = C.saltoMin + Math.random() * (C.saltoMax - C.saltoMin)
+        while (Math.abs(d - 1) < C.saltoMuerto)
+        salto.x = (salto.x + (Math.random() < 0.5 ? -d : d)) % 1
+      }
+    } else { salto.x = 0; salto.reloj = 1 }   // reloj en 1: al subir el fader, el primer salto es inmediato
 
     // cambió una versión → recompilar
     if (salidaArgs && firma() !== firmaArmada) armar()
@@ -539,8 +567,13 @@
       // vhs: ondas horizontales suaves y corrimientos lentos por bandas, colores corridos (rojo para un lado,
       // verde-azul para el otro), color lavado, líneas de barrido y una franja de tracking que baja despacio
       const corrida = () => ms() * 0.008
+      // ondas que bajan constantes (sync negativo = hacia abajo en pantalla); una segunda onda más fina las
+      // deforma para que no queden parejas, y otra suma bandas finitas
+      const ondaVhs = () => osc(5, () => -C.vhsBaja, 0).rotate(PI / 2)
+        .modulate(osc(17, () => -C.vhsBaja * 1.7, 0).rotate(PI / 2), 0.08)
+        .add(osc(40, () => -C.vhsBaja * 1.3, 0).rotate(PI / 2), 0.3)
       const ondas = (c) => c
-        .modulateScrollX(osc(5, 0.08, 0).rotate(PI / 2), () => ms() * 0.012)
+        .modulateScrollX(ondaVhs(), () => ms() * 0.012)
         .modulateScrollX(noise(3, 0.15).scale(1, 200, 1), () => ms() * 0.04)
       fin = ondas(base()).color(1, 0, 0).scrollX(corrida)
         .add(ondas(base()).color(0, 1, 1).scrollX(() => -corrida()))
@@ -549,17 +582,17 @@
         .add(noise(200, 6).mult(shape(4, 1, 0.4).scale(1, 4, 0.05).scrollY(() => (time * 0.06) % 1)), () => ms() * 0.5)
     } else if (vS === 2) {
       // rueda: la imagen rueda hacia arriba y se rompe como una tele con interferencia — líneas rasgadas
-      // en franjas sueltas, ondulación de sincronismo y nieve
+      // en franjas sueltas, ondulación de sincronismo (quieta, baja despacio, al revés de la rueda) y nieve
       const fuerza = () => C.malaSenal * segunRitmo()
       fin = base()
         .scrollY(() => rueda % 1)
         .modulateScrollX(noise(8, 0.6).scale(1, 300, 1).thresh(0.6, 0.2), () => fuerza() * 0.12)
-        .modulateScrollX(osc(18, 0.4, 0).rotate(PI / 2), () => fuerza() * 0.01)
+        .modulateScrollX(osc(18, () => -C.ruedaOndaBaja, 0).rotate(PI / 2), () => C.malaSenal * 0.01)
         .add(noise(350, 12), () => fuerza() * 0.3)
     } else fin = base()
       .layer(lineaMalaSenal())
       .modulateScrollX(noise(30, 10).pixelate(1, 100), () => ms() * 0.06)
-      .scroll(() => 0.01 * C.malaSenal, 0, () => 0.1 * ms())
+      .scrollX(() => salto.x)
 
     fin
       .modulateScrollX(noise(() => 30 + tir.r * 30, 10).pixelate(1, 100), () => nivelTiron() * C.tiron)
