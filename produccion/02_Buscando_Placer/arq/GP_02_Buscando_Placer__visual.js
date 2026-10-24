@@ -3,11 +3,13 @@
 // Canción: 02_Buscando_Placer (Gordo y Papu) · Fase 3 · COPIA DE TRABAJO
 // Rol: motor visual — recuadros con imágenes/videos que se disparan con las
 //      notas, barrido de entrada, aparición con zoom, imán con la voz,
-//      mala señal de TV, versiones por fader, invertir (canal 2), color (canal 9),
+//      mala señal de TV, versiones por fader, tirón de glitch (canal 2), color (canal 9),
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 24/10/2026 (v3.4: duración por nota, idea de Fluorescente — la aparición sigue a la nota
+// Actualizado: 24/10/2026 (v3.5: el canal 2 / fila 6 da un tirón de glitch en toda la pantalla (reemplaza
+//              al invertir) · la mala señal (vhs y rueda) ya no reacciona a los disparos del bajo)
+//              24/10/2026 (v3.4: duración por nota, idea de Fluorescente — la aparición sigue a la nota
 //              sostenida y termina según el ritmo · barrido según el ritmo · F6 con versiones de aparición
 //              (zoom / abre / tele) · el golpe dura mientras suena la nota · F8 frena en silencio)
 //              23/10/2026 (v3.3: F3 V2 = mosaico — el fader elige cuántas caras: 0 nada · 2 espejo … 6 hexágono)
@@ -34,7 +36,7 @@
 //   GP.buscandoPlacer.soltar(clave)                      se soltó esa nota: termina la aparición y corta el barrido
 //                                                        (sin clave: como antes, no espera a la nota)
 //   GP.buscandoPlacer.rafaga()                           varios recuadros seguidos (ej: al cambiar de estado)
-//   GP.buscandoPlacer.invertir(on, origen)               canal 2 (golpe) o pad a mano (mientras lo apretás)
+//   GP.buscandoPlacer.tiron(on, clave)                   canal 2 o pad a mano: tirón de glitch (mientras suena + caída)
 //   GP.buscandoPlacer.color9(columna)                    canal 9 o pad a mano: gira el color de toda la imagen
 //
 // Versiones (0 = V1, 1 = V2, 2 = V3). V1 es siempre el efecto de la v3.0
@@ -59,7 +61,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.4'
+  const VERSION = 'v3.5'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -112,9 +114,9 @@
     // pixelado: cuántos bloques hay con el fader abajo y arriba (curva pareja entre los dos)
     pixelMax: 600,
     pixelMin: 12,
-    // invertir (canal 2 / fila 6)
-    invertir: 1,        // cuánto invierte (0 a 1)
-    invertirCaida: 0.25,// segundos que tarda en volver después de cada nota (o al soltar el pad)
+    // tirón de glitch (canal 2 / fila 6): bandas de ruido que corren las líneas de toda la pantalla
+    tiron: 0.02,        // fuerza (anda en cualquier versión de F5, aunque el fader esté en 0)
+    tironCaida: 0.3,    // segundos que tarda en apagarse después de soltar la nota (o el pad)
     // color con el canal 9 / fila 5
     color9: 0.6,        // cuánto gira el color (1 = media vuelta entre el primer pad y el último)
     color9Vel: 0.15,    // segundos para llegar al color de cada nota
@@ -354,22 +356,20 @@
   }
 
   // ============================================================
-  // Invertir (canal 2 / fila 6)
-  //   nota del canal → un golpe de invertido que vuelve en invertirCaida
-  //   pad a mano     → invertido mientras lo apretás; al soltar vuelve igual que un golpe
+  // Tirón de glitch (canal 2 / fila 6)
+  //   cada nota (o pad) lo prende al máximo, queda arriba mientras suena y se apaga en tironCaida
+  //   después de soltar. Cada nota cambia un poco el dibujo de las bandas.
   // ============================================================
-  const inv = { mano: new Set(), t: -1e9 }
-  V.invertir = (on, origen = 'canal', columna = 0) => {
+  const tir = { sostenidas: new Map(), t: -1e9, suelta: -1e9, r: 0.5 }
+  V.tiron = (on, clave = 'mano') => {
     const ahora = performance.now()
-    if (origen === 'akai') {
-      if (on) inv.mano.add(columna)
-      else { inv.mano.delete(columna); if (!inv.mano.size) inv.t = ahora }
-    } else if (on) inv.t = ahora
+    if (on) { tir.sostenidas.set(clave, ahora); tir.t = ahora; tir.suelta = null; tir.r = Math.random() }
+    else { tir.sostenidas.delete(clave); if (!tir.sostenidas.size && tir.suelta == null) tir.suelta = ahora }
   }
-  const invNivel = () => {
-    if (inv.mano.size) return 1
-    const dt = (performance.now() - inv.t) / 1000
-    return dt < 0 ? 0 : clamp01(1 - dt / Math.max(0.01, C.invertirCaida))
+  const nivelTiron = () => {
+    if (tir.sostenidas.size) return 1
+    const dt = (performance.now() - (tir.suelta ?? tir.t)) / 1000
+    return dt < 0 ? 0 : Math.exp(-dt / Math.max(0.01, C.tironCaida))
   }
 
   // ============================================================
@@ -407,6 +407,7 @@
 
     // notas sostenidas de más (se perdió el note-off): se dan por sueltas
     for (const [k, t0] of sostenidas) if (ahora - t0 > C.maxSostenida * 1000) V.soltar(k)
+    for (const [k, t0] of tir.sostenidas) if (ahora - t0 > C.maxSostenida * 1000) V.tiron(false, k)
 
     // silencio: sin notas sostenidas ni actividad reciente → el feedback frena (y vuelve rápido con la próxima)
     const activo = sostenidas.size > 0 || ahora - ultimaActividad < C.silencio * 1000
@@ -523,27 +524,26 @@
       .modulate(iman(), imanFuerza)
       .out(out)
 
-    // --- 2. salida final (o1): mosaico, mala señal, color del canal 9, invertir ---
+    // --- 2. salida final (o1): mosaico, mala señal, tirón del canal 2, color del canal 9 ---
     let fin = vM === 1
       ? src(out).blend(src(out).kaleid(mosaicoLados).rotate(() => time * 0.03), mosaicoMezcla)
       : src(out)
 
     // F5 mala señal
     if (vS === 1) fin = fin
-      .modulateScrollX(noise(() => 30 + golpe.r * 30, 0.5), () => ms() * 0.015 + g() * 0.05 * C.malaSenal)
+      .modulateScrollX(noise(45, 0.5), () => ms() * 0.015)
       .mult(osc(300, 0, 0).rotate(PI / 2), () => ms() * 0.6)
       .saturate(() => 1 + ms() * 0.5)
     else if (vS === 2) fin = fin
       .scrollY(() => rueda % 1)
-      .modulateScrollX(noise(30, 10).pixelate(1, 100), () => g() * 0.03 * C.malaSenal)
     else fin = fin
       .layer(lineaMalaSenal())
       .modulateScrollX(noise(30, 10).pixelate(1, 100), () => ms() * 0.06)
       .scroll(() => 0.01 * C.malaSenal, 0, () => 0.1 * ms())
 
     fin
+      .modulateScrollX(noise(() => 30 + tir.r * 30, 10).pixelate(1, 100), () => nivelTiron() * C.tiron)
       .hue(() => col9.actual * C.color9)
-      .invert(() => invNivel() * C.invertir)
       .out(final)
   }
 
@@ -572,7 +572,7 @@
   }
 
   // para mirar desde la consola
-  V.estadoNotas = () => ({ sostenidas: [...sostenidas.keys()], aparicion: ap.p, golpe: g(), feedback: fbVel, entreDisparos: intervaloDisparos })
+  V.estadoNotas = () => ({ sostenidas: [...sostenidas.keys()], aparicion: ap.p, golpe: g(), tiron: nivelTiron(), feedback: fbVel, entreDisparos: intervaloDisparos })
 
   console.log('[GP] visual Buscando Placer ' + VERSION + ' (produccion) cargado')
 })()

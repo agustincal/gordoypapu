@@ -20,6 +20,8 @@
 //              24/10/2026 (v05, motor v3.4): duración por nota — la aparición sigue a la nota sostenida y
 //              termina según el ritmo · barrido según el ritmo · F6 con versiones de aparición (zoom / abre /
 //              tele) · el golpe dura mientras suena la nota · F8 frena en silencio. LIVE sigue en v04.
+//              24/10/2026 (motor v3.5): canal 2 / fila 6 = tirón de glitch (ya no invierte) · la mala señal
+//              (vhs, rueda) no reacciona a los disparos del bajo
 // ============================================================
 
 // ---- carga de scripts ----
@@ -99,8 +101,8 @@ V.init({
   colorBase: 0,        // color de la rueda (0 a 1); cada recuadro toma uno de su tríada
 
   rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado
-  invertir: 1,         // cuánto invierte el canal 2 / la fila 6 (0 a 1)
-  invertirCaida: 0.25, // segundos que tarda en volver después de cada nota
+  tiron: 0.02,         // fuerza del tirón de glitch del canal 2 / la fila 6 (anda aunque F5 esté en 0)
+  tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
 
   // duración por nota (idea de Fluorescente)
   aparicionLarga: 1.8, // s que tarda en abrirse del todo un recuadro mientras la nota se sostiene
@@ -145,8 +147,8 @@ const CONTROLES = {
 }
 
 // base de los mutes: los recuadros los dispara sólo el canal 1 (bajo); el bombo queda muteado.
-// El canal 2 (invierte) y el 9 (color) quedan muteados de base: cada estado los abre donde entran
-// ({ ..., muteCanal2: false } = en ese estado invierte).
+// El canal 2 (tirón de glitch) y el 9 (color) quedan muteados de base: cada estado los abre donde entran
+// ({ ..., muteCanal2: false } = en ese estado el teclado da el tirón).
 // En vivo: 83 / 84 / 85 los prenden o apagan hasta el próximo cambio de estado.
 const BASE_CANALES = { muteCanal1: false, muteCanal10: true, muteCanal2: true, muteCanal9: true }
 
@@ -193,11 +195,11 @@ const ESTADOS_PRUEBA = [
             feedback: 0.3, verFeedback: 0, malaSenal: 0.1, siguenRitmo: true, colorBase: 0.00 },
   /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2)',
             marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08 },
-  /* 3 */ { nombre: '3 · teclado: invierte + bloques (F2 V2) + canales (F4 V3)', muteCanal2: false,
+  /* 3 */ { nombre: '3 · teclado: tirón de glitch + bloques (F2 V2) + canales (F4 V3)', muteCanal2: false,
             marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20 },
   /* 4 */ { nombre: '4 · notas largas: color + mosaico (F3 V2) + sandin (F8 V3) + aparición tele (F6 V3)', muteCanal9: false,
             marco: 0.5, verMarco: 1, zoom: 0.2, verAparicion: 2, feedback: 0.4, verFeedback: 2, colorBase: 0.40, fundido: 1 },
-  /* 5 */ { nombre: '5 · todo: invierte + color + rasgado (F1 V2) + rueda (F5 V3)', muteCanal2: false, muteCanal9: false,
+  /* 5 */ { nombre: '5 · todo: tirón + color + rasgado (F1 V2) + rueda (F5 V3)', muteCanal2: false, muteCanal9: false,
             marco: 0.6, jitter: 0.6, verJitter: 1, malaSenal: 0.4, verMalaSenal: 2, tinte: 0.3, iman: 0.5, usaBarrido: true, colorBase: 0.55 },
   /* 6 */ { nombre: '6 · baja: tono (F4 V2) + poster (F2 V3) + el marco se abre (F6 V2)',
             marco: 0.4, jitter: 0.1, tinte: 0.5, verTinte: 1, pixelado: 0.4, verPixelado: 2, verAparicion: 1, colorBase: 0.70 },
@@ -212,8 +214,8 @@ const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 
 // AKAI — mapa LIVE (mismo orden de canales que las otras canciones)
 //   fila 8 → canal 1 (bajo). Es el que dispara los recuadros. Mute: botón 82
 //   fila 7 → canal 10 (bombo, una nota por negra). De base muteado. Mute: botón 83
-//   fila 6 → canal 2 (teclado distorsionado): INVIERTE la imagen con cada nota. Mute: botón 84
-//            pads de la fila 6 a mano: invertido mientras los apretás
+//   fila 6 → canal 2 (teclado distorsionado): cada nota da un TIRÓN DE GLITCH en toda la pantalla. Mute: botón 84
+//            pads de la fila 6 a mano: tirón mientras los apretás
 //   fila 5 → canal 9 (notas largas): cada nota gira el color de toda la imagen. Mute: botón 85
 //            pads de la fila 5 a mano: cada pad es un color
 //   fila 4 → libre
@@ -246,7 +248,7 @@ GP.estados.init({
 })
 
 GP.midi.alDisparo(({ fila, columna, nota, on, origen }) => {
-  if (fila === 6) { V.invertir(on, origen, columna); return }   // canal 2 o pads de la fila 6
+  if (fila === 6) { V.tiron(on, origen === 'akai' ? `pad${columna}` : `n${nota}`); return }   // canal 2 o pads de la fila 6
   if (fila === 5) { if (on) V.color9(columna); return }         // canal 9 o pads de la fila 5
   // filas 8 y 7: recuadros. La clave identifica la nota (o el pad) para saber cuándo se suelta
   const clave = origen === 'akai' ? `pad${fila}.${columna}` : `f${fila}.${nota}`
