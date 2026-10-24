@@ -22,6 +22,7 @@
 //              tele) · el golpe dura mientras suena la nota · F8 frena en silencio. LIVE sigue en v04.
 //              24/10/2026 (motor v3.5): canal 2 / fila 6 = tirón de glitch (ya no invierte) · la mala señal
 //              (vhs, rueda) no reacciona a los disparos del bajo
+//              24/10/2026 (motor v3.6): F5 vhs y rueda rehechos con las referencias de TV / VHS
 // ============================================================
 
 // ---- carga de scripts ----
@@ -134,7 +135,7 @@ const CONTROLES = {
   verPixelado:  'V2',  // F2: pixelado · bloques · poster
   verMarco:     'V3',  // F3: marco · marco + mosaico
   verTinte:     'V4',  // F4: tríada · tono · canales
-  verMalaSenal: 'V5',  // F5: banda · vhs · rueda
+  verMalaSenal: 'V5',  // F5: banda · vhs (colores corridos, ondas, tracking) · rueda (rueda + interferencia)
   verFeedback:  'V8',  // F8: túnel · giro · sandin
   verAparicion: 'V6',  // F6: cómo aparece cada recuadro — zoom del contenido · el marco se abre · desde una línea (tele)
   usaBarrido:  'N11',

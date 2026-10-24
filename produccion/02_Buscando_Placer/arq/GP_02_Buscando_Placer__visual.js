@@ -7,7 +7,10 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 24/10/2026 (v3.5: el canal 2 / fila 6 da un tirón de glitch en toda la pantalla (reemplaza
+// Actualizado: 24/10/2026 (v3.6: F5 rehecho con referencias — vhs: colores corridos, ondas horizontales,
+//              líneas de barrido y franja de tracking · rueda: además de rodar, interferencia con líneas
+//              rasgadas en franjas, ondulación y nieve)
+//              24/10/2026 (v3.5: el canal 2 / fila 6 da un tirón de glitch en toda la pantalla (reemplaza
 //              al invertir) · la mala señal (vhs y rueda) ya no reacciona a los disparos del bajo)
 //              24/10/2026 (v3.4: duración por nota, idea de Fluorescente — la aparición sigue a la nota
 //              sostenida y termina según el ritmo · barrido según el ritmo · F6 con versiones de aparición
@@ -45,7 +48,7 @@
 //   verPixelado   0 pixelado · 1 bloques (con cada recuadro) · 2 poster
 //   verMarco      0 marco del recuadro · 1 + mosaico en toda la pantalla (fader: 0 nada → 1 hexágono)
 //   verTinte      0 tríada · 1 tono · 2 canales (RGB corrido)
-//   verMalaSenal  0 banda + costura · 1 vhs · 2 rueda (rolling vertical)
+//   verMalaSenal  0 banda + costura · 1 vhs (colores corridos, ondas, tracking) · 2 rueda (rueda + interferencia)
 //   verFeedback   0 túnel · 1 giro · 2 sandin (cambia de color)
 //   verAparicion  0 zoom del contenido (F6) · 1 el marco se abre · 2 se abre desde una línea, como una tele
 //
@@ -61,7 +64,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.5'
+  const VERSION = 'v3.6'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -525,18 +528,35 @@
       .out(out)
 
     // --- 2. salida final (o1): mosaico, mala señal, tirón del canal 2, color del canal 9 ---
-    let fin = vM === 1
+    // cada llamada da una copia nueva (en Hydra una cadena se usa una sola vez)
+    const base = () => vM === 1
       ? src(out).blend(src(out).kaleid(mosaicoLados).rotate(() => time * 0.03), mosaicoMezcla)
       : src(out)
 
-    // F5 mala señal
-    if (vS === 1) fin = fin
-      .modulateScrollX(noise(45, 0.5), () => ms() * 0.015)
-      .mult(osc(300, 0, 0).rotate(PI / 2), () => ms() * 0.6)
-      .saturate(() => 1 + ms() * 0.5)
-    else if (vS === 2) fin = fin
-      .scrollY(() => rueda % 1)
-    else fin = fin
+    // F5 mala señal (con el fader en 0, ninguna versión cambia la imagen)
+    let fin
+    if (vS === 1) {
+      // vhs: ondas horizontales suaves y corrimientos lentos por bandas, colores corridos (rojo para un lado,
+      // verde-azul para el otro), color lavado, líneas de barrido y una franja de tracking que baja despacio
+      const corrida = () => ms() * 0.008
+      const ondas = (c) => c
+        .modulateScrollX(osc(5, 0.08, 0).rotate(PI / 2), () => ms() * 0.012)
+        .modulateScrollX(noise(3, 0.15).scale(1, 200, 1), () => ms() * 0.04)
+      fin = ondas(base()).color(1, 0, 0).scrollX(corrida)
+        .add(ondas(base()).color(0, 1, 1).scrollX(() => -corrida()))
+        .saturate(() => 1 - ms() * 0.3)
+        .mult(osc(300, 0, 0).rotate(PI / 2), () => ms() * 0.12)
+        .add(noise(200, 6).mult(shape(4, 1, 0.4).scale(1, 4, 0.05).scrollY(() => (time * 0.06) % 1)), () => ms() * 0.5)
+    } else if (vS === 2) {
+      // rueda: la imagen rueda hacia arriba y se rompe como una tele con interferencia — líneas rasgadas
+      // en franjas sueltas, ondulación de sincronismo y nieve
+      const fuerza = () => C.malaSenal * segunRitmo()
+      fin = base()
+        .scrollY(() => rueda % 1)
+        .modulateScrollX(noise(8, 0.6).scale(1, 300, 1).thresh(0.6, 0.2), () => fuerza() * 0.12)
+        .modulateScrollX(osc(18, 0.4, 0).rotate(PI / 2), () => fuerza() * 0.01)
+        .add(noise(350, 12), () => fuerza() * 0.3)
+    } else fin = base()
       .layer(lineaMalaSenal())
       .modulateScrollX(noise(30, 10).pixelate(1, 100), () => ms() * 0.06)
       .scroll(() => 0.01 * C.malaSenal, 0, () => 0.1 * ms())
