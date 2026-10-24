@@ -7,7 +7,10 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 23/10/2026 (v3.3: F3 V2 = mosaico — el fader elige cuántas caras: 0 nada · 2 espejo … 6 hexágono)
+// Actualizado: 24/10/2026 (v3.4: duración por nota, idea de Fluorescente — la aparición sigue a la nota
+//              sostenida y termina según el ritmo · barrido según el ritmo · F6 con versiones de aparición
+//              (zoom / abre / tele) · el golpe dura mientras suena la nota · F8 frena en silencio)
+//              23/10/2026 (v3.3: F3 V2 = mosaico — el fader elige cuántas caras: 0 nada · 2 espejo … 6 hexágono)
 //              23/10/2026 (v3.2: el imán es sólo el fader F7, siempre activo — sin el toggle usaIman / N12)
 //              23/10/2026 (v3.1: versiones por fader con los botones 64-71, tomadas de los
 //              efectos de Perdido · curva pareja de pixelado · invertir con el canal 2 / fila 6 ·
@@ -27,8 +30,9 @@
 //   GP.buscandoPlacer.medios({ urls, modo, fuente, aspecto })   imágenes o videos (precarga)
 //   GP.buscandoPlacer.update()                           dentro de update = () => {...}
 //   GP.buscandoPlacer.salida(o0, o1)                     para dibujar (después render(o1))
-//   GP.buscandoPlacer.disparar()                         un recuadro nuevo
-//   GP.buscandoPlacer.soltar()                           corta el barrido (al soltar la nota)
+//   GP.buscandoPlacer.disparar(clave)                    un recuadro nuevo (clave = la nota o el pad que lo disparó)
+//   GP.buscandoPlacer.soltar(clave)                      se soltó esa nota: termina la aparición y corta el barrido
+//                                                        (sin clave: como antes, no espera a la nota)
 //   GP.buscandoPlacer.rafaga()                           varios recuadros seguidos (ej: al cambiar de estado)
 //   GP.buscandoPlacer.invertir(on, origen)               canal 2 (golpe) o pad a mano (mientras lo apretás)
 //   GP.buscandoPlacer.color9(columna)                    canal 9 o pad a mano: gira el color de toda la imagen
@@ -41,13 +45,21 @@
 //   verTinte      0 tríada · 1 tono · 2 canales (RGB corrido)
 //   verMalaSenal  0 banda + costura · 1 vhs · 2 rueda (rolling vertical)
 //   verFeedback   0 túnel · 1 giro · 2 sandin (cambia de color)
+//   verAparicion  0 zoom del contenido (F6) · 1 el marco se abre · 2 se abre desde una línea, como una tele
+//
+// Duración por nota (como en Fluorescente):
+//   - la aparición avanza lenta mientras la nota del recuadro se sostiene (se abre del todo en
+//     aparicionLarga s); al soltar, termina en aparicionRitmo × el tiempo entre disparos
+//   - el barrido dura barridoRitmo × el tiempo entre disparos (como mucho barridoDur)
+//   - el golpe queda arriba mientras suena la nota y se apaga al soltarla
+//   - en silencio (sin notas durante `silencio` s) el feedback de F8 frena en caidaSilencio s
 // Cambiar de versión recompila la cadena de Hydra (puede haber un salto chico).
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.3'
+  const VERSION = 'v3.4'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -65,7 +77,7 @@
     marco: 0,           // F3: tamaño del marco del recuadro (en V2, además, mosaico)
     tinte: 0,           // F4: cuánto tiñe el color de la paleta
     malaSenal: 0,       // F5: mala señal de TV
-    zoom: 0,            // F6: zoom del contenido adentro del marco
+    zoom: 0,            // F6: zoom del contenido adentro del marco (en V1 crece con la aparición)
     iman: 0,            // F7: imán con la voz del mic (siempre activo: en 0 no hace nada)
     feedback: 0,        // F8: feedback sobre el collage (0 = nada)
     // versiones (botones 64-71, a través de GP_estados)
@@ -75,6 +87,7 @@
     verTinte: 0,
     verMalaSenal: 0,
     verFeedback: 0,
+    verAparicion: 0,
     // toggles
     usaBarrido: false,  // N11: el recuadro entra barriendo desde afuera
     siguenRitmo: false, // N13: jitter y mala señal laten con los disparos (en vez de quedar parejos)
@@ -83,11 +96,19 @@
     // recuadros
     rafagaCantidad: 3,  // recuadros de la ráfaga al cambiar de estado
     rafagaPausa: 30,    // ms entre recuadros de la ráfaga
-    apareceDur: 0.45,   // segundos del zoom de aparición
-    barridoDur: 0.6,    // segundos que tarda en entrar barriendo
+    // duración por nota
+    aparicionLarga: 1.8, // segundos que tarda en abrirse del todo mientras la nota se sostiene
+    aparicionRitmo: 0.25, // al soltar, la aparición termina en esta fracción del tiempo entre disparos
+    aparicionMin: 0.06,  // límites (s) de ese final
+    aparicionMax: 1,
+    maxSostenida: 8,     // segundos: una nota sostenida más que esto se da por suelta
+    barridoRitmo: 0.8,   // el barrido dura esta fracción del tiempo entre disparos…
+    barridoDur: 0.6,     // …y como mucho esto (segundos)
+    silencio: 0.6,       // segundos sin notas para considerar silencio
+    caidaSilencio: 1.5,  // segundos que tarda el feedback (F8) en frenar en silencio
     barridoDist: 1.3,   // desde qué tan lejos entra
     // golpe de cada recuadro (lo usan rasgado, franjas, bloques, tono, canales, vhs, rueda)
-    golpeCaida: 0.3,    // segundos que tarda en apagarse
+    golpeCaida: 0.3,    // segundos que tarda en apagarse después de soltar la nota
     // pixelado: cuántos bloques hay con el fader abajo y arriba (curva pareja entre los dos)
     pixelMax: 600,
     pixelMin: 12,
@@ -108,7 +129,9 @@
   V.DEFAULTS = DEFAULTS
 
   // cuántas versiones tiene cada efecto (el sketch las declara igual en GP.midi.versiones)
-  const CUANTAS = { verJitter: 3, verPixelado: 3, verMarco: 2, verTinte: 3, verMalaSenal: 3, verFeedback: 3 }
+  const CUANTAS = { verJitter: 3, verPixelado: 3, verMarco: 2, verTinte: 3, verMalaSenal: 3, verFeedback: 3, verAparicion: 3 }
+  // las que cambian la cadena de Hydra (recompilan); la aparición sólo cambia números
+  const RECOMPILAN = ['verJitter', 'verPixelado', 'verMarco', 'verTinte', 'verMalaSenal', 'verFeedback']
   V.CUANTAS = CUANTAS
   const ver = k => {
     const n = CUANTAS[k]
@@ -180,8 +203,14 @@
   }
   V.rect = rect
 
-  let barriendo = false, barridoInicio = 0
-  let apareciendo = false, apareceInicio = 0
+  let barriendo = false, barridoInicio = 0, barridoDurActual = 0.6
+
+  // notas sostenidas que dispararon recuadros: clave → instante del note-on
+  const sostenidas = new Map()
+  let ultimaActividad = -1e9          // último disparo o suelta (para el silencio)
+  // aparición del recuadro actual: p va de 0 a 1 (en pantalla, con salida suave)
+  const ap = { p: 1, clave: null, vel: 0 }
+  const sostiene = clave => clave != null && sostenidas.has(clave)
 
   // latido: cuánto pasó desde el último recuadro, en relación al tiempo entre los dos últimos
   let tUltimoDisparo = 0, intervaloDisparos = 0
@@ -191,12 +220,24 @@
   }
   const segunRitmo = () => (C.siguenRitmo ? latido() : 1)
 
-  // golpe: salta a 1 con cada recuadro y se apaga solo (más un azar por golpe, como en Perdido)
-  const golpe = { t: -1e9, r: 0.5, s: 1 }
+  // golpe: salta a 1 con cada recuadro, queda arriba mientras suena su nota y se apaga al soltarla
+  // (más un azar por golpe, como en Perdido)
+  const golpe = { t: -1e9, r: 0.5, s: 1, clave: null, suelta: -1e9 }
   const g = () => {
-    const dt = (performance.now() - golpe.t) / 1000
+    if (golpe.suelta == null && sostiene(golpe.clave)) return 1
+    const dt = (performance.now() - (golpe.suelta ?? golpe.t)) / 1000
     return dt < 0 ? 0 : Math.exp(-dt / Math.max(0.01, C.golpeCaida))
   }
+
+  // tiempo (s) en que termina la aparición después de soltar: una fracción del tiempo entre disparos
+  const durRitmo = () => {
+    const base = intervaloDisparos ? intervaloDisparos / 1000 : 0.5
+    return Math.max(C.aparicionMin, Math.min(C.aparicionMax, C.aparicionRitmo * base))
+  }
+  const durBarrido = () => intervaloDisparos
+    ? Math.max(0.08, Math.min(C.barridoDur, C.barridoRitmo * intervaloDisparos / 1000))
+    : C.barridoDur
+  const soltarAparicion = () => { ap.vel = (1 - ap.p) / Math.max(0.01, durRitmo()) }
   V.golpe = g
 
   const hslToRgb = (h, s, l) => {
@@ -207,7 +248,10 @@
   }
   const triadica = (hue, s = 0.8, l = 0.55) => [0, 1 / 3, 2 / 3].map(o => hslToRgb((hue + o) % 1, s, l))
 
-  V.disparar = () => {
+  V.disparar = (clave = null) => {
+    const ahoraNota = performance.now()
+    if (clave != null) sostenidas.set(clave, ahoraNota)
+    ultimaActividad = ahoraNota
     if (rect.cargando || !medios.urls.length) return
     rect.cargando = true
     rect.sueltaPendiente = false
@@ -247,6 +291,7 @@
         rect.ryIni = rect.ryFin + Math.sin(angulo) * C.barridoDist
         rect.rx = rect.rxIni; rect.ry = rect.ryIni
         barridoInicio = time
+        barridoDurActual = durBarrido()
         barriendo = true
       } else {
         rect.rx = rect.rxFin; rect.ry = rect.ryFin
@@ -254,12 +299,17 @@
         barriendo = false
       }
 
-      golpe.t = performance.now()
+      const t0 = performance.now()
+      golpe.t = t0
       golpe.r = Math.random()
       golpe.s = Math.random() * 2 - 1
+      golpe.clave = clave
+      golpe.suelta = sostiene(clave) ? null : t0
 
-      apareceInicio = time
-      apareciendo = true
+      ap.p = 0
+      ap.vel = 0
+      ap.clave = clave
+      if (!sostiene(clave)) soltarAparicion()   // sin nota sostenida (ráfaga, o ya la soltaron): termina según el ritmo
       rect.escalaAparicion = 0
       rect.cargando = false
     }
@@ -273,8 +323,17 @@
     m.addEventListener(medios.modo === 'video' ? 'loadeddata' : 'load', () => { clearTimeout(espera); aplicar(m) }, { once: true })
   }
 
-  // al soltar la nota: si estaba barriendo, el recuadro cae en su lugar
-  V.soltar = () => {
+  // al soltar la nota: termina la aparición según el ritmo, se apaga el golpe y,
+  // si estaba barriendo, el recuadro cae en su lugar. Sin clave: como antes.
+  V.soltar = (clave = null) => {
+    const ahora = performance.now()
+    ultimaActividad = ahora
+    if (clave != null) {
+      sostenidas.delete(clave)
+      if (clave !== ap.clave) return          // una nota vieja: el recuadro actual sigue como está
+      if (golpe.clave === clave && golpe.suelta == null) golpe.suelta = ahora
+      if (ap.p < 1) soltarAparicion()
+    }
     rect.sueltaPendiente = true
     if (!barriendo) return
     rect.rx = rect.rxFin; rect.ry = rect.ryFin
@@ -327,6 +386,7 @@
   // ============================================================
   let tPrev = performance.now()
   let rueda = 0
+  let fbVel = 1                        // F8: 1 = normal · 0 = frenado (silencio)
   let salidaArgs = null, firmaArmada = ''
 
   V.update = () => {
@@ -345,13 +405,23 @@
     // cambió una versión → recompilar
     if (salidaArgs && firma() !== firmaArmada) armar()
 
-    if (apareciendo) {
-      const t = Math.min(1, (time - apareceInicio) / C.apareceDur)
-      rect.escalaAparicion = 1 - Math.pow(1 - t, 3)
-      if (t >= 1) apareciendo = false
+    // notas sostenidas de más (se perdió el note-off): se dan por sueltas
+    for (const [k, t0] of sostenidas) if (ahora - t0 > C.maxSostenida * 1000) V.soltar(k)
+
+    // silencio: sin notas sostenidas ni actividad reciente → el feedback frena (y vuelve rápido con la próxima)
+    const activo = sostenidas.size > 0 || ahora - ultimaActividad < C.silencio * 1000
+    fbVel += ((activo ? 1 : 0) - fbVel) * (1 - Math.exp(-dt / (activo ? 0.15 : Math.max(0.05, C.caidaSilencio / 3))))
+
+    // aparición: lenta mientras la nota se sostiene; al soltar, termina según el ritmo
+    if (ap.p < 1) {
+      if (ap.vel === 0 && sostiene(ap.clave)) ap.p += dt / Math.max(0.05, C.aparicionLarga)
+      else { if (ap.vel === 0) soltarAparicion(); ap.p += dt * ap.vel }
+      if (ap.p >= 1) { ap.p = 1; ap.vel = 0 }
     }
+    rect.escalaAparicion = 1 - Math.pow(1 - ap.p, 3)
+
     if (!barriendo) return
-    const t = Math.min(1, (time - barridoInicio) / C.barridoDur)
+    const t = Math.min(1, (time - barridoInicio) / Math.max(0.01, barridoDurActual))
     const e = 1 - Math.pow(1 - t, 3)
     rect.rx = rect.rxIni + (rect.rxFin - rect.rxIni) * e
     rect.ry = rect.ryIni + (rect.ryFin - rect.ryIni) * e
@@ -375,7 +445,10 @@
     const destino = 6 + golpe.r * 34
     return base + (destino - base) * g() * Math.min(1, C.pixelado * 2)
   }
-  const escalaExtra = () => 1 + Math.pow(C.zoom, 3) * 40 * rect.escalaAparicion
+  // F6: en V1 el zoom del contenido crece con la aparición; en V2 y V3 el zoom queda fijo y lo que aparece es el marco
+  const escalaExtra = () => 1 + Math.pow(C.zoom, 3) * 40 * (ver('verAparicion') === 0 ? rect.escalaAparicion : 1)
+  const anchoAparicion = () => (ver('verAparicion') === 1 ? Math.max(0.001, rect.escalaAparicion) : 1)
+  const altoAparicion = () => (ver('verAparicion') === 0 ? 1 : Math.max(0.001, rect.escalaAparicion))
   const imanFuerza = () => voz() * C.iman * C.iman
 
   const iman = () => shape(64, 0.2, 0.9)
@@ -384,7 +457,7 @@
 
   const recuadro = (conJitter) => {
     const r = shape(4, 1, 0.001)
-      .scale(() => rect.rw, () => rect.rh)
+      .scale(() => rect.rw * anchoAparicion(), () => rect.rh * altoAparicion())
       .scrollX(() => rect.rx)
       .scrollY(() => rect.ry)
     return conJitter ? r.modulateScrollX(noise(3, 0.4).pixelate(1, 120), () => C.jitter * 0.5 * segunRitmo()) : r
@@ -399,7 +472,7 @@
 
   // F8: el cuadro anterior del collage, transformado (con feedback en 0 queda igual)
   const baseFeedback = (out, v) => {
-    const f = () => C.feedback
+    const f = () => C.feedback * fbVel
     if (v === 1) return src(out).scale(() => 1 + 0.01 * f()).rotate(() => 0.03 * f())
     if (v === 2) return src(out).scale(() => 1 + 0.015 * f()).hue(() => 0.04 * f())
     return src(out).scale(() => 1 + 0.04 * f())
@@ -409,7 +482,7 @@
   const mosaicoLados = () => 2 + Math.round(clamp01(C.marco) * 4)
   const mosaicoMezcla = () => clamp01(C.marco / 0.05)
 
-  const firma = () => Object.keys(CUANTAS).map(ver).join('')
+  const firma = () => RECOMPILAN.map(ver).join('')
 
   const armar = () => {
     const [out, final] = salidaArgs
@@ -497,6 +570,9 @@
     else a.hide()
     return V
   }
+
+  // para mirar desde la consola
+  V.estadoNotas = () => ({ sostenidas: [...sostenidas.keys()], aparicion: ap.p, golpe: g(), feedback: fbVel, entreDisparos: intervaloDisparos })
 
   console.log('[GP] visual Buscando Placer ' + VERSION + ' (produccion) cargado')
 })()
