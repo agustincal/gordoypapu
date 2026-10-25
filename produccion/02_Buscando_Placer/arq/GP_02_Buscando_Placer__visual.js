@@ -7,7 +7,9 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 24/10/2026 (v3.7: F5 ajustes — V1 saltos de toda la pantalla en X, más seguidos cuanto más
+// Actualizado: 25/10/2026 (v3.8: el collage se apaga solo hacia negro — lento mientras se toca
+//              (fondoApaga), más rápido en silencio (fondoApagaSilencio); el recuadro actual queda entero)
+//              24/10/2026 (v3.7: F5 ajustes — V1 saltos de toda la pantalla en X, más seguidos cuanto más
 //              fader (reemplaza al scroll continuo, que saltaba al mover el fader) · V2 ondas que bajan
 //              constantes, desparejas, con bandas más finas · V3 rueda a la mitad de velocidad y ondulación
 //              quieta que baja despacio, al revés de la rueda)
@@ -62,13 +64,17 @@
 //   - el barrido dura barridoRitmo × el tiempo entre disparos (como mucho barridoDur)
 //   - el golpe queda arriba mientras suena la nota y se apaga al soltarla
 //   - en silencio (sin notas durante `silencio` s) el feedback de F8 frena en caidaSilencio s
+//
+// El collage se apaga solo: cada cuadro, lo que quedó de antes baja un poco hacia negro
+// (fondoApaga s de blanco a negro mientras se toca, fondoApagaSilencio s en silencio; 0 = no se apaga).
+// El recuadro que está apareciendo se dibuja entero cada cuadro, así que no se apaga.
 // Cambiar de versión recompila la cadena de Hydra (puede haber un salto chico).
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.7'
+  const VERSION = 'v3.8'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -115,6 +121,9 @@
     barridoDur: 0.6,     // …y como mucho esto (segundos)
     silencio: 0.6,       // segundos sin notas para considerar silencio
     caidaSilencio: 1.5,  // segundos que tarda el feedback (F8) en frenar en silencio
+    // el collage se apaga hacia negro (segundos de blanco a negro; 0 = no se apaga)
+    fondoApaga: 15,         // mientras se toca
+    fondoApagaSilencio: 3,  // en silencio
     barridoDist: 1.3,   // desde qué tan lejos entra
     // golpe de cada recuadro (lo usan rasgado, franjas, bloques, tono, canales, vhs, rueda)
     golpeCaida: 0.3,    // segundos que tarda en apagarse después de soltar la nota
@@ -404,6 +413,7 @@
   let rueda = 0
   const salto = { x: 0, reloj: 0 }    // mala señal V1: posición en X de toda la pantalla y reloj hasta el próximo salto
   let fbVel = 1                        // F8: 1 = normal · 0 = frenado (silencio)
+  const fondo = { acum: 0, resta: 0 }  // apagado del collage: lo que se resta este cuadro (en pasos de 1/255)
   let salidaArgs = null, firmaArmada = ''
 
   V.update = () => {
@@ -443,6 +453,14 @@
     // silencio: sin notas sostenidas ni actividad reciente → el feedback frena (y vuelve rápido con la próxima)
     const activo = sostenidas.size > 0 || ahora - ultimaActividad < C.silencio * 1000
     fbVel += ((activo ? 1 : 0) - fbVel) * (1 - Math.exp(-dt / (activo ? 0.15 : Math.max(0.05, C.caidaSilencio / 3))))
+
+    // apagado del collage: velocidad entre la de silencio y la de tocando (según fbVel). Se resta en pasos
+    // enteros de 1/255 porque la pantalla de Hydra es de 8 bits: un paso más chico se perdería al redondear
+    // y quedarían fantasmas grises que nunca llegan a negro
+    const tasa = (seg) => (seg > 0 ? 1 / seg : 0)
+    fondo.acum += dt * (tasa(C.fondoApagaSilencio) + (tasa(C.fondoApaga) - tasa(C.fondoApagaSilencio)) * fbVel)
+    fondo.resta = Math.floor(fondo.acum * 255) / 255
+    fondo.acum -= fondo.resta
 
     // aparición: lenta mientras la nota se sostiene; al soltar, termina según el ritmo
     if (ap.p < 1) {
@@ -551,6 +569,7 @@
     else img = img.mult(solid(() => rect.tinteR, () => rect.tinteG, () => rect.tinteB), () => C.tinte)
 
     baseFeedback(out, vF)
+      .add(solid(1, 1, 1, 0), () => -fondo.resta)   // el collage de antes baja hacia negro
       .layer(img.mask(recuadro(vJ === 0)))
       .modulate(iman(), imanFuerza)
       .out(out)
