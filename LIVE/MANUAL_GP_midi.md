@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-23 · GP_midi v1.9 · GP_tools v1.14 · GP_estados v1.2 (ver su manual)
+Actualizado: 2026-10-23 · GP_midi v1.10 · GP_tools v1.14 · GP_estados v1.4 (ver su manual)
 
 ---
 
@@ -34,13 +34,13 @@ await GP.midi.start()
 
 | Zona | Notas | Uso | LED |
 |---|---|---|---|
-| Filas 1–3 de la grilla | 0–23 | **toggle** y pads propios de la canción (`GP.midi.buttons`) | verde = habilitado · rojo parpadeo = prendido · apagado = sin uso |
+| Filas 1–3 de la grilla | 0–23 | **pads de la canción**: toggle, piano o de 2 a 4 estados (`GP.midi.buttons`, ver 5) | verde = reposo · verde parpadeo = prendido / estado 1 · amarillo parpadeo = estado 2 · rojo parpadeo = estado 3 · piano: rojo fijo mientras lo apretás · apagado = sin uso |
 | Filas 4–8 de la grilla | 24–63 | **disparo**: sólo muestran lo que entra, una fila por canal (`GP.midi.filas`) | **activa** = verde, y la nota que suena se apaga · **muteada** = apagada, y la nota que suena se prende en verde (ves que hay notas, pero no dispara) · **rojo** = lo tocás vos |
 | Botones redondos de abajo (arriba de cada fader) | 64–71 | **versión** del efecto de F1..F8 (`GP.midi.versiones`) | apagado = v1 · prendido = v2 · parpadea = v3 |
 | Columna derecha 82–86 | 82 (fila 8) … 86 (fila 4) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
 | 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
 | 89 | | **grabador** (GP_tools): toque = grabar / detener+guardar | prendido = listo · parpadea = grabando · apagado = guardando |
-| 98 (Shift) | | **ocultar / mostrar todo** (código, barras del mic y paneles) en cualquier canción. Lo maneja GP_midi: **anda también en el show, sin GP_tools** — **no tiene LED** | |
+| 98 (Shift) | | **ocultar / mostrar todo** al **soltarlo** (código, barras del mic y paneles), en cualquier canción y también en el show, sin GP_tools. **Shift + pad de estados** = estado anterior (y ahí no oculta) — **no tiene LED** | |
 | Faders | CC 48–55 | `F1`..`F8` (0..127) | — |
 | FMASTER | CC 56 | **fundido a negro** en todos los sketches (ver 3.1) | — |
 
@@ -130,17 +130,34 @@ El botón en vivo cambia la versión hasta el próximo cambio de estado (mismo c
 
 ---
 
-## 5. Toggles (filas 1–3)
+## 5. Pads de las filas 1–3: toggle, piano o estados
 
 ```js
-GP.midi.buttons(['N11', 'N12', 'N21'])
-N11                                   // true / false (global)
-GP.midi.on('N11', ({ active }) => { ... })
-GP.midi.setButton('N11', true)        // prender/apagar desde código (ej: al cambiar de estado)
+GP.midi.buttons(['N11', 'N12', 'N21'])     // como siempre: todos toggle
+
+GP.midi.buttons({
+  N11: 'toggle',   // un toque prende, otro apaga
+  N12: 'piano',    // prendido sólo mientras lo apretás
+  N13: 3,          // 3 estados: cada toque pasa al siguiente (0 → 1 → 2 → 0)
+  N14: 4,          // hasta 4 estados
+})
+
+N11 ? 1 : 0                            // toggle y piano: true / false (global)
+[0.1, 0.5, 1][N13]                     // estados: 0, 1, 2… (como V1 con las versiones)
+GP.midi.on('N13', ({ valor, active }) => { ... })   // valor = true/false o el número
+GP.midi.setButton('N13', 2)            // fijar desde código (toggle: true / false)
 ```
 
-- Al reevaluar, los toggles que siguen en la lista conservan cómo los dejaste.
-- Si ponés un toggle en una fila que es de disparo (4–8), la consola avisa: gana el disparo.
+| Modo | Reposo | Activo |
+|---|---|---|
+| toggle | verde | verde parpadeo |
+| piano | verde | rojo fijo mientras lo apretás |
+| estados | 0 = verde | 1 = verde parpadeo · 2 = amarillo parpadeo · 3 = rojo parpadeo |
+
+- **Shift + pad de estados** = vuelve al estado anterior. El Shift solo (sin tocar pads) oculta todo al soltarlo.
+- Al reevaluar, cada pad que sigue con el mismo modo conserva cómo lo dejaste. Si le cambiás el modo, arranca en 0.
+- En GP_estados un pad de estados se anota con su número (`brillo: 'N13'` → `brillo: 2`). Los piano no van en los estados.
+- Si ponés un pad en una fila que es de disparo (4–8), la consola avisa: gana el disparo.
 
 ---
 
@@ -218,7 +235,7 @@ GP.midi.alMensaje((nombre, data, info) => {
 
 Sketch sin GP_midi (sólo GP_tools): `GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })`.
 
-**Ocultar todo desde código:** `GP.midi.ocultarTodo()` alterna (lo mismo que el Shift 98) · `GP.midi.ocultarTodo(true)` oculta · `(false)` muestra · `GP.midi.oculto()` dice cómo está.
+**Ocultar todo desde código:** `GP.midi.ocultarTodo()` alterna (lo mismo que soltar el Shift 98) · `GP.midi.ocultarTodo(true)` oculta · `(false)` muestra · `GP.midi.oculto()` dice cómo está.
 Si el motor de la canción ya maneja el 98 (Vociferan, James: su `toggleCodigo`), GP_midi no lo repite: se pone al día y oculta lo que falte (barras del mic, paneles).
 Otro módulo con cosas en pantalla se anota con `GP.midi.alOcultar('id', visible => {...})` (así lo hace GP_tools con sus cajas).
 

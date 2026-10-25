@@ -7,7 +7,8 @@
 // Depende de: GP_midi (faders, toggles, versiones, mutes, LEDs).
 //             GP_tools es opcional: si está cargado (ensayo) muestra el
 //             estado arriba a la derecha. En el show no se ve.
-// Actualizado: 2026-10-23 (v1.3: faders más directos — suavizado 0.1 → 0.04 s, mezclaToque 0.25 → 0.12 s)
+// Actualizado: 2026-10-25 (v1.4: pads con varios estados — N13: 0..3 · respeta el modo de cada pad de GP_midi)
+//              2026-10-23 (v1.3: faders más directos — suavizado 0.1 → 0.04 s, mezclaToque 0.25 → 0.12 s)
 //              2026-10-21 (v1.2: guardar capturas pasa a Ctrl+Alt+D)
 //              2026-10-20 (v1.1: suspender, copiar estado, aviso de cambio, botones 87/88)
 // ============================================================
@@ -24,7 +25,7 @@
 //     destino: V.C,              // la configuración del visual: acá se escriben los valores
 //     controles: {               // nombre → control físico
 //       tamano:  'F1',           //   F1..F8 = fader (valores de 0 a 1)
-//       strobe:  'N11',          //   N11..N88 = toggle (true / false)
+//       strobe:  'N11',          //   N11..N88 = pad: toggle (true / false) o de estados (0, 1, 2, 3)
 //       forma:   'V3',           //   V1..V8 = versión del fader (0, 1 o 2)
 //       melodia: 'M8',           //   M4..M8 = mute de esa fila de disparo (true = muteada)
 //     },
@@ -63,7 +64,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.3'
+  const VERSION = 'v1.4'
 
   if (GP.estados && GP.estados._version === VERSION) return
 
@@ -135,7 +136,7 @@
   const aplicarDiscreto = (c, v) => {
     const M = midi()
     if (!M) return
-    if (c.tipo === 'toggle') M.setButton(c.ref, !!v)
+    if (c.tipo === 'toggle') M.setButton(c.ref, v)   // GP_midi lo ajusta al modo del pad
     else if (c.tipo === 'version') M.fijarVersion(c.ref, v | 0)
     else if (c.tipo === 'mute' && M.muteado(c.fila) !== !!v) M.mute(c.fila, !!v)
   }
@@ -420,12 +421,16 @@
     const cancion = op.cancion ?? (GP.tools && GP.tools.config ? GP.tools.config.cancion : null)
     can = { cancion, controles, claves: [...claves], lista, fundidos, destino, alEntrar: op.alEntrar || null }
 
-    // los toggles tienen que estar habilitados en GP_midi para que el Akai los cambie
+    // los pads tienen que estar habilitados en GP_midi para que el Akai los cambie
+    // (los que faltan entran como toggle; los que ya están conservan su modo)
     const M = midi()
     if (M && M.state) {
       const activos = M.state.activeButtons || []
       const faltan = Object.values(controles).filter(c => c.tipo === 'toggle' && !activos.includes(notaDeBoton(c.ref)))
-      if (faltan.length) M.buttons([...activos.map(nombreDeNota), ...faltan.map(c => c.ref)])
+      if (faltan.length) {
+        if (M.modos) M.buttons({ ...M.modos(), ...Object.fromEntries(faltan.map(c => [c.ref, 'toggle'])) })
+        else M.buttons([...activos.map(nombreDeNota), ...faltan.map(c => c.ref)])
+      }
     } else if (!M) {
       console.warn('[GP estados] GP_midi no está cargado: los controles no van a responder')
     }

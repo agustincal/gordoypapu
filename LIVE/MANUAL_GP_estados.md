@@ -1,7 +1,7 @@
 # Manual · GP_estados (Fase 3 · LIVE)
 
 Estados genéricos para todas las canciones. Vive en `LIVE/arq/GP_estados.js`.
-Actualizado: 2026-10-21 · GP_estados v1.1 (guardar pasa a Ctrl+Alt+D · botones en pantalla)
+Actualizado: 2026-10-25 · GP_estados v1.4 (pads con varios estados)
 
 ---
 
@@ -58,7 +58,7 @@ const CONTROLES = {
 | Control | Qué es | Valores en los estados |
 |---|---|---|
 | `F1`..`F8` | fader | 0 a 1 |
-| `N11`..`N88` | toggle (filas 1–4) | `true` / `false` |
+| `N11`..`N88` | pad de las filas 1–3: toggle, o de varios estados (`GP.midi.buttons({ N13: 3 })`) | toggle: `true` / `false` · estados: 0, 1, 2 (hasta 3) |
 | `V1`..`V8` | versión del efecto del fader (botones 64–71) | 0, 1 o 2 |
 | `M4`..`M8` | mute de una fila de disparo | `true` = muteada |
 

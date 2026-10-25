@@ -7,7 +7,11 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 25/10/2026 (v3.8: el collage se apaga solo hacia negro — lento mientras se toca
+// Actualizado: 25/10/2026 (v3.10: recuadros negros — una proporción de los disparos (recuadrosNegros, 30 %)
+//              pega un recuadro negro, con la misma forma y aparición; la ráfaga de cada estado no)
+//              25/10/2026 (v3.9: el apagado se prende con un toggle (apagaFondo, N18 en el sketch) ·
+//              valores 1 s tocando / 0.3 s en silencio · en silencio también se apaga el último recuadro)
+//              25/10/2026 (v3.8: el collage se apaga solo hacia negro — lento mientras se toca
 //              (fondoApaga), más rápido en silencio (fondoApagaSilencio); el recuadro actual queda entero)
 //              24/10/2026 (v3.7: F5 ajustes — V1 saltos de toda la pantalla en X, más seguidos cuanto más
 //              fader (reemplaza al scroll continuo, que saltaba al mover el fader) · V2 ondas que bajan
@@ -44,7 +48,8 @@
 //   GP.buscandoPlacer.disparar(clave)                    un recuadro nuevo (clave = la nota o el pad que lo disparó)
 //   GP.buscandoPlacer.soltar(clave)                      se soltó esa nota: termina la aparición y corta el barrido
 //                                                        (sin clave: como antes, no espera a la nota)
-//   GP.buscandoPlacer.rafaga()                           varios recuadros seguidos (ej: al cambiar de estado)
+//   GP.buscandoPlacer.rafaga()                           varios recuadros seguidos (ej: al cambiar de estado; nunca negros)
+//   (recuadrosNegros: proporción de disparos que salen negros, 0 = ninguno)
 //   GP.buscandoPlacer.tiron(on, clave)                   canal 2 o pad a mano: tirón de glitch (mientras suena + caída)
 //   GP.buscandoPlacer.color9(columna)                    canal 9 o pad a mano: gira el color de toda la imagen
 //
@@ -65,16 +70,17 @@
 //   - el golpe queda arriba mientras suena la nota y se apaga al soltarla
 //   - en silencio (sin notas durante `silencio` s) el feedback de F8 frena en caidaSilencio s
 //
-// El collage se apaga solo: cada cuadro, lo que quedó de antes baja un poco hacia negro
+// Apagado del collage (toggle apagaFondo): cada cuadro, lo que quedó de antes baja un poco hacia negro
 // (fondoApaga s de blanco a negro mientras se toca, fondoApagaSilencio s en silencio; 0 = no se apaga).
-// El recuadro que está apareciendo se dibuja entero cada cuadro, así que no se apaga.
+// Mientras se toca, el recuadro actual se dibuja entero cada cuadro y no se apaga; en silencio deja de
+// dibujarse y se apaga con el resto, hasta el próximo recuadro.
 // Cambiar de versión recompila la cadena de Hydra (puede haber un salto chico).
 // ============================================================
 
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.8'
+  const VERSION = 'v3.10'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -121,9 +127,11 @@
     barridoDur: 0.6,     // …y como mucho esto (segundos)
     silencio: 0.6,       // segundos sin notas para considerar silencio
     caidaSilencio: 1.5,  // segundos que tarda el feedback (F8) en frenar en silencio
+    recuadrosNegros: 0.3,   // proporción de disparos que pegan un recuadro negro (0 = ninguno, 1 = todos)
     // el collage se apaga hacia negro (segundos de blanco a negro; 0 = no se apaga)
-    fondoApaga: 15,         // mientras se toca
-    fondoApagaSilencio: 3,  // en silencio
+    apagaFondo: false,      // toggle: prende o apaga todo el apagado
+    fondoApaga: 1,          // mientras se toca
+    fondoApagaSilencio: 0.3, // en silencio (y ahí se apaga también el último recuadro)
     barridoDist: 1.3,   // desde qué tan lejos entra
     // golpe de cada recuadro (lo usan rasgado, franjas, bloques, tono, canales, vhs, rueda)
     golpeCaida: 0.3,    // segundos que tarda en apagarse después de soltar la nota
@@ -221,6 +229,7 @@
   // Recuadro
   // ============================================================
   const rect = {
+    negro: false,                       // este recuadro sale negro (recuadrosNegros)
     rx: 0, ry: 0, rw: 1, rh: 1,
     rxIni: 0, ryIni: 0, rxFin: 0, ryFin: 0,
     imgScale: 1, imgX: 0, imgY: 0, imgXFin: 0, imgYFin: 0,
@@ -275,13 +284,14 @@
   }
   const triadica = (hue, s = 0.8, l = 0.55) => [0, 1 / 3, 2 / 3].map(o => hslToRgb((hue + o) % 1, s, l))
 
-  V.disparar = (clave = null) => {
+  V.disparar = (clave = null, sinNegro = false) => {
     const ahoraNota = performance.now()
     if (clave != null) sostenidas.set(clave, ahoraNota)
     ultimaActividad = ahoraNota
     if (rect.cargando || !medios.urls.length) return
     rect.cargando = true
     rect.sueltaPendiente = false
+    const negro = !sinNegro && Math.random() < C.recuadrosNegros   // este recuadro sale negro
 
     const ahora = performance.now()
     if (tUltimoDisparo) {
@@ -299,6 +309,8 @@
       }
       if (medios.fuente) { medios.fuente.src = m; medios.fuente.dynamic = true }
 
+      fondo.oculto = false                      // recuadro nuevo: se vuelve a dibujar
+      rect.negro = negro
       const paleta = triadica(((C.colorBase % 1) + 1) % 1)
       const color = paleta[Math.floor(Math.random() * paleta.length)]
       rect.tinteR = color[0]; rect.tinteG = color[1]; rect.tinteB = color[2]
@@ -373,7 +385,7 @@
     const intentar = () => {
       if (hechos >= cantidad) return
       if (rect.cargando) { setTimeout(intentar, C.rafagaPausa); return }
-      V.disparar()
+      V.disparar(null, true)                   // la ráfaga siempre con imágenes
       hechos++
       setTimeout(intentar, C.rafagaPausa)
     }
@@ -413,7 +425,8 @@
   let rueda = 0
   const salto = { x: 0, reloj: 0 }    // mala señal V1: posición en X de toda la pantalla y reloj hasta el próximo salto
   let fbVel = 1                        // F8: 1 = normal · 0 = frenado (silencio)
-  const fondo = { acum: 0, resta: 0 }  // apagado del collage: lo que se resta este cuadro (en pasos de 1/255)
+  const fondo = { acum: 0, resta: 0, oculto: false }  // apagado del collage: lo que se resta este cuadro
+                                                       // (en pasos de 1/255) y si el último recuadro ya no se dibuja
   let salidaArgs = null, firmaArmada = ''
 
   V.update = () => {
@@ -457,10 +470,14 @@
     // apagado del collage: velocidad entre la de silencio y la de tocando (según fbVel). Se resta en pasos
     // enteros de 1/255 porque la pantalla de Hydra es de 8 bits: un paso más chico se perdería al redondear
     // y quedarían fantasmas grises que nunca llegan a negro
-    const tasa = (seg) => (seg > 0 ? 1 / seg : 0)
+    const tasa = (seg) => (C.apagaFondo && seg > 0 ? 1 / seg : 0)
     fondo.acum += dt * (tasa(C.fondoApagaSilencio) + (tasa(C.fondoApaga) - tasa(C.fondoApagaSilencio)) * fbVel)
     fondo.resta = Math.floor(fondo.acum * 255) / 255
     fondo.acum -= fondo.resta
+    // en silencio (con el apagado prendido y en silencio > 0) el último recuadro deja de dibujarse: se apaga
+    // con el resto y no vuelve aunque llegue otra actividad; lo destapa el próximo recuadro
+    if (!activo && tasa(C.fondoApagaSilencio) > 0) fondo.oculto = true
+    if (!C.apagaFondo) fondo.oculto = false
 
     // aparición: lenta mientras la nota se sostiene; al soltar, termina según el ritmo
     if (ap.p < 1) {
@@ -568,9 +585,12 @@
     else if (vT === 2) img = img.shift(() => C.tinte * 0.4, () => C.tinte * 0.2 * golpe.s, () => g() * 0.3 * C.tinte, 0)
     else img = img.mult(solid(() => rect.tinteR, () => rect.tinteG, () => rect.tinteB), () => C.tinte)
 
+    // recuadro negro (una proporción de los disparos): misma forma y aparición, sin imagen
+    img = img.mult(solid(0, 0, 0, 1), () => (rect.negro ? 1 : 0))
+
     baseFeedback(out, vF)
       .add(solid(1, 1, 1, 0), () => -fondo.resta)   // el collage de antes baja hacia negro
-      .layer(img.mask(recuadro(vJ === 0)))
+      .layer(img.mask(recuadro(vJ === 0)).mult(solid(1, 1, 1, 0), () => (fondo.oculto ? 1 : 0)))   // oculto: transparente
       .modulate(iman(), imanFuerza)
       .out(out)
 

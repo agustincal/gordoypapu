@@ -5,7 +5,9 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-23 (v1.9: filas de disparo en negativo — activa = verde y las notas que suenan se apagan ·
+// Actualizado: 2026-10-25 (v1.10: pads de las filas 1-3 con modo — toggle · piano · 2 a 4 estados (Shift + pad = atrás) ·
+//              toggle prendido = verde parpadeo · el Shift oculta al SOLTARLO, y no oculta si lo usaste con un pad)
+//              2026-10-23 (v1.9: filas de disparo en negativo — activa = verde y las notas que suenan se apagan ·
 //              muteada = apagada y las notas que suenan en verde · a mano = rojo)
 //              2026-10-23 (v1.8: Shift (98) = ocultar / mostrar todo, en cualquier canción y sin GP_tools ·
 //              GP.midi.ocultarTodo() · modo pulso 'vuelta' también apagado en reposo: cada golpe prende el
@@ -27,7 +29,11 @@
 //
 // Zonas de la grilla (igual en todos los sketches)
 // ------------------------------------------------
-//   filas 1-3 → TOGGLE   (GP.midi.buttons)  verde = habilitado · rojo parpadeo = prendido
+//   filas 1-3 → PADS     (GP.midi.buttons)  cada pad: 'toggle' · 'piano' · 2 a 4 estados
+//                                            verde = en reposo (0) · verde parpadeo = prendido / estado 1
+//                                            amarillo parpadeo = estado 2 · rojo parpadeo = estado 3
+//                                            piano: rojo fijo mientras lo apretás
+//                                            Shift + pad de estados = estado anterior
 //   filas 4-8 → DISPARO  (GP.midi.filas)    así ves qué filas están activas en cada parte:
 //                                            activa  = verde · la nota que suena se apaga
 //                                            muteada = apagada · la nota que suena en verde
@@ -45,7 +51,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.9'
+  const VERSION = 'v1.10'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -110,8 +116,10 @@
     rojo: 3, rojoParpadeo: 4,
     amarillo: 5, amarilloParpadeo: 6,
   }
-  // Valores que usaba la base v0.9 para los botones (no cambian, así se ve igual)
-  const ESTILO_BOTON = { activo: 4, inactivo: 1 }
+  // pads de las filas 1-3: color por estado (0 = reposo). Toggle = 2 estados.
+  const COLOR_ESTADO_PAD = [COLOR.verde, COLOR.verdeParpadeo, COLOR.amarilloParpadeo, COLOR.rojoParpadeo]
+  const COLOR_PIANO = { reposo: COLOR.verde, apretado: COLOR.rojo }
+  const ESTILO_BOTON = { activo: COLOR_ESTADO_PAD[1], inactivo: COLOR_ESTADO_PAD[0] }
 
   // ============================================================
   // Mapas del Akai (igual que v0.9)
@@ -129,6 +137,7 @@
     if (!m) throw new Error(`GP MIDI: botón inválido "${name}". Usá N11..N88.`)
     return (Number(m[1]) - 1) * 8 + (Number(m[2]) - 1)
   }
+  const nombreDeBoton = n => `N${Math.floor(n / 8) + 1}${n % 8 + 1}`
   // acepta número de nota o nombre N11..N88
   const aNota = (x) => typeof x === 'number' ? x : buttonToNote(x)
 
@@ -150,7 +159,7 @@
   // ============================================================
   const state = {
     status: 'idle', output: null, outputName: null,
-    activeButtons: [], activeFaders: [], buttonState: {},
+    activeButtons: [], activeFaders: [], buttonState: {}, modoBoton: {},   // modo: 'toggle' · 'piano' · 2..4
     faderValues: Object.fromEntries(Object.values(FADER_CC).map(cc => [cc, 0])),
     buttonHandlers: {}, faderHandlers: {},
   }
@@ -223,7 +232,28 @@
     notas.forEach(marcar)
   }
 
-  const pintarBoton = (n) => fijar(capaBoton, n, state.buttonState[n] ? ESTILO_BOTON.activo : ESTILO_BOTON.inactivo)
+  const modoDe = n => state.modoBoton[n] || 'toggle'
+  const pintarBoton = (n) => {
+    const modo = modoDe(n)
+    const v = state.buttonState[n]
+    if (modo === 'piano') fijar(capaBoton, n, v ? COLOR_PIANO.apretado : COLOR_PIANO.reposo)
+    else fijar(capaBoton, n, COLOR_ESTADO_PAD[typeof v === 'number' ? v : (v ? 1 : 0)] ?? COLOR_ESTADO_PAD[0])
+  }
+  // valor hacia afuera: toggle / piano = true/false · estados = 0..n-1
+  const valorBoton = n => {
+    const modo = modoDe(n)
+    const v = state.buttonState[n]
+    if (typeof modo === 'number') return typeof v === 'number' ? v : (v ? 1 : 0)
+    return !!v
+  }
+  const normalizarBoton = (n, v) => {
+    const modo = modoDe(n)
+    if (typeof modo !== 'number') return !!v
+    const x = typeof v === 'number' ? Math.round(v) : (v ? 1 : 0)
+    return Math.max(0, Math.min(modo - 1, x))
+  }
+  // Shift (98) apretado: Shift + pad de estados = anterior. El ocultar todo va al soltar el Shift.
+  const shift = { apretado: false, usado: false, dato: null, nombre: null, timer: null }
 
   const limpiarCapaBoton = () => {
     for (const k of Object.keys(capaBoton)) { delete capaBoton[k]; marcar(Number(k)) }
@@ -505,11 +535,21 @@
         else if (esOn && d1 >= 82 && d1 <= 86) alternarMute(90 - d1)
         // botón de versión arriba de cada fader (64..71)
         else if (esOn && d1 >= 64 && d1 <= 71) { const f = `F${d1 - 63}`; ponerVersion(f, versionDe(f) + 1, 'akai') }
-        // botón de la grilla (toggle, filas 1-4 o donde el sketch los habilite)
-        else if (esOn && d1 <= 63 && state.activeButtons.includes(d1)) {
-          state.buttonState[d1] = !state.buttonState[d1]
-          pintarBoton(d1)
-          for (const fn of state.buttonHandlers[d1] || []) fn({ note: d1, active: state.buttonState[d1], data })
+        // pad de las filas 1-3 (o donde el sketch los habilite): toggle · piano · estados
+        else if (d1 <= 63 && state.activeButtons.includes(d1)) {
+          const modo = modoDe(d1)
+          let cambio = false
+          if (modo === 'piano') { state.buttonState[d1] = esOn; cambio = true }
+          else if (esOn && typeof modo === 'number') {
+            const v = valorBoton(d1)
+            state.buttonState[d1] = shift.apretado ? (v - 1 + modo) % modo : (v + 1) % modo
+            cambio = true
+          } else if (esOn) { state.buttonState[d1] = !state.buttonState[d1]; cambio = true }
+          if (cambio) {
+            pintarBoton(d1)
+            const valor = valorBoton(d1)
+            for (const fn of state.buttonHandlers[d1] || []) fn({ note: d1, active: !!valor, valor, modo, data })
+          }
         }
       }
     } else if (st < 0xf0 && (esOn || esOff)) {
@@ -524,23 +564,43 @@
       if (fila) muteado = filas[fila].mute
     }
 
-    // Shift (98) del Akai
-    const esShift = esOn && d1 === 98 && st < 0xf0 && canal === cfg.canal && cfg.akai.test(nombre)
-    const firmaAntes = esShift ? firmaEditor() : null
-
-    // el sketch recibe TODO (korg incluido); info.muteado avisa si ese canal está muteado
-    if (alMensaje) {
-      try { alMensaje(nombre, data, { muteado }) } catch (err) { console.error('[GP MIDI] alMensaje del sketch:', err) }
+    // Shift (98) del Akai: al apretarlo no pasa nada todavía (puede ser Shift + pad).
+    // Al soltarlo, si no lo usaste con ningún pad = ocultar / mostrar todo.
+    const esAkai = st < 0xf0 && canal === cfg.canal && cfg.akai.test(nombre)
+    if (esAkai && d1 === 98 && (esOn || esOff)) {
+      if (esOn) {
+        shift.apretado = true; shift.usado = false; shift.dato = data; shift.nombre = nombre
+        clearTimeout(shift.timer)
+        shift.timer = setTimeout(soltarShift, 4000)   // por si el aviso de soltar no llega
+      } else soltarShift()
+      return
     }
+    if (esAkai && esOn && shift.apretado) shift.usado = true
 
-    if (esShift) {
-      if (firmaEditor() === firmaAntes) ocultarTodo()
-      else {
-        // lo hizo el motor de la canción: nos ponemos al día y completamos (barras del mic, paneles)
-        ocu.visible = editorVisible()
-        ponerBins(ocu.visible)
-        avisarOcultar(ocu.visible)
-      }
+    entregar(nombre, data, { muteado })
+  }
+
+  // el sketch recibe TODO (korg incluido); info.muteado avisa si ese canal está muteado
+  const entregar = (nombre, data, info) => {
+    if (!alMensaje) return
+    try { alMensaje(nombre, data, info) } catch (err) { console.error('[GP MIDI] alMensaje del sketch:', err) }
+  }
+
+  function soltarShift() {
+    clearTimeout(shift.timer)
+    if (!shift.apretado) return
+    shift.apretado = false
+    if (shift.usado) return   // Shift + pad: el sketch no se entera del Shift
+    // el sketch recibe el Shift recién ahora (los motores de Vociferan / James ocultan con él)
+    const firmaAntes = firmaEditor()
+    entregar(shift.nombre, shift.dato, { muteado: false })
+    entregar(shift.nombre, new Uint8Array([0x80 | cfg.canal, 98, 0]), { muteado: false })
+    if (firmaEditor() === firmaAntes) ocultarTodo()
+    else {
+      // lo hizo el motor de la canción: nos ponemos al día y completamos (barras del mic, paneles)
+      ocu.visible = editorVisible()
+      ponerBins(ocu.visible)
+      avisarOcultar(ocu.visible)
     }
   }
 
@@ -572,7 +632,7 @@
     }
     for (let r = 1; r <= 8; r++) for (let c = 1; c <= 8; c++) {
       const name = `N${r}${c}`
-      Object.defineProperty(window, name, { configurable: true, get: () => !!state.buttonState[buttonToNote(name)] })
+      Object.defineProperty(window, name, { configurable: true, get: () => valorBoton(buttonToNote(name)) })
     }
   }
   installDirectGlobals()
@@ -642,28 +702,51 @@
   M.filaDelCanal = (nombre, canal0) => filaDelCanal(nombre, canal0)   // canal 0..15 → fila o null
   M.tiempos = tiempos
 
+  // GP.midi.buttons(['N11', 'N12'])  → todos toggle (como siempre)
+  // GP.midi.buttons({ N11: 'toggle', N12: 'piano', N13: 3 })  → 3 = tres estados (0, 1, 2). Máx. 4.
   M.buttons = function (names = []) {
     limpiarCapaBoton()
-    const notas = [...new Set(names.map(n => String(n).trim().toUpperCase()))].map(buttonToNote)
+    const modos = {}
+    const lista = Array.isArray(names) ? names.map(n => [n, 'toggle']) : Object.entries(names || {})
+    for (const [nombre, modo] of lista) {
+      const n = buttonToNote(String(nombre).trim().toUpperCase())
+      let m = modo
+      if (typeof m === 'number') m = Math.max(2, Math.min(4, m | 0))
+      else if (m !== 'piano') m = 'toggle'
+      if (m === 2) m = 'toggle'
+      modos[n] = m
+    }
+    const notas = Object.keys(modos).map(Number)
     const enDisparo = notas.filter(n => n >= 24 && n <= 63 && filas[Math.floor(n / 8) + 1] && filas[Math.floor(n / 8) + 1].cfg)
     if (enDisparo.length) console.warn(`[GP MIDI] ${enDisparo.map(n => `N${Math.floor(n / 8) + 1}${n % 8 + 1}`).join(', ')}: esa fila es de disparo; los toggles van en las filas 1-3`)
     // los toggles que siguen activos conservan su estado al reevaluar (como los mutes)
     const antes = state.buttonState || {}
+    const modosAntes = state.modoBoton || {}
     state.activeButtons = notas
+    state.modoBoton = modos
     state.buttonState = {}
     state.buttonHandlers = {}
-    for (const n of notas) { state.buttonState[n] = !!antes[n]; state.buttonHandlers[n] = []; pintarBoton(n) }
+    for (const n of notas) {
+      // piano arranca suelto; si cambió el modo, arranca en 0
+      const conserva = modos[n] !== 'piano' && modosAntes[n] === modos[n]
+      state.buttonState[n] = normalizarBoton(n, conserva ? antes[n] : 0)
+      state.buttonHandlers[n] = []
+      pintarBoton(n)
+    }
     pintarVersiones()
     for (const fila of FILAS_DISPARO) { pintarFila(fila); pintarMute(fila) }   // no borrar las filas de disparo
     return M
   }
 
-  M.button = name => !!state.buttonState[buttonToNote(name)]
+  // toggle / piano → true/false · estados → 0..n-1
+  M.button = name => valorBoton(buttonToNote(name))
+  // modo de cada pad habilitado: { N11: 'toggle', N13: 3, ... }
+  M.modos = () => Object.fromEntries(state.activeButtons.map(n => [nombreDeBoton(n), modoDe(n)]))
 
-  // prender/apagar un botón activo desde código (ej: al cambiar de estado)
+  // fijar un pad desde código (ej: al cambiar de estado). Toggle: true/false · estados: número
   M.setButton = (name, activo) => {
     const n = buttonToNote(name)
-    state.buttonState[n] = !!activo
+    state.buttonState[n] = normalizarBoton(n, activo)
     if (state.activeButtons.includes(n)) pintarBoton(n)
     return M
   }
@@ -738,7 +821,7 @@
     limpiarCapaBoton()
     M.apagarLuces()
     state.activeButtons = []; state.activeFaders = []
-    state.buttonState = {}; state.buttonHandlers = {}; state.faderHandlers = {}
+    state.buttonState = {}; state.modoBoton = {}; state.buttonHandlers = {}; state.faderHandlers = {}
     return M
   }
 

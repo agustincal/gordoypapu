@@ -23,6 +23,9 @@
 //              24/10/2026 (motor v3.5): canal 2 / fila 6 = tirón de glitch (ya no invierte) · la mala señal
 //              (vhs, rueda) no reacciona a los disparos del bajo
 //              24/10/2026 (motor v3.6): F5 vhs y rueda rehechos con las referencias de TV / VHS
+//              24/10/2026 (motor v3.7): F5 V1 saltos · V2 ondas que bajan · V3 rueda más lenta
+//              25/10/2026 (motor v3.9): N18 = el collage se apaga hacia negro (1 s tocando, 0.3 s en silencio)
+//              25/10/2026 (motor v3.10): el 30 % de los recuadros sale negro (recuadrosNegros)
 // ============================================================
 
 // ---- carga de scripts ----
@@ -98,10 +101,14 @@ V.init({
   // toggles
   usaBarrido: false,   // N11: el recuadro entra barriendo
   siguenRitmo: false,  // N13: jitter y mala señal laten con los recuadros
+  apagaFondo: false,   // N18: el collage se apaga hacia negro (en silencio, también el último recuadro)
+  fondoApaga: 1,       // s de blanco a negro mientras se toca
+  fondoApagaSilencio: 0.3, // s de blanco a negro en silencio
 
   colorBase: 0,        // color de la rueda (0 a 1); cada recuadro toma uno de su tríada
 
-  rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado
+  rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado (nunca negros)
+  recuadrosNegros: 0.3, // proporción de disparos que pegan un recuadro negro (0 = ninguno, 1 = todos)
   tiron: 0.02,         // fuerza del tirón de glitch del canal 2 / la fila 6 (anda aunque F5 esté en 0)
   tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
 
@@ -140,6 +147,7 @@ const CONTROLES = {
   verAparicion: 'V6',  // F6: cómo aparece cada recuadro — zoom del contenido · el marco se abre · desde una línea (tele)
   usaBarrido:  'N11',
   siguenRitmo: 'N13',
+  apagaFondo:  'N18',
   // mutes por fila (true = muteado): un canal muteado no hace nada (los pads a mano siguen andando)
   muteCanal1:  'M8',
   muteCanal10: 'M7',
@@ -224,12 +232,13 @@ const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 
 //   Mientras la nota (o el pad) se sostiene, el recuadro se sigue abriendo; al soltar termina según el ritmo
 //   (y si estaba barriendo, cae en su lugar).
 //   N11 / N13 = barrido / jitter y mala señal laten con los recuadros (N12 libre: el imán es sólo F7)
+//   N18 = el collage se apaga hacia negro (fondoApaga / fondoApagaSilencio)
 //   F1 jitter · F2 pixelado · F3 marco · F4 tinte · F5 mala señal · F6 zoom · F7 imán · F8 feedback
 //   Botones redondos 64-71 (arriba de cada fader) = versión del efecto (F1, F2, F3, F4, F5, F6 aparición, F8)
 //   87 / 88 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N13'])
+GP.midi.buttons(['N11', 'N13', 'N18'])
 GP.midi.versiones({ F1: 3, F2: 3, F3: 2, F4: 3, F5: 3, F6: 3, F8: 3 })   // igual que V.CUANTAS del motor
 GP.midi.filas({
   8: { canal: 1, rango: [26, 61] },
