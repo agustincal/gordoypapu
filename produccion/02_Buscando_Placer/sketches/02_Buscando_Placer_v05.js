@@ -25,7 +25,9 @@
 //              24/10/2026 (motor v3.6): F5 vhs y rueda rehechos con las referencias de TV / VHS
 //              24/10/2026 (motor v3.7): F5 V1 saltos · V2 ondas que bajan · V3 rueda más lenta
 //              25/10/2026 (motor v3.9): N18 = el collage se apaga hacia negro (1 s tocando, 0.3 s en silencio)
-//              25/10/2026 (motor v3.10): el 30 % de los recuadros sale negro (recuadrosNegros)
+//              25/10/2026 (motor v3.10): recuadros negros (recuadrosNegros: base 0, cada estado pone el suyo)
+//              25/10/2026: estados de prueba con lo nuevo — apagado (N18) en 2, 6 y 7 · negros por estado ·
+//              intro con vhs suave (sin saltos) · saltos de F5 V1 en el 3 y el 7
 // ============================================================
 
 // ---- carga de scripts ----
@@ -108,7 +110,7 @@ V.init({
   colorBase: 0,        // color de la rueda (0 a 1); cada recuadro toma uno de su tríada
 
   rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado (nunca negros)
-  recuadrosNegros: 0.3, // proporción de disparos que pegan un recuadro negro (0 = ninguno, 1 = todos)
+  recuadrosNegros: 0,  // proporción de disparos que pegan un recuadro negro (0 = ninguno, 1 = todos; cada estado pone la suya)
   tiron: 0.02,         // fuerza del tirón de glitch del canal 2 / la fila 6 (anda aunque F5 esté en 0)
   tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
 
@@ -200,20 +202,26 @@ const ESTADOS_CANCION = [
 // Versiones: 0 = V1 · 1 = V2 · 2 = V3
 // ============================================================
 const ESTADOS_PRUEBA = [
-  /* 1 */ { nombre: '1 · intro: túnel (F8 V1)',
-            feedback: 0.3, verFeedback: 0, malaSenal: 0.1, siguenRitmo: true, colorBase: 0.00 },
-  /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2)',
-            marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08 },
-  /* 3 */ { nombre: '3 · teclado: tirón de glitch + bloques (F2 V2) + canales (F4 V3)', muteCanal2: false,
-            marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20 },
+  /* 1 */ { nombre: '1 · intro: túnel (F8 V1) + vhs suave',
+            feedback: 0.3, verFeedback: 0, malaSenal: 0.1, verMalaSenal: 1, siguenRitmo: true, colorBase: 0.00 },
+  /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2) + apagado + negros',
+            marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08,
+            apagaFondo: true, recuadrosNegros: 0.2 },
+  /* 3 */ { nombre: '3 · teclado: tirón de glitch + bloques (F2 V2) + canales (F4 V3) + saltos (F5 V1) + negros', muteCanal2: false,
+            marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20,
+            malaSenal: 0.2, verMalaSenal: 0, recuadrosNegros: 0.3 },
   /* 4 */ { nombre: '4 · notas largas: color + mosaico (F3 V2) + sandin (F8 V3) + aparición tele (F6 V3)', muteCanal9: false,
-            marco: 0.5, verMarco: 1, zoom: 0.2, verAparicion: 2, feedback: 0.4, verFeedback: 2, colorBase: 0.40, fundido: 1 },
+            marco: 0.5, verMarco: 1, zoom: 0.2, verAparicion: 2, feedback: 0.4, verFeedback: 2, colorBase: 0.40, fundido: 1,
+            recuadrosNegros: 0.2 },
   /* 5 */ { nombre: '5 · todo: tirón + color + rasgado (F1 V2) + rueda (F5 V3)', muteCanal2: false, muteCanal9: false,
-            marco: 0.6, jitter: 0.6, verJitter: 1, malaSenal: 0.4, verMalaSenal: 2, tinte: 0.3, iman: 0.5, usaBarrido: true, colorBase: 0.55 },
-  /* 6 */ { nombre: '6 · baja: tono (F4 V2) + poster (F2 V3) + el marco se abre (F6 V2)',
-            marco: 0.4, jitter: 0.1, tinte: 0.5, verTinte: 1, pixelado: 0.4, verPixelado: 2, verAparicion: 1, colorBase: 0.70 },
-  /* 7 */ { nombre: '7 · cierre: giro (F8 V2) + pixelado fuerte (curva nueva)',
-            marco: 0.5, tinte: 0.2, malaSenal: 0.15, pixelado: 0.75, feedback: 0.35, verFeedback: 1, colorBase: 0.85 },
+            marco: 0.6, jitter: 0.6, verJitter: 1, malaSenal: 0.4, verMalaSenal: 2, tinte: 0.3, iman: 0.5, usaBarrido: true, colorBase: 0.55,
+            recuadrosNegros: 0.1 },
+  /* 6 */ { nombre: '6 · baja: tono (F4 V2) + poster (F2 V3) + el marco se abre (F6 V2) + apagado + negros',
+            marco: 0.4, jitter: 0.1, tinte: 0.5, verTinte: 1, pixelado: 0.4, verPixelado: 2, verAparicion: 1, colorBase: 0.70,
+            apagaFondo: true, recuadrosNegros: 0.4 },
+  /* 7 */ { nombre: '7 · cierre: giro (F8 V2) + pixelado fuerte + saltos (F5 V1) + apagado + negros',
+            marco: 0.5, tinte: 0.2, malaSenal: 0.15, pixelado: 0.75, feedback: 0.35, verFeedback: 1, colorBase: 0.85,
+            apagaFondo: true, recuadrosNegros: 0.5 },
 ]
 
 const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 13 de la canción
