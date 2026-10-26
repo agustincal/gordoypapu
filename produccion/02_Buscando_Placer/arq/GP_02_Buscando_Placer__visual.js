@@ -138,7 +138,7 @@
       [0, 0],               // 0: nada
       [4, 1],               // 1: suave
       [1, 0.3],             // 2: normal
-      [0.4, 0.15],          // 3: extremo
+      [0.15, 0.15],          // 3: extremo
     ],
     barridoDist: 1.3,   // desde qué tan lejos entra
     // golpe de cada recuadro (lo usan rasgado, franjas, bloques, tono, canales, vhs, rueda)
