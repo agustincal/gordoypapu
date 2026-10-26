@@ -7,7 +7,10 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 26/10/2026 (v3.12: al soltar la nota, la aparición (F6, las 3 versiones) se queda donde
+// Actualizado: 26/10/2026 (v3.13: eco del canal 2 — V.eco(on, clave): cada nota pega un recuadro propio con la
+//              imagen actual invertida, que tiembla y se repite ecoRepeticiones veces cada ecoMs (corchea),
+//              cada vez más oscuro, más chico y un poco corrido. 6 voces, para que las notas seguidas no se corten)
+//              26/10/2026 (v3.12: al soltar la nota, la aparición (F6, las 3 versiones) se queda donde
 //              llegó en vez de completarse — el tamaño sigue la duración del toque (aparicionQueda; las notas
 //              muy cortas abren por lo menos aparicionPiso). La ráfaga y los disparos sin nota terminan como antes.
 //              aparicionLarga 1.8 → 0.4 s para que el tamaño siga a las notas cortas del bajo)
@@ -57,7 +60,8 @@
 //                                                        (sin clave: como antes, no espera a la nota)
 //   GP.buscandoPlacer.rafaga()                           varios recuadros seguidos (ej: al cambiar de estado; nunca negros)
 //   (negros: nivel 0..3 de la proporción de disparos que salen negros, ver negrosNiveles)
-//   GP.buscandoPlacer.tiron(on, clave)                   canal 2 o pad a mano: tirón de glitch (mientras suena + caída)
+//   GP.buscandoPlacer.tiron(on, clave)                   tirón de glitch (mientras suena + caída) — hoy sin uso en el sketch
+//   GP.buscandoPlacer.eco(on, clave)                     canal 2 o pad a mano: recuadro invertido que tiembla, con eco
 //   GP.buscandoPlacer.color9(columna)                    canal 9 o pad a mano: gira el color de toda la imagen
 //
 // Versiones (0 = V1, 1 = V2, 2 = V3). V1 es siempre el efecto de la v3.0
@@ -89,7 +93,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.12'
+  const VERSION = 'v3.13'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -167,6 +171,16 @@
     vhsBaja: 0.2,       // V2: velocidad con que bajan las ondas (fracción de pantalla por segundo)
     ruedaVel: 0.3,      // V3: vueltas por segundo de la rueda con el fader al máximo
     ruedaOndaBaja: 0.04, // V3: velocidad con que baja la ondulación (lenta, al revés de la rueda)
+    // eco del canal 2 / fila 6: cada nota = un recuadro con la imagen actual invertida, que tiembla
+    // mientras suena y se repite como un eco, cada vez más oscuro, más chico y corrido
+    ecoMs: 275,          // tiempo entre repeticiones (corchea a 109 BPM, medido del bombo en el ensayo)
+    ecoRepeticiones: 6,  // cuántas veces se repite después de la nota
+    ecoCaida: 0.72,      // brillo de cada repetición respecto de la anterior (va hacia negro)
+    ecoAchica: 0.06,     // cuánto se achica en cada repetición
+    ecoCorre: 0.03,      // cuánto se corre en cada repetición (cada nota elige su dirección)
+    ecoTamano: [0.15, 0.4], // ancho y alto del recuadro, al azar entre estos dos
+    ecoTiembla: 0.008,   // amplitud del temblor
+    ecoDestello: 0.5,    // cada repetición se ve esta fracción del tiempo del eco
     // color con el canal 9 / fila 5
     color9: 0.6,        // cuánto gira el color (1 = media vuelta entre el primer pad y el último)
     color9Vel: 0.15,    // segundos para llegar al color de cada nota
@@ -439,6 +453,50 @@
   }
 
   // ============================================================
+  // Eco del canal 2 / fila 6
+  //   cada nota toma una voz (hay ECO_VOCES, en rueda): un recuadro con la imagen actual invertida.
+  //   Se ve mientras suena la nota y después en destellos cada ecoMs, ecoRepeticiones veces, cada vez
+  //   más oscuro (ecoCaida), más chico (ecoAchica) y corrido (ecoCorre). Tiembla mientras se ve.
+  //   Como el collage guarda lo que se pega, cada destello deja su copia (el apagado N18 las borra).
+  // ============================================================
+  const ECO_VOCES = 6
+  const ecos = Array.from({ length: ECO_VOCES }, () => ({
+    t0: -1e9, clave: null, sostenida: false, rw: 0.2, rh: 0.2, rx: 0, ry: 0, dx: 0, dy: 0,
+    vis: 0, k: 0, brillo: 1, esc: 1, tx: 0, ty: 0,
+  }))
+  let ecoSig = 0
+  V.eco = (on, clave = null) => {
+    const ahora = performance.now()
+    ultimaActividad = ahora
+    if (!on) { if (clave != null) for (const e of ecos) if (e.clave === clave) e.sostenida = false; return }
+    const e = ecos[ecoSig]
+    ecoSig = (ecoSig + 1) % ECO_VOCES
+    const [a, b] = C.ecoTamano
+    e.rw = a + Math.random() * (b - a)
+    e.rh = a + Math.random() * (b - a)
+    e.rx = (Math.random() - 0.5) * 0.7
+    e.ry = (Math.random() - 0.5) * 0.7
+    const ang = Math.random() * Math.PI * 2
+    e.dx = Math.cos(ang); e.dy = Math.sin(ang)
+    e.t0 = ahora; e.clave = clave; e.sostenida = clave != null
+  }
+  const actualizarEcos = (ahora) => {
+    for (const e of ecos) {
+      const tt = ahora - e.t0
+      const k = Math.floor(tt / Math.max(20, C.ecoMs))
+      if (k > C.ecoRepeticiones) { e.vis = 0; continue }
+      const visible = (e.sostenida && k === 0) || tt - k * C.ecoMs < C.ecoMs * C.ecoDestello
+      e.vis = visible ? 1 : 0
+      e.k = k
+      e.brillo = Math.pow(C.ecoCaida, k)
+      e.esc = Math.max(0.1, 1 - C.ecoAchica * k)
+      const amp = visible ? C.ecoTiembla : 0
+      e.tx = (Math.random() * 2 - 1) * amp
+      e.ty = (Math.random() * 2 - 1) * amp
+    }
+  }
+
+  // ============================================================
   // Color con el canal 9 / fila 5: cada pad (columna 0..7) es un color
   // ============================================================
   const col9 = { objetivo: 0, actual: 0, ult: -1e9 }
@@ -462,6 +520,8 @@
     const ahora = performance.now()
     const dt = Math.min(0.1, Math.max(0, (ahora - tPrev) / 1000))
     tPrev = ahora
+
+    actualizarEcos(ahora)
 
     // color del canal 9: llega suave a cada nota y vuelve cuando deja de sonar
     if (ahora - col9.ult > C.color9Suelta * 1000) col9.objetivo = 0
@@ -618,9 +678,25 @@
     // recuadro negro (una proporción de los disparos): misma forma y aparición, sin imagen
     img = img.mult(solid(0, 0, 0, 1), () => (rect.negro ? 1 : 0))
 
-    baseFeedback(out, vF)
+    // eco del canal 2: una capa por voz — la imagen actual invertida, oscurecida según la repetición,
+    // recortada por su recuadro (achicado, corrido y temblando); invisible cuando la voz no destella
+    const capaEco = (e) => src(medios.fuente)
+      .scale(() => rect.imgScale, () => rect.imgScale / ((width / height) / medios.aspecto) * medios.ajuste)
+      .scrollX(() => rect.imgX)
+      .scrollY(() => rect.imgY)
+      .invert()
+      .color(() => e.brillo, () => e.brillo, () => e.brillo)
+      .mask(shape(4, 1, 0.001)
+        .scale(() => e.rw * e.esc, () => e.rh * e.esc)
+        .scrollX(() => e.rx + e.dx * C.ecoCorre * e.k + e.tx)
+        .scrollY(() => e.ry + e.dy * C.ecoCorre * e.k + e.ty))
+      .mult(solid(1, 1, 1, 0), () => 1 - e.vis)
+
+    let collage = baseFeedback(out, vF)
       .add(solid(1, 1, 1, 0), () => -fondo.resta)   // el collage de antes baja hacia negro
       .layer(img.mask(recuadro(vJ === 0)).mult(solid(1, 1, 1, 0), () => (fondo.oculto ? 1 : 0)))   // oculto: transparente
+    for (const e of ecos) collage = collage.layer(capaEco(e))
+    collage
       .modulate(iman(), imanFuerza)
       .out(out)
 

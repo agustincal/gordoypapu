@@ -32,6 +32,10 @@
 //              2 normal · 3 extremo) · N28 recuadros negros (0 · 15 · 30 · 50 %). Shift + pad = atrás
 //              26/10/2026 (motor v3.12): F6 sigue la duración del toque — al soltar, el recuadro queda del
 //              tamaño al que llegó (aparicionQueda) · aparicionLarga 1.8 → 0.4 s
+//              26/10/2026: el canal 2 / fila 6 deja de dar el tirón de glitch (queda sin efecto, para probar
+//              otra idea: nota que tiembla, con eco). El tirón sigue en el motor: V.tiron(on, clave)
+//              26/10/2026 (motor v3.13): canal 2 / fila 6 = ECO — recuadro con la imagen invertida que tiembla
+//              y se repite 6 veces cada corchea (ecoMs 275 = 109 BPM), cada vez más oscuro
 // ============================================================
 
 // ---- carga de scripts ----
@@ -116,6 +120,8 @@ V.init({
   rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado (nunca negros)
   tiron: 0.02,         // fuerza del tirón de glitch del canal 2 / la fila 6 (anda aunque F5 esté en 0)
   tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
+  ecoMs: 275,          // canal 2: tiempo del eco (corchea a 109 BPM)
+  ecoRepeticiones: 6,  // canal 2: repeticiones del eco
 
   // duración por nota (idea de Fluorescente)
   aparicionLarga: 0.4, // s que tarda en abrirse del todo un recuadro mientras la nota se sostiene
@@ -208,10 +214,11 @@ const ESTADOS_CANCION = [
 // Versiones: 0 = V1 · 1 = V2 · 2 = V3
 // ============================================================
 const ESTADOS_PRUEBA = [
-  /* 1 */ { nombre: '1 · intro: ventanas que se abren', jitter: 0.31, pixelado: 0, marco: 0.29, verJitter: 1, verMalaSenal: 1, 
-            verAparicion: 2, siguenRitmo: true },
-  /* 2 */ { nombre: '2 · se va con F8 maximo ultimo dos', marco: 0.30, malaSenal: 0.25, feedback: 0.01, verMalaSenal: 1, 
-            verFeedback: 2, verAparicion: 2, negros: 1, colorBase: 0.08 },
+  /* 1 */ { nombre: '1 · intro: túnel (F8 V1) + vhs suave',
+            feedback: 0.3, verFeedback: 0, malaSenal: 0.1, verMalaSenal: 1, siguenRitmo: true, colorBase: 0.00 },
+  /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2) + apagado + negros',
+            marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08,
+            apagaFondo: 2, negros: 1 },
   /* 3 */ { nombre: '3 · teclado: tirón de glitch + bloques (F2 V2) + canales (F4 V3) + saltos (F5 V1) + negros', muteCanal2: false,
             marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20,
             malaSenal: 0.2, verMalaSenal: 0, negros: 2 },
@@ -236,8 +243,9 @@ const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 
 // AKAI — mapa LIVE (mismo orden de canales que las otras canciones)
 //   fila 8 → canal 1 (bajo). Es el que dispara los recuadros. Mute: botón 82
 //   fila 7 → canal 10 (bombo, una nota por negra). De base muteado. Mute: botón 83
-//   fila 6 → canal 2 (teclado distorsionado): cada nota da un TIRÓN DE GLITCH en toda la pantalla. Mute: botón 84
-//            pads de la fila 6 a mano: tirón mientras los apretás
+//   fila 6 → canal 2 (teclado distorsionado, nota que tiembla con eco): cada nota = recuadro con la imagen
+//            invertida que tiembla y se repite como eco (6 veces, cada corchea). Mute: botón 84
+//            pads de la fila 6 a mano: lo mismo
 //   fila 5 → canal 9 (notas largas): cada nota gira el color de toda la imagen. Mute: botón 85
 //            pads de la fila 5 a mano: cada pad es un color
 //   fila 4 → libre
@@ -274,7 +282,7 @@ GP.estados.init({
 })
 
 GP.midi.alDisparo(({ fila, columna, nota, on, origen }) => {
-  if (fila === 6) { V.tiron(on, origen === 'akai' ? `pad${columna}` : `n${nota}`); return }   // canal 2 o pads de la fila 6
+  if (fila === 6) { V.eco(on, origen === 'akai' ? `pad${columna}` : `n${nota}`); return }   // canal 2 o pads de la fila 6: eco
   if (fila === 5) { if (on) V.color9(columna); return }         // canal 9 o pads de la fila 5
   // filas 8 y 7: recuadros. La clave identifica la nota (o el pad) para saber cuándo se suelta
   const clave = origen === 'akai' ? `pad${fila}.${columna}` : `f${fila}.${nota}`
