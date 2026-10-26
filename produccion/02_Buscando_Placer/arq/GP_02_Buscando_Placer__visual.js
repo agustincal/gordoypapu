@@ -131,7 +131,7 @@
     silencio: 0.6,       // segundos sin notas para considerar silencio
     caidaSilencio: 1.5,  // segundos que tarda el feedback (F8) en frenar en silencio
     negros: 0,              // nivel 0..3 (pad de 4 estados): qué proporción de disparos pega un recuadro negro
-    negrosNiveles: [0, 0.15, 0.3, 0.5],   // proporción de cada nivel (0 = ninguno, 1 = todos)
+    negrosNiveles: [0, 0.16, 0.33, 0.73],   // proporción de cada nivel (0 = ninguno, 1 = todos)
     // el collage se apaga hacia negro (segundos de blanco a negro; 0 = no se apaga)
     apagaFondo: 0,          // nivel 0..3 (pad de 4 estados; true cuenta como 2)
     fondoNiveles: [         // [mientras se toca, en silencio] en segundos de blanco a negro (0 = no se apaga)
