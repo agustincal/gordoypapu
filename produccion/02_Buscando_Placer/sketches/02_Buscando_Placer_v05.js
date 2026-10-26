@@ -214,11 +214,8 @@ const ESTADOS_CANCION = [
 // Versiones: 0 = V1 · 1 = V2 · 2 = V3
 // ============================================================
 const ESTADOS_PRUEBA = [
-  /* 1 */ { nombre: '1 · intro: túnel (F8 V1) + vhs suave',
-            feedback: 0.3, verFeedback: 0, malaSenal: 0.1, verMalaSenal: 1, siguenRitmo: true, colorBase: 0.00 },
-  /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2) + apagado + negros',
-            marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08,
-            apagaFondo: 2, negros: 1 },
+  /* 1 */ { nombre: '1 · intro: ventanas que se abren', jitter: 0.31, pixelado: 0, marco: 0.29, verJitter: 1, verMalaSenal: 1, verAparicion: 2, siguenRitmo: true },
+  /* 2 */ { nombre: '2 · se va con F8 maximo ultimo dos', marco: 0.30, malaSenal: 0.25, feedback: 0.01, verMalaSenal: 1, verFeedback: 2, verAparicion: 2, negros: 1, colorBase: 0.08 },
   /* 3 */ { nombre: '3 · teclado: tirón de glitch + bloques (F2 V2) + canales (F4 V3) + saltos (F5 V1) + negros', muteCanal2: false,
             marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20,
             malaSenal: 0.2, verMalaSenal: 0, negros: 2 },
