@@ -28,6 +28,8 @@
 //              25/10/2026 (motor v3.10): recuadros negros (recuadrosNegros: base 0, cada estado pone el suyo)
 //              25/10/2026: estados de prueba con lo nuevo — apagado (N18) en 2, 6 y 7 · negros por estado ·
 //              intro con vhs suave (sin saltos) · saltos de F5 V1 en el 3 y el 7
+//              26/10/2026 (motor v3.11, GP_midi v1.10): pads de 4 estados — N18 apagado (0 nada · 1 suave ·
+//              2 normal · 3 extremo) · N28 recuadros negros (0 · 15 · 30 · 50 %). Shift + pad = atrás
 // ============================================================
 
 // ---- carga de scripts ----
@@ -103,14 +105,13 @@ V.init({
   // toggles
   usaBarrido: false,   // N11: el recuadro entra barriendo
   siguenRitmo: false,  // N13: jitter y mala señal laten con los recuadros
-  apagaFondo: false,   // N18: el collage se apaga hacia negro (en silencio, también el último recuadro)
-  fondoApaga: 1,       // s de blanco a negro mientras se toca
-  fondoApagaSilencio: 0.3, // s de blanco a negro en silencio
+  apagaFondo: 0,       // N18 (4 estados): el collage se apaga hacia negro — 0 nada · 1 suave · 2 normal · 3 extremo
+                       //   (en silencio, también el último recuadro). Tiempos de cada nivel: fondoNiveles en el motor
+  negros: 0,           // N28 (4 estados): recuadros negros — 0 ninguno · 1 15 % · 2 30 % · 3 50 % (negrosNiveles)
 
   colorBase: 0,        // color de la rueda (0 a 1); cada recuadro toma uno de su tríada
 
   rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado (nunca negros)
-  recuadrosNegros: 0,  // proporción de disparos que pegan un recuadro negro (0 = ninguno, 1 = todos; cada estado pone la suya)
   tiron: 0.02,         // fuerza del tirón de glitch del canal 2 / la fila 6 (anda aunque F5 esté en 0)
   tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
 
@@ -149,7 +150,8 @@ const CONTROLES = {
   verAparicion: 'V6',  // F6: cómo aparece cada recuadro — zoom del contenido · el marco se abre · desde una línea (tele)
   usaBarrido:  'N11',
   siguenRitmo: 'N13',
-  apagaFondo:  'N18',
+  apagaFondo:  'N18',  // 4 estados
+  negros:      'N28',  // 4 estados
   // mutes por fila (true = muteado): un canal muteado no hace nada (los pads a mano siguen andando)
   muteCanal1:  'M8',
   muteCanal10: 'M7',
@@ -206,22 +208,22 @@ const ESTADOS_PRUEBA = [
             feedback: 0.3, verFeedback: 0, malaSenal: 0.1, verMalaSenal: 1, siguenRitmo: true, colorBase: 0.00 },
   /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2) + apagado + negros',
             marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08,
-            apagaFondo: true, recuadrosNegros: 0.2 },
+            apagaFondo: 2, negros: 1 },
   /* 3 */ { nombre: '3 · teclado: tirón de glitch + bloques (F2 V2) + canales (F4 V3) + saltos (F5 V1) + negros', muteCanal2: false,
             marco: 0.45, jitter: 0.2, pixelado: 0.35, verPixelado: 1, tinte: 0.4, verTinte: 2, colorBase: 0.20,
-            malaSenal: 0.2, verMalaSenal: 0, recuadrosNegros: 0.3 },
+            malaSenal: 0.2, verMalaSenal: 0, negros: 2 },
   /* 4 */ { nombre: '4 · notas largas: color + mosaico (F3 V2) + sandin (F8 V3) + aparición tele (F6 V3)', muteCanal9: false,
             marco: 0.5, verMarco: 1, zoom: 0.2, verAparicion: 2, feedback: 0.4, verFeedback: 2, colorBase: 0.40, fundido: 1,
-            recuadrosNegros: 0.2 },
+            negros: 1 },
   /* 5 */ { nombre: '5 · todo: tirón + color + rasgado (F1 V2) + rueda (F5 V3)', muteCanal2: false, muteCanal9: false,
             marco: 0.6, jitter: 0.6, verJitter: 1, malaSenal: 0.4, verMalaSenal: 2, tinte: 0.3, iman: 0.5, usaBarrido: true, colorBase: 0.55,
-            recuadrosNegros: 0.1 },
+            negros: 1 },
   /* 6 */ { nombre: '6 · baja: tono (F4 V2) + poster (F2 V3) + el marco se abre (F6 V2) + apagado + negros',
             marco: 0.4, jitter: 0.1, tinte: 0.5, verTinte: 1, pixelado: 0.4, verPixelado: 2, verAparicion: 1, colorBase: 0.70,
-            apagaFondo: true, recuadrosNegros: 0.4 },
+            apagaFondo: 2, negros: 3 },
   /* 7 */ { nombre: '7 · cierre: giro (F8 V2) + pixelado fuerte + saltos (F5 V1) + apagado + negros',
             marco: 0.5, tinte: 0.2, malaSenal: 0.15, pixelado: 0.75, feedback: 0.35, verFeedback: 1, colorBase: 0.85,
-            apagaFondo: true, recuadrosNegros: 0.5 },
+            apagaFondo: 2, negros: 3 },
 ]
 
 const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 13 de la canción
@@ -240,13 +242,16 @@ const ESTADOS = ESTADOS_PRUEBA   // ← poné ESTADOS_CANCION para volver a los 
 //   Mientras la nota (o el pad) se sostiene, el recuadro se sigue abriendo; al soltar termina según el ritmo
 //   (y si estaba barriendo, cae en su lugar).
 //   N11 / N13 = barrido / jitter y mala señal laten con los recuadros (N12 libre: el imán es sólo F7)
-//   N18 = el collage se apaga hacia negro (fondoApaga / fondoApagaSilencio)
+//   N18 (4 estados) = el collage se apaga hacia negro: 0 nada · 1 suave · 2 normal · 3 extremo
+//   N28 (4 estados) = recuadros negros: 0 ninguno · 1 15 % · 2 30 % · 3 50 %
+//   pads de estados: cada toque pasa al siguiente · Shift + pad = anterior
+//   (LED: verde = 0 · verde parpadeo = 1 · amarillo parpadeo = 2 · rojo parpadeo = 3)
 //   F1 jitter · F2 pixelado · F3 marco · F4 tinte · F5 mala señal · F6 zoom · F7 imán · F8 feedback
 //   Botones redondos 64-71 (arriba de cada fader) = versión del efecto (F1, F2, F3, F4, F5, F6 aparición, F8)
 //   87 / 88 = estado anterior / siguiente (ensayo o emergencia)
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
-GP.midi.buttons(['N11', 'N13', 'N18'])
+GP.midi.buttons({ N11: 'toggle', N13: 'toggle', N18: 4, N28: 4 })
 GP.midi.versiones({ F1: 3, F2: 3, F3: 2, F4: 3, F5: 3, F6: 3, F8: 3 })   // igual que V.CUANTAS del motor
 GP.midi.filas({
   8: { canal: 1, rango: [26, 61] },

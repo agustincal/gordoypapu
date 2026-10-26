@@ -7,7 +7,10 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 25/10/2026 (v3.10: recuadros negros — una proporción de los disparos (recuadrosNegros, 30 %)
+// Actualizado: 26/10/2026 (v3.11: apagado y recuadros negros por niveles, para pads de 4 estados —
+//              apagaFondo 0..3 (fondoNiveles: nada · suave · normal · extremo) · negros 0..3 (negrosNiveles:
+//              0 · 15 · 30 · 50 %); reemplazan a fondoApaga / fondoApagaSilencio / recuadrosNegros)
+//              25/10/2026 (v3.10: recuadros negros — una proporción de los disparos (recuadrosNegros, 30 %)
 //              pega un recuadro negro, con la misma forma y aparición; la ráfaga de cada estado no)
 //              25/10/2026 (v3.9: el apagado se prende con un toggle (apagaFondo, N18 en el sketch) ·
 //              valores 1 s tocando / 0.3 s en silencio · en silencio también se apaga el último recuadro)
@@ -49,7 +52,7 @@
 //   GP.buscandoPlacer.soltar(clave)                      se soltó esa nota: termina la aparición y corta el barrido
 //                                                        (sin clave: como antes, no espera a la nota)
 //   GP.buscandoPlacer.rafaga()                           varios recuadros seguidos (ej: al cambiar de estado; nunca negros)
-//   (recuadrosNegros: proporción de disparos que salen negros, 0 = ninguno)
+//   (negros: nivel 0..3 de la proporción de disparos que salen negros, ver negrosNiveles)
 //   GP.buscandoPlacer.tiron(on, clave)                   canal 2 o pad a mano: tirón de glitch (mientras suena + caída)
 //   GP.buscandoPlacer.color9(columna)                    canal 9 o pad a mano: gira el color de toda la imagen
 //
@@ -70,8 +73,8 @@
 //   - el golpe queda arriba mientras suena la nota y se apaga al soltarla
 //   - en silencio (sin notas durante `silencio` s) el feedback de F8 frena en caidaSilencio s
 //
-// Apagado del collage (toggle apagaFondo): cada cuadro, lo que quedó de antes baja un poco hacia negro
-// (fondoApaga s de blanco a negro mientras se toca, fondoApagaSilencio s en silencio; 0 = no se apaga).
+// Apagado del collage (apagaFondo, nivel 0..3): cada cuadro, lo que quedó de antes baja un poco hacia negro.
+// Cada nivel de fondoNiveles = [s de blanco a negro mientras se toca, s en silencio] (0 = no se apaga).
 // Mientras se toca, el recuadro actual se dibuja entero cada cuadro y no se apaga; en silencio deja de
 // dibujarse y se apaga con el resto, hasta el próximo recuadro.
 // Cambiar de versión recompila la cadena de Hydra (puede haber un salto chico).
@@ -80,7 +83,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.10'
+  const VERSION = 'v3.11'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -127,11 +130,16 @@
     barridoDur: 0.6,     // …y como mucho esto (segundos)
     silencio: 0.6,       // segundos sin notas para considerar silencio
     caidaSilencio: 1.5,  // segundos que tarda el feedback (F8) en frenar en silencio
-    recuadrosNegros: 0.3,   // proporción de disparos que pegan un recuadro negro (0 = ninguno, 1 = todos)
+    negros: 0,              // nivel 0..3 (pad de 4 estados): qué proporción de disparos pega un recuadro negro
+    negrosNiveles: [0, 0.15, 0.3, 0.5],   // proporción de cada nivel (0 = ninguno, 1 = todos)
     // el collage se apaga hacia negro (segundos de blanco a negro; 0 = no se apaga)
-    apagaFondo: false,      // toggle: prende o apaga todo el apagado
-    fondoApaga: 1,          // mientras se toca
-    fondoApagaSilencio: 0.3, // en silencio (y ahí se apaga también el último recuadro)
+    apagaFondo: 0,          // nivel 0..3 (pad de 4 estados; true cuenta como 2)
+    fondoNiveles: [         // [mientras se toca, en silencio] en segundos de blanco a negro (0 = no se apaga)
+      [0, 0],               // 0: nada
+      [4, 1],               // 1: suave
+      [1, 0.3],             // 2: normal
+      [0.4, 0.15],          // 3: extremo
+    ],
     barridoDist: 1.3,   // desde qué tan lejos entra
     // golpe de cada recuadro (lo usan rasgado, franjas, bloques, tono, canales, vhs, rueda)
     golpeCaida: 0.3,    // segundos que tarda en apagarse después de soltar la nota
@@ -229,7 +237,7 @@
   // Recuadro
   // ============================================================
   const rect = {
-    negro: false,                       // este recuadro sale negro (recuadrosNegros)
+    negro: false,                       // este recuadro sale negro (negros)
     rx: 0, ry: 0, rw: 1, rh: 1,
     rxIni: 0, ryIni: 0, rxFin: 0, ryFin: 0,
     imgScale: 1, imgX: 0, imgY: 0, imgXFin: 0, imgYFin: 0,
@@ -255,6 +263,11 @@
     return clamp01((performance.now() - tUltimoDisparo) / intervaloDisparos)
   }
   const segunRitmo = () => (C.siguenRitmo ? latido() : 1)
+  // valor de una lista de niveles (pads de estados): true = 2, false = 0, números fuera de rango se recortan
+  const nivelDe = (lista, n) => {
+    const i = n === true ? 2 : Math.round(Number(n) || 0)
+    return lista[Math.max(0, Math.min(lista.length - 1, i))]
+  }
 
   // golpe: salta a 1 con cada recuadro, queda arriba mientras suena su nota y se apaga al soltarla
   // (más un azar por golpe, como en Perdido)
@@ -291,7 +304,7 @@
     if (rect.cargando || !medios.urls.length) return
     rect.cargando = true
     rect.sueltaPendiente = false
-    const negro = !sinNegro && Math.random() < C.recuadrosNegros   // este recuadro sale negro
+    const negro = !sinNegro && Math.random() < (nivelDe(C.negrosNiveles, C.negros) || 0)   // este recuadro sale negro
 
     const ahora = performance.now()
     if (tUltimoDisparo) {
@@ -470,14 +483,15 @@
     // apagado del collage: velocidad entre la de silencio y la de tocando (según fbVel). Se resta en pasos
     // enteros de 1/255 porque la pantalla de Hydra es de 8 bits: un paso más chico se perdería al redondear
     // y quedarían fantasmas grises que nunca llegan a negro
-    const tasa = (seg) => (C.apagaFondo && seg > 0 ? 1 / seg : 0)
-    fondo.acum += dt * (tasa(C.fondoApagaSilencio) + (tasa(C.fondoApaga) - tasa(C.fondoApagaSilencio)) * fbVel)
+    const [segTocando, segSilencio] = nivelDe(C.fondoNiveles, C.apagaFondo) || [0, 0]
+    const tasa = (seg) => (seg > 0 ? 1 / seg : 0)
+    fondo.acum += dt * (tasa(segSilencio) + (tasa(segTocando) - tasa(segSilencio)) * fbVel)
     fondo.resta = Math.floor(fondo.acum * 255) / 255
     fondo.acum -= fondo.resta
     // en silencio (con el apagado prendido y en silencio > 0) el último recuadro deja de dibujarse: se apaga
     // con el resto y no vuelve aunque llegue otra actividad; lo destapa el próximo recuadro
-    if (!activo && tasa(C.fondoApagaSilencio) > 0) fondo.oculto = true
-    if (!C.apagaFondo) fondo.oculto = false
+    if (!activo && tasa(segSilencio) > 0) fondo.oculto = true
+    if (!tasa(segSilencio) && !tasa(segTocando)) fondo.oculto = false
 
     // aparición: lenta mientras la nota se sostiene; al soltar, termina según el ritmo
     if (ap.p < 1) {
