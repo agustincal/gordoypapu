@@ -120,8 +120,14 @@ V.init({
   rafagaCantidad: 3,   // recuadros seguidos al cambiar de estado (nunca negros)
   tiron: 0.02,         // fuerza del tirón de glitch del canal 2 / la fila 6 (anda aunque F5 esté en 0)
   tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
-  ecoMs: 275,          // canal 2: tiempo del eco (corchea a 109 BPM)
-  ecoRepeticiones: 6,  // canal 2: repeticiones del eco
+  ecoMs: 275,             // canal 2: tiempo del eco (corchea a 109 BPM)
+  ecoRepeticiones: 12,     // canal 2: repeticiones del eco
+  ecoCaida: 0.62,         // brillo de cada repetición respecto de la anterior (más chico = se apaga más rápido)
+  ecoAchica: 0.06,        // cuánto se achica en cada repetición
+  ecoCorre: 0.03,         // cuánto se corre en cada repetición
+  ecoTamano: [0.45, 0.6], // ancho y alto del recuadro, al azar entre estos dos
+  ecoTiembla: 0.108,      // fuerza del temblor
+  ecoDestello: 0.5,       // cada repetición se ve esta fracción del tiempo del eco
 
   // duración por nota (idea de Fluorescente)
   aparicionLarga: 0.4, // s que tarda en abrirse del todo un recuadro mientras la nota se sostiene
