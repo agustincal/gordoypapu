@@ -30,6 +30,8 @@
 //              intro con vhs suave (sin saltos) · saltos de F5 V1 en el 3 y el 7
 //              26/10/2026 (motor v3.11, GP_midi v1.10): pads de 4 estados — N18 apagado (0 nada · 1 suave ·
 //              2 normal · 3 extremo) · N28 recuadros negros (0 · 15 · 30 · 50 %). Shift + pad = atrás
+//              26/10/2026 (motor v3.12): F6 sigue la duración del toque — al soltar, el recuadro queda del
+//              tamaño al que llegó (aparicionQueda) · aparicionLarga 1.8 → 0.4 s
 // ============================================================
 
 // ---- carga de scripts ----
@@ -116,7 +118,9 @@ V.init({
   tironCaida: 0.3,     // segundos que tarda en apagarse después de cada nota
 
   // duración por nota (idea de Fluorescente)
-  aparicionLarga: 1.8, // s que tarda en abrirse del todo un recuadro mientras la nota se sostiene
+  aparicionLarga: 0.4, // s que tarda en abrirse del todo un recuadro mientras la nota se sostiene
+  aparicionQueda: true, // al soltar la nota el recuadro se queda del tamaño al que llegó (false = termina de abrirse)
+  aparicionPiso: 0.1,  // lo mínimo que se abre (notas muy cortas)
   aparicionRitmo: 0.25, // al soltar, la aparición termina en esta fracción del tiempo entre disparos
   barridoRitmo: 0.8,   // el barrido dura esta fracción del tiempo entre disparos (como mucho barridoDur)
   silencio: 0.6,       // s sin notas = silencio: el feedback (F8) frena…
@@ -204,8 +208,8 @@ const ESTADOS_CANCION = [
 // Versiones: 0 = V1 · 1 = V2 · 2 = V3
 // ============================================================
 const ESTADOS_PRUEBA = [
-  /* 1 */ { nombre: '1 · intro: túnel (F8 V1) + vhs suave',
-            feedback: 0.3, verFeedback: 0, malaSenal: 0.1, verMalaSenal: 1, siguenRitmo: true, colorBase: 0.00 },
+  /* 1 */ { nombre: '1 · intro: ventanas que se abren', jitter: 0.31, pixelado: 0, marco: 0.29, verJitter: 1, verMalaSenal: 1, 
+            verAparicion: 2, siguenRitmo: true },
   /* 2 */ { nombre: '2 · entra el bajo: vhs (F5 V2) + el marco se abre (F6 V2) + apagado + negros',
             marco: 0.3, jitter: 0.15, malaSenal: 0.25, verMalaSenal: 1, verAparicion: 1, colorBase: 0.08,
             apagaFondo: 2, negros: 1 },

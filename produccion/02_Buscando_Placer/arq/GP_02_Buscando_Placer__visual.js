@@ -7,7 +7,11 @@
 //      feedback sobre el collage (F8)
 // Lo carga el sketch de producción (produccion/02_Buscando_Placer/sketches/02_Buscando_Placer_v04.js).
 // LIVE sigue con su motor v3.0 (LIVE/arq): esta copia pasa a LIVE cuando esté aprobada.
-// Actualizado: 26/10/2026 (v3.11: apagado y recuadros negros por niveles, para pads de 4 estados —
+// Actualizado: 26/10/2026 (v3.12: al soltar la nota, la aparición (F6, las 3 versiones) se queda donde
+//              llegó en vez de completarse — el tamaño sigue la duración del toque (aparicionQueda; las notas
+//              muy cortas abren por lo menos aparicionPiso). La ráfaga y los disparos sin nota terminan como antes.
+//              aparicionLarga 1.8 → 0.4 s para que el tamaño siga a las notas cortas del bajo)
+//              26/10/2026 (v3.11: apagado y recuadros negros por niveles, para pads de 4 estados —
 //              apagaFondo 0..3 (fondoNiveles: nada · suave · normal · extremo) · negros 0..3 (negrosNiveles:
 //              0 · 15 · 30 · 50 %); reemplazan a fondoApaga / fondoApagaSilencio / recuadrosNegros)
 //              25/10/2026 (v3.10: recuadros negros — una proporción de los disparos (recuadrosNegros, 30 %)
@@ -68,7 +72,9 @@
 //
 // Duración por nota (como en Fluorescente):
 //   - la aparición avanza lenta mientras la nota del recuadro se sostiene (se abre del todo en
-//     aparicionLarga s); al soltar, termina en aparicionRitmo × el tiempo entre disparos
+//     aparicionLarga s); al soltar se queda donde llegó (aparicionQueda, con un mínimo de aparicionPiso)
+//     hasta el recuadro siguiente. Con aparicionQueda en false, al soltar termina en
+//     aparicionRitmo × el tiempo entre disparos (como en v3.4–v3.11)
 //   - el barrido dura barridoRitmo × el tiempo entre disparos (como mucho barridoDur)
 //   - el golpe queda arriba mientras suena la nota y se apaga al soltarla
 //   - en silencio (sin notas durante `silencio` s) el feedback de F8 frena en caidaSilencio s
@@ -83,7 +89,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.11'
+  const VERSION = 'v3.12'
 
   if (GP.buscandoPlacer && GP.buscandoPlacer._version === VERSION) return
   GP.buscandoPlacer = { _version: VERSION }
@@ -121,8 +127,11 @@
     rafagaCantidad: 3,  // recuadros de la ráfaga al cambiar de estado
     rafagaPausa: 30,    // ms entre recuadros de la ráfaga
     // duración por nota
-    aparicionLarga: 1.8, // segundos que tarda en abrirse del todo mientras la nota se sostiene
-    aparicionRitmo: 0.25, // al soltar, la aparición termina en esta fracción del tiempo entre disparos
+    aparicionLarga: 0.4, // segundos que tarda en abrirse del todo mientras la nota se sostiene (con las notas
+                         // del bajo, de 60 a 270 ms, el tamaño queda entre un tercio y casi entero)
+    aparicionQueda: true, // al soltar, la aparición se queda donde llegó (false = termina según el ritmo)
+    aparicionPiso: 0.1,   // con aparicionQueda: lo mínimo que se abre un recuadro (para las notas muy cortas)
+    aparicionRitmo: 0.25, // sin aparicionQueda: al soltar, la aparición termina en esta fracción del tiempo entre disparos
     aparicionMin: 0.06,  // límites (s) de ese final
     aparicionMax: 1,
     maxSostenida: 8,     // segundos: una nota sostenida más que esto se da por suelta
@@ -253,7 +262,7 @@
   const sostenidas = new Map()
   let ultimaActividad = -1e9          // último disparo o suelta (para el silencio)
   // aparición del recuadro actual: p va de 0 a 1 (en pantalla, con salida suave)
-  const ap = { p: 1, clave: null, vel: 0 }
+  const ap = { p: 1, clave: null, vel: 0, quieta: false }   // quieta: se soltó la nota y se queda donde llegó
   const sostiene = clave => clave != null && sostenidas.has(clave)
 
   // latido: cuánto pasó desde el último recuadro, en relación al tiempo entre los dos últimos
@@ -287,6 +296,12 @@
     ? Math.max(0.08, Math.min(C.barridoDur, C.barridoRitmo * intervaloDisparos / 1000))
     : C.barridoDur
   const soltarAparicion = () => { ap.vel = (1 - ap.p) / Math.max(0.01, durRitmo()) }
+  // al soltar una nota: se queda donde llegó (aparicionQueda) o termina según el ritmo.
+  // Sin clave (ráfaga, disparos a mano sin nota) siempre termina, porque no hay duración que seguir
+  const alSoltarAparicion = (clave) => {
+    if (C.aparicionQueda && clave != null) { ap.p = Math.max(ap.p, C.aparicionPiso); ap.quieta = true }
+    else soltarAparicion()
+  }
   V.golpe = g
 
   const hslToRgb = (h, s, l) => {
@@ -360,8 +375,9 @@
 
       ap.p = 0
       ap.vel = 0
+      ap.quieta = false
       ap.clave = clave
-      if (!sostiene(clave)) soltarAparicion()   // sin nota sostenida (ráfaga, o ya la soltaron): termina según el ritmo
+      if (!sostiene(clave)) alSoltarAparicion(clave)   // ya la soltaron (nota muy corta) o no hay nota (ráfaga)
       rect.escalaAparicion = 0
       rect.cargando = false
     }
@@ -384,7 +400,7 @@
       sostenidas.delete(clave)
       if (clave !== ap.clave) return          // una nota vieja: el recuadro actual sigue como está
       if (golpe.clave === clave && golpe.suelta == null) golpe.suelta = ahora
-      if (ap.p < 1) soltarAparicion()
+      if (ap.p < 1) alSoltarAparicion(clave)
     }
     rect.sueltaPendiente = true
     if (!barriendo) return
@@ -494,7 +510,7 @@
     if (!tasa(segSilencio) && !tasa(segTocando)) fondo.oculto = false
 
     // aparición: lenta mientras la nota se sostiene; al soltar, termina según el ritmo
-    if (ap.p < 1) {
+    if (ap.p < 1 && !ap.quieta) {
       if (ap.vel === 0 && sostiene(ap.clave)) ap.p += dt / Math.max(0.05, C.aparicionLarga)
       else { if (ap.vel === 0) soltarAparicion(); ap.p += dt * ap.vel }
       if (ap.p >= 1) { ap.p = 1; ap.vel = 0 }
