@@ -8,7 +8,8 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-23 (v1.14: el Shift (98) pasa a GP_midi (anda sin GP_tools); las cajas se anotan para ocultarse con él)
+// Actualizado: 2026-10-30 (v1.15: sugerencia de filas 5-8 (la 4 es de pads) · la SMC y la JP-Mini no cuentan como instrumentos)
+//              2026-10-23 (v1.14: el Shift (98) pasa a GP_midi (anda sin GP_tools); las cajas se anotan para ocultarse con él)
 //              2026-10-23 (v1.13: Shift (98) oculta todo en cualquier canción · al volver a mostrar, las cajas no se desarman ·
 //              Ctrl+Shift+H de Hydra: las cajas se ocultan y vuelven junto con el código)
 //              2026-10-23 (v1.12: reproductor con línea de tiempo, estados marcados, pausa y bucle del estado ·
@@ -21,7 +22,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.14'
+  const VERSION = 'v1.15'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -285,13 +286,16 @@
       for (const c of est) L.push(`${c.aparato} canal ${c.ch}: **${c.n} cambios** → ${c.tiempos.map(t => mmss(t - panelDesde)).join(', ')}`)
       if (GP.estados && GP.estados.total) L.push(`El sketch tiene ${GP.estados.total} estados.`)
     }
-    const musicales = lista.filter(c => c.n > 0 && !esEst(c) && !esAPC(c.aparato))
+    // las consolas (SMC-Mixer, JP-Mini) no son instrumentos: no van a las filas
+    const cons = GP.midi && GP.midi.config && GP.midi.config.consolas
+    const esConsola = a => !!(cons && (cons.smc.test(a) || cons.jp.test(a)))
+    const musicales = lista.filter(c => c.n > 0 && !esEst(c) && !esAPC(c.aparato) && !esConsola(c.aparato))
     if (musicales.length) {
       L.push('', '## Notas de cada canal')
       for (const c of musicales) L.push(`- ${c.aparato} canal ${c.ch}: ${[...c.notas.keys()].sort((a, b) => a - b).join(' ')}`)
       L.push('', '## Sugerencia para GP.midi.filas (los más tocados arriba)', '', '```js', 'GP.midi.filas({')
       const orden = [...musicales].sort((a, b) => b.n - a.n)
-      ;[8, 7, 6, 5, 4].forEach((fila, i) => {
+      ;[8, 7, 6, 5].forEach((fila, i) => {
         const c = orden[i]
         if (!c) { L.push(`  ${fila}: null,`); return }
         const notas = [...c.notas.keys()].sort((a, b) => a - b)
@@ -299,7 +303,7 @@
         L.push(`  ${fila}: { puerto: ${regexDe(c.aparato)}, canal: ${c.ch}, ${como} },   // ${c.n} notas`)
       })
       L.push('})', '```')
-      if (orden.length > 5) L.push('', `Quedaron afuera (hay 5 filas): ${orden.slice(5).map(c => `${c.aparato} ch${c.ch} (${c.n})`).join(', ')}.`)
+      if (orden.length > 4) L.push('', `Quedaron afuera (hay 4 filas): ${orden.slice(4).map(c => `${c.aparato} ch${c.ch} (${c.n})`).join(', ')}.`)
     }
     const texto = L.join('\n')
     console.log(texto)

@@ -5,7 +5,9 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-25 (v1.10: pads de las filas 1-3 con modo — toggle · piano · 2 a 4 estados (Shift + pad = atrás) ·
+// Actualizado: 2026-10-30 (v1.11: la fila 4 pasa a ser de pads (como la 1-3); disparo = filas 5-8 ·
+//              SMC-Mixer + JP-Mini se traducen al Akai (sin Akai las canciones andan igual))
+//              2026-10-25 (v1.10: pads de las filas 1-3 con modo — toggle · piano · 2 a 4 estados (Shift + pad = atrás) ·
 //              toggle prendido = verde parpadeo · el Shift oculta al SOLTARLO, y no oculta si lo usaste con un pad)
 //              2026-10-23 (v1.9: filas de disparo en negativo — activa = verde y las notas que suenan se apagan ·
 //              muteada = apagada y las notas que suenan en verde · a mano = rojo)
@@ -29,16 +31,16 @@
 //
 // Zonas de la grilla (igual en todos los sketches)
 // ------------------------------------------------
-//   filas 1-3 → PADS     (GP.midi.buttons)  cada pad: 'toggle' · 'piano' · 2 a 4 estados
+//   filas 1-4 → PADS     (GP.midi.buttons)  cada pad: 'toggle' · 'piano' · 2 a 4 estados
 //                                            verde = en reposo (0) · verde parpadeo = prendido / estado 1
 //                                            amarillo parpadeo = estado 2 · rojo parpadeo = estado 3
 //                                            piano: rojo fijo mientras lo apretás
 //                                            Shift + pad de estados = estado anterior
-//   filas 4-8 → DISPARO  (GP.midi.filas)    así ves qué filas están activas en cada parte:
+//   filas 5-8 → DISPARO  (GP.midi.filas)    así ves qué filas están activas en cada parte:
 //                                            activa  = verde · la nota que suena se apaga
 //                                            muteada = apagada · la nota que suena en verde
 //                                            rojo = lo tocás vos (activa o muteada)
-//   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85, 4→86) = MUTE del canal
+//   botón derecho de cada fila de disparo (8→82, 7→83, 6→84, 5→85) = MUTE del canal (86 sin uso)
 //     apagado = no llegó nada (o la fila no tiene canal) · prendido = recibiendo · parpadea = muteado
 //   87 / 88 = estado anterior / siguiente (GP_estados)
 //   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
@@ -46,12 +48,15 @@
 //   89 = grabador (GP_tools)
 //   98 (Shift, sin LED) = ocultar / mostrar todo: código, barras del mic y paneles
 //
+// Sin Akai: SMC-Mixer + JP-Mini (ver "Otras consolas" más abajo y el manual).
+// Lo que tocás en ellas entra como si fuera el Akai: las canciones no cambian.
+//
 // ============================================================
 
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.10'
+  const VERSION = 'v1.11'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -107,7 +112,18 @@
     canal: 0,                   // canal del Akai (0 = canal 1)
     tanda: 32,                  // máx. LEDs por envío
     pausaTanda: 4,              // ms entre tandas
+    // otras consolas que se traducen al Akai (ver "Otras consolas")
+    consolas: {
+      smc: /smc/i,                                   // M-VAVE SMC-Mixer (USB, o su puerto de loopMIDI)
+      jp: /jp-?mini/i,                               // JAMJUM JP-Mini, preset 1 (USB o el puerto jpmini)
+      ignorar: /midiin2|luces/i,                     // la SMC por USB llega dos veces · puertos de luces
+      smcLuces: /^smc-mixer$|^midiout2 \(smc-mixer\)$|smc.*luces/i,   // a dónde van las luces de la SMC
+      pasosVersion: 3,                               // clicks de perilla para pasar de versión
+      pasoFundido: 4,                                // cuánto mueve cada click de la perilla 8 (de 127)
+    },
   }
+  // estado de las otras consolas (se llena al conectar)
+  const consolas = { smcLuces: [], smcEnviado: {}, perillas: {}, vistas: new Set() }
 
   // Valores de color del APC mini (mk1) para la grilla 8x8:
   const COLOR = {
@@ -194,20 +210,22 @@
 
   const enviar = () => {
     envioProgramado = false
-    if (!state.output) { pendientes.clear(); return }
+    if (!state.output && !consolas.smcLuces.length) { pendientes.clear(); return }
     let mandados = 0
     for (const n of pendientes) {
       if (mandados >= cfg.tanda) break        // el resto va en la próxima tanda
       pendientes.delete(n)
       const v = valorFinal(n)
-      if (enviado[n] === v) continue
-      try {
-        state.output.send([0x90 | cfg.canal, n, v])
-        enviado[n] = v
-        mandados++
-      } catch (err) {
-        console.warn('[GP MIDI] no se pudo mandar LED', n, err)
+      if (state.output && enviado[n] !== v) {
+        try {
+          state.output.send([0x90 | cfg.canal, n, v])
+          enviado[n] = v
+          mandados++
+        } catch (err) {
+          console.warn('[GP MIDI] no se pudo mandar LED', n, err)
+        }
       }
+      mandados += luzSMC(n, v)
     }
     if (pendientes.size) programar(cfg.pausaTanda)
   }
@@ -228,6 +246,7 @@
   // repinta todo desde cero (al conectar el Akai, o a mano si algo quedó raro)
   const repintar = () => {
     for (const k in enviado) delete enviado[k]
+    for (const k in consolas.smcEnviado) delete consolas.smcEnviado[k]
     const notas = new Set([...NOTAS_AKAI, ...Object.keys(capaSistema), ...Object.keys(capaBoton), ...Object.keys(capaLuz)].map(Number))
     notas.forEach(marcar)
   }
@@ -265,9 +284,9 @@
   // ============================================================
   // Filas de disparo (5-8) y mute por canal
   // ============================================================
-  const FILAS_DISPARO = [4, 5, 6, 7, 8]
+  const FILAS_DISPARO = [5, 6, 7, 8]   // la fila 4 es de pads (GP.midi.buttons), como la 1-3
   const notaDe = (fila, col) => (fila - 1) * 8 + col          // fila 1..8, col 0..7
-  const botonMute = fila => 90 - fila                          // 8→82 ... 4→86
+  const botonMute = fila => 90 - fila                          // 8→82 ... 5→85
   // activa: verde y la nota que suena se apaga · muteada: al revés · a mano: rojo
   const LED_DISPARO = {
     activa: { reposo: COLOR.verde, suena: COLOR.apagado },
@@ -339,6 +358,7 @@
 
   // ¿este mensaje es de un canal asignado a una fila? → devuelve la fila
   const filaDelCanal = (nombre, canal) => {
+    if (consolaDe(nombre)) return null   // SMC / JP-Mini son consolas, no instrumentos
     for (const fila of FILAS_DISPARO) {
       const f = filas[fila]
       if (!f || !f.cfg || f.cfg.canal == null) continue
@@ -521,7 +541,7 @@
     if (st < 0xf0 && cfg.akai.test(nombre) && canal === cfg.canal) {
       // fader
       if (tipo === 0xb0 && d1 >= 48 && d1 <= 56) {
-        const limpio = limpiarFader(CC_TO_FADER[d1], d2)
+        const limpio = esVirtual(nombre) ? d2 : limpiarFader(CC_TO_FADER[d1], d2)   // la zona muerta es del Akai
         state.faderValues[d1] = limpio
         saveFader(d1, limpio)
         if (d1 === FADER_CC.FMASTER) { fundido.movido = true; aplicarFundido() }
@@ -604,6 +624,150 @@
     }
   }
 
+  // ============================================================
+  // Otras consolas: SMC-Mixer + JP-Mini → Akai
+  // Lo que se toca en ellas entra a procesar() como si fuera el Akai
+  // (nombre "APC virtual (…)"): pads, mutes, faders, Shift, versiones,
+  // fundido. Grabador y estados se llaman directo. Las canciones no se enteran.
+  //
+  //   SMC-Mixer                         Akai
+  //   faders 1-8 (pitch bend)        →  F1-F8
+  //   perillas 1-7                   →  versión de F1-F7 (girar = anterior / siguiente)
+  //   perilla 8                      →  FMASTER (fundido a negro)
+  //   botones fila 1 (24-31, arriba) →  fila 4 (24-31)
+  //   botones fila 2 (0-7)           →  fila 3 (16-23)
+  //   botones fila 3 (8-15)          →  fila 2 (8-15)
+  //   botones fila 4 (16-23, abajo)  →  fila 1 (0-7)
+  //   ▶ 94 → grabador (89) · ⏸ 93 → pausar estados · ■ 95 → Shift (98)
+  //   ⏮ 91 / ⏭ 92 → estado anterior / siguiente (87 / 88)
+  //   ↑ 96 · ↓ 97 · ← 98 · → 99     →  mute filas 8 · 7 · 6 · 5 (82-85)
+  //   ⏪ 46 / ⏩ 47                    →  libres (llegan al sketch tal cual)
+  //
+  //   JP-Mini (preset 1, 4x4, pads de abajo a arriba)
+  //   bank 1 (36-51): pads 1-8 → fila 5 · pads 9-16 → fila 6
+  //   bank 2 (52-67): pads 1-8 → fila 7 · pads 9-16 → fila 8
+  //   bank 3 (68-83) y ▶ ■ ● (CC 22-24) → libres (llegan al sketch tal cual)
+  // ============================================================
+  const VIRTUAL = 'APC virtual'
+  const esVirtual = nombre => typeof nombre === 'string' && nombre.startsWith(VIRTUAL)
+  const consolaDe = (nombre) => {
+    const c = cfg.consolas
+    if (!c || c.ignorar.test(nombre)) return c && (c.smc.test(nombre) || c.jp.test(nombre)) ? 'ignorar' : null
+    if (c.smc.test(nombre)) return 'smc'
+    if (c.jp.test(nombre)) return 'jp'
+    return null
+  }
+  const akaiVirtual = (de, bytes) => procesar(`${VIRTUAL} (${de})`, bytes)
+  const notaAkai = (de, nota, vel, on) => akaiVirtual(de, [(on ? 0x90 : 0x80) | cfg.canal, nota, on ? (vel || 127) : 0])
+
+  // botones de la SMC ↔ notas del Akai (ida y vuelta, para las luces)
+  const SMC_A_AKAI = {}
+  for (let i = 0; i < 8; i++) {
+    SMC_A_AKAI[24 + i] = 24 + i   // fila 1 de la SMC → fila 4
+    SMC_A_AKAI[i] = 16 + i        // fila 2 → fila 3
+    SMC_A_AKAI[8 + i] = 8 + i     // fila 3 → fila 2
+    SMC_A_AKAI[16 + i] = i        // fila 4 → fila 1
+  }
+  Object.assign(SMC_A_AKAI, { 95: 98, 96: 82, 97: 83, 98: 84, 99: 85 })
+  const AKAI_A_SMC = {}
+  for (const [smc, akai] of Object.entries(SMC_A_AKAI)) if (akai !== 98) AKAI_A_SMC[akai] = Number(smc)
+  AKAI_A_SMC[89] = 94   // grabador → ▶
+
+  const traducirSMC = (nombre, data) => {
+    const [st, d1, d2] = data
+    const tipo = st & 0xf0
+    const ch = st & 0x0f
+    const esOn = tipo === 0x90 && d2 > 0
+    const esNota = tipo === 0x90 || tipo === 0x80
+    // fader: pitch bend del canal 1-8 (14 bits) → CC 48-55 del Akai
+    if (tipo === 0xe0 && ch < 8) {
+      const v = Math.round((((d2 << 7) | d1) / 16383) * 127)
+      akaiVirtual('SMC', [0xb0 | cfg.canal, 48 + ch, v])
+      return
+    }
+    // perillas: CC 16-23, giro relativo (1..63 = derecha · 65..127 = izquierda)
+    if (tipo === 0xb0 && d1 >= 16 && d1 <= 23) {
+      const i = d1 - 16
+      const dir = d2 > 0 && d2 < 64 ? d2 : d2 > 64 ? -(d2 - 64) : 0
+      if (!dir) return
+      if (i === 7) {   // perilla 8 = FMASTER
+        const cc = FADER_CC.FMASTER
+        const desde = fundido.movido ? state.faderValues[cc] : 127   // sin tocar, arranca a pleno
+        const v = Math.max(0, Math.min(127, Math.round(desde + dir * cfg.consolas.pasoFundido)))
+        akaiVirtual('SMC', [0xb0 | cfg.canal, cc, v])
+        return
+      }
+      const f = `F${i + 1}`
+      const n = versiones.cuantas[f]
+      if (!n) return
+      consolas.perillas[i] = (consolas.perillas[i] || 0) + dir
+      const pasos = cfg.consolas.pasosVersion
+      if (Math.abs(consolas.perillas[i]) < pasos) return
+      const paso = Math.sign(consolas.perillas[i])
+      consolas.perillas[i] = 0
+      const v = Math.max(0, Math.min(n - 1, versionDe(f) + paso))   // sin dar la vuelta
+      ponerVersion(f, v, 'akai')
+      return
+    }
+    if (esNota && SMC_A_AKAI[d1] != null) { notaAkai('SMC', SMC_A_AKAI[d1], d2, esOn); return }
+    if (esNota) {
+      if (!esOn) return
+      if (d1 === 94) { if (GP.tools && GP.tools.grabadorCiclo) GP.tools.grabadorCiclo(); return }
+      if (d1 === 93) { if (GP.estados && GP.estados.suspender) GP.estados.suspender(); marcar(87); return }
+      if (d1 === 91) { if (GP.estados && GP.estados.anterior) GP.estados.anterior('SMC ⏮'); return }
+      if (d1 === 92) { if (GP.estados && GP.estados.siguiente) GP.estados.siguiente('SMC ⏭'); return }
+    }
+    entregar(nombre, data, { muteado: false })   // ⏪ ⏩ y lo demás: al sketch tal cual
+  }
+
+  const traducirJP = (nombre, data) => {
+    const [st, d1, d2] = data
+    const tipo = st & 0xf0
+    if ((tipo === 0x90 || tipo === 0x80) && d1 >= 36 && d1 <= 67) {
+      const p = d1 - 36
+      const bank = p >> 4            // 0 = bank 1 · 1 = bank 2
+      const pad = p & 15             // 0..15, de abajo a arriba
+      const fila = (bank ? 7 : 5) + (pad >= 8 ? 1 : 0)
+      notaAkai('JP-Mini', (fila - 1) * 8 + (pad % 8), d2, tipo === 0x90 && d2 > 0)
+      return
+    }
+    entregar(nombre, data, { muteado: false })   // bank 3 y ▶ ■ ●: al sketch tal cual
+  }
+
+  // todo lo que entra por el bus pasa por acá
+  const recibir = (nombre, data) => {
+    const consola = consolaDe(nombre)
+    if (!consola) { procesar(nombre, data); return }
+    if (consola === 'ignorar') return
+    if (!consolas.vistas.has(nombre)) {
+      consolas.vistas.add(nombre)
+      console.info(`[GP MIDI] ${nombre} → se traduce al Akai (${consola === 'smc' ? 'SMC-Mixer' : 'JP-Mini'})`)
+    }
+    if (data[0] >= 0xf0) return
+    if (consola === 'smc') traducirSMC(nombre, data)
+    else traducirJP(nombre, data)
+  }
+
+  // luces de la SMC: un solo color, prender / apagar. Devuelve 1 si mandó algo.
+  const luzSMC = (n, v) => {
+    if (!consolas.smcLuces.length) return 0
+    let nota = AKAI_A_SMC[n]
+    let on
+    if (n === 87) {   // pausa (93) = estados suspendidos
+      nota = 93
+      on = !!(GP.estados && GP.estados.suspendido)
+    } else if (nota == null) return 0
+    else if (n <= 31) on = v >= 2                 // pads: verde fijo = reposo → apagado
+    else if (n >= 82 && n <= 85) on = v === 1     // mute: prendido = recibiendo
+    else if (n === 89) on = v === 2               // grabador: prendido mientras graba
+    else on = !!v
+    const val = on ? 127 : 0
+    if (consolas.smcEnviado[nota] === val) return 0
+    consolas.smcEnviado[nota] = val
+    for (const o of consolas.smcLuces) { try { o.send([0x90, nota, val]) } catch (err) { console.warn('[GP MIDI] luz SMC', nota, err) } }
+    return 1
+  }
+
   const alCambiarPuertos = (acc) => {
     let elegida = null
     acc.outputs.forEach(o => {
@@ -614,10 +778,14 @@
     const cambio = elegida !== state.output
     state.output = elegida
     state.outputName = elegida ? elegida.name : null
-    if (cambio && elegida) {
-      console.info('[GP MIDI] LEDs →', elegida.name)
-      repintar()
-    }
+    // luces de la SMC (sólo prender / apagar)
+    const smc = []
+    acc.outputs.forEach(o => { if (o.state === 'connected' && cfg.consolas.smcLuces.test(o.name)) smc.push(o) })
+    const cambioSmc = smc.map(o => o.name).join('|') !== consolas.smcLuces.map(o => o.name).join('|')
+    consolas.smcLuces = smc
+    if (cambioSmc && smc.length) console.info('[GP MIDI] luces SMC →', smc.map(o => o.name).join(' + '))
+    if (cambio && elegida) console.info('[GP MIDI] LEDs →', elegida.name)
+    if ((cambio && elegida) || (cambioSmc && smc.length)) repintar()
   }
 
   // ============================================================
@@ -652,7 +820,7 @@
     state.outputNameExacto = outputName || null
     state.faderHandlers = {}   // cada evaluación registra sus onFader de nuevo: no se acumulan
     aplicarFundido()
-    bus.escuchar('midi', procesar)
+    bus.escuchar('midi', recibir)   // Akai, Korg, etc. + SMC / JP-Mini traducidas
     bus.puertos('midi', alCambiarPuertos)
     try {
       const acc = await bus.conectar()
@@ -670,13 +838,13 @@
   // Llamala en cada evaluación: reemplaza a la anterior, no se acumula.
   M.alMensaje = (fn) => { alMensaje = fn; return M }
 
-  // filas de disparo 4-8. Cada fila: { puerto, canal (1-16), notas | rango | pulso }
+  // filas de disparo 5-8. Cada fila: { puerto, canal (1-16), notas | rango | pulso }
   //   puerto: regex del aparato (ej /korg/i, /keystep/i). Sin puerto = cualquier aparato menos el Akai.
   //   null = fila apagada · {} sin canal = sólo disparo a mano
   // El mute y el "ya llegó" se conservan al reevaluar.
   M.filas = function (config = {}) {
     for (const k of Object.keys(config)) {
-      if (!FILAS_DISPARO.includes(Number(k))) console.warn(`[GP MIDI] fila ${k}: las filas de disparo son de la 4 a la 8 (la 1-3 son toggles)`)
+      if (!FILAS_DISPARO.includes(Number(k)) && config[k]) console.warn(`[GP MIDI] fila ${k}: las filas de disparo son de la 5 a la 8 (la 1-4 son de pads: GP.midi.buttons)`)
     }
     const canalEstados = GP.estados && GP.estados.config ? GP.estados.config.canal : 16
     for (const fila of FILAS_DISPARO) {
@@ -717,8 +885,8 @@
       modos[n] = m
     }
     const notas = Object.keys(modos).map(Number)
-    const enDisparo = notas.filter(n => n >= 24 && n <= 63 && filas[Math.floor(n / 8) + 1] && filas[Math.floor(n / 8) + 1].cfg)
-    if (enDisparo.length) console.warn(`[GP MIDI] ${enDisparo.map(n => `N${Math.floor(n / 8) + 1}${n % 8 + 1}`).join(', ')}: esa fila es de disparo; los toggles van en las filas 1-3`)
+    const enDisparo = notas.filter(n => n >= 32 && n <= 63 && filas[Math.floor(n / 8) + 1] && filas[Math.floor(n / 8) + 1].cfg)
+    if (enDisparo.length) console.warn(`[GP MIDI] ${enDisparo.map(n => `N${Math.floor(n / 8) + 1}${n % 8 + 1}`).join(', ')}: esa fila es de disparo; los pads van en las filas 1-4`)
     // los toggles que siguen activos conservan su estado al reevaluar (como los mutes)
     const antes = state.buttonState || {}
     const modosAntes = state.modoBoton || {}

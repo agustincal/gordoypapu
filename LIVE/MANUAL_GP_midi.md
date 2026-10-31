@@ -1,7 +1,8 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-23 · GP_midi v1.10 · GP_tools v1.14 · GP_estados v1.4 (ver su manual)
+Actualizado: 2026-10-30 · GP_midi v1.11 · GP_tools v1.15 · GP_estados v1.4 (ver su manual)
+Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
 
@@ -34,10 +35,10 @@ await GP.midi.start()
 
 | Zona | Notas | Uso | LED |
 |---|---|---|---|
-| Filas 1–3 de la grilla | 0–23 | **pads de la canción**: toggle, piano o de 2 a 4 estados (`GP.midi.buttons`, ver 5) | verde = reposo · verde parpadeo = prendido / estado 1 · amarillo parpadeo = estado 2 · rojo parpadeo = estado 3 · piano: rojo fijo mientras lo apretás · apagado = sin uso |
-| Filas 4–8 de la grilla | 24–63 | **disparo**: sólo muestran lo que entra, una fila por canal (`GP.midi.filas`) | **activa** = verde, y la nota que suena se apaga · **muteada** = apagada, y la nota que suena se prende en verde (ves que hay notas, pero no dispara) · **rojo** = lo tocás vos |
+| Filas 1–4 de la grilla | 0–31 | **pads de la canción**: toggle, piano o de 2 a 4 estados (`GP.midi.buttons`, ver 5) | verde = reposo · verde parpadeo = prendido / estado 1 · amarillo parpadeo = estado 2 · rojo parpadeo = estado 3 · piano: rojo fijo mientras lo apretás · apagado = sin uso |
+| Filas 5–8 de la grilla | 32–63 | **disparo**: sólo muestran lo que entra, una fila por canal (`GP.midi.filas`) | **activa** = verde, y la nota que suena se apaga · **muteada** = apagada, y la nota que suena se prende en verde (ves que hay notas, pero no dispara) · **rojo** = lo tocás vos |
 | Botones redondos de abajo (arriba de cada fader) | 64–71 | **versión** del efecto de F1..F8 (`GP.midi.versiones`) | apagado = v1 · prendido = v2 · parpadea = v3 |
-| Columna derecha 82–86 | 82 (fila 8) … 86 (fila 4) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
+| Columna derecha 82–85 (86 sin uso) | 82 (fila 8) … 85 (fila 5) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
 | 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
 | 89 | | **grabador** (GP_tools): toque = grabar / detener+guardar | prendido = listo · parpadea = grabando · apagado = guardando |
 | 98 (Shift) | | **ocultar / mostrar todo** al **soltarlo** (código, barras del mic y paneles), en cualquier canción y también en el show, sin GP_tools. **Shift + pad de estados** = estado anterior (y ahí no oculta) — **no tiene LED** | |
@@ -130,7 +131,7 @@ El botón en vivo cambia la versión hasta el próximo cambio de estado (mismo c
 
 ---
 
-## 5. Pads de las filas 1–3: toggle, piano o estados
+## 5. Pads de las filas 1–4: toggle, piano o estados
 
 ```js
 GP.midi.buttons(['N11', 'N12', 'N21'])     // como siempre: todos toggle
@@ -157,11 +158,12 @@ GP.midi.setButton('N13', 2)            // fijar desde código (toggle: true / fa
 - **Shift + pad de estados** = vuelve al estado anterior. El Shift solo (sin tocar pads) oculta todo al soltarlo.
 - Al reevaluar, cada pad que sigue con el mismo modo conserva cómo lo dejaste. Si le cambiás el modo, arranca en 0.
 - En GP_estados un pad de estados se anota con su número (`brillo: 'N13'` → `brillo: 2`). Los piano no van en los estados.
-- Si ponés un pad en una fila que es de disparo (4–8), la consola avisa: gana el disparo.
+- La fila 4 es de pads desde la v1.11 (antes era de disparo): por ejemplo columnas 1–4 efectos (toggle / posiciones) y 5–8 golpes a mano (piano).
+- Si ponés un pad en una fila que es de disparo (5–8), la consola avisa: gana el disparo.
 
 ---
 
-## 6. Filas de disparo (4–8) y mute por canal
+## 6. Filas de disparo (5–8) y mute por canal
 
 Cada fila representa **un aparato + un canal**. Tocando los pads, disparás a mano (rojo). El botón de la derecha mutea el canal: la fila deja de disparar lo que viene del aparato, y queda sólo tu mano.
 
@@ -302,3 +304,54 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 - una **sugerencia de `GP.midi.filas`** (los canales más tocados arriba; `pulso` si tiene 1–2 notas, `notas` si tiene hasta 8, `rango` si tiene más).
 
 Los atajos leen la tecla física: con AltGr (teclado español) no se confunden con €, @, etc.
+
+---
+
+## 10. Sin Akai: SMC-Mixer + JP-Mini
+
+Cuando no está el Akai, GP_midi traduce lo que se toca en la **M-VAVE SMC-Mixer** y en la **JAMJUM JP-Mini** como si fuera el Akai. Las canciones no cambian (`F1`, `N11`, `V1`, filas, mutes, estados y grabador funcionan igual). Si el Akai también está conectado, funcionan los tres a la vez.
+
+### Conexión
+
+- **SMC por USB:** no hace falta nada. Windows la muestra dos veces (`SMC-Mixer` y `MIDIIN2 (SMC-Mixer)`): GP_midi escucha una sola.
+- **SMC o JP-Mini por Bluetooth:** con BLE-MIDI Connect + loopMIDI. En los ajustes del aparato: **Enviar** = un puerto con su nombre (`smc` / `jpmini`). Nunca el mismo puerto en Enviar y Recibir (se arma un loop y loopMIDI lo silencia).
+  - Luces de la SMC por Bluetooth: otro puerto `smc_luces` en **Recibir**.
+- **JP-Mini:** siempre en el **preset 1** (Shift + PAD 1). Otro preset cambia las notas.
+- Al crear un puerto nuevo, reiniciar Chrome (`chrome://restart`).
+
+### SMC-Mixer
+
+| Control | Equivale en el Akai |
+|---|---|
+| Faders 1–8 | F1–F8 (sin la zona muerta del F7 del Akai) |
+| Perillas 1–7 (girar) | versión de F1–F7: derecha = siguiente · izquierda = anterior (3 clicks por paso, no da la vuelta) |
+| Perilla 8 | FMASTER, fundido a negro (izquierda = más negro) |
+| Botones, fila 1 (arriba) | fila 4 |
+| Fila 2 | fila 3 |
+| Fila 3 | fila 2 |
+| Fila 4 (abajo) | fila 1 |
+| ▶ play (94) | grabador (89) |
+| ⏸ pausa (93) | pausar / reanudar los estados |
+| ■ stop (95) | Shift (98): solo = ocultar todo al soltar · mantenido + pad de posiciones = posición anterior |
+| ⏮ / ⏭ (91 / 92) | estado anterior / siguiente (87 / 88) |
+| ⏪ / ⏩ (46 / 47) | libres (llegan al sketch con `GP.midi.alMensaje`) |
+| ↑ ↓ ← → (96–99) | mute de las filas 8 · 7 · 6 · 5 |
+
+Luces (un solo color, prender / apagar): pads activos (toggle prendido, posición 1–3, piano apretado) · mute prendido = recibiendo · ▶ prendido mientras graba · ⏸ prendido con los estados en pausa.
+
+### JP-Mini (preset 1)
+
+Los pads van de izquierda a derecha y de abajo hacia arriba.
+
+| Bank (color) | PAD 1–8 (mitad de abajo) | PAD 9–16 (mitad de arriba) |
+|---|---|---|
+| 1 · naranja (notas 36–51) | fila 5 | fila 6 |
+| 2 · verde (52–67) | fila 7 | fila 8 |
+| 3 · celeste (68–83) | libre | libre |
+
+- Sus luces no se pueden manejar desde Hydra: lo que suena y los mutes no se ven en la JP-Mini. Con KuSuite se pueden pintar los pads con colores fijos (por ejemplo un color por fila).
+- ▶ ■ ● de la JP-Mini (CC 22–24) y el bank 3: libres, llegan al sketch con `GP.midi.alMensaje`.
+
+### Ajustes
+
+`GP.midi.config.consolas`: nombres de los puertos (`smc`, `jp`, `smcLuces`), `pasosVersion` (clicks por versión, 3) y `pasoFundido` (cuánto mueve cada click de la perilla 8, 4 de 127).
