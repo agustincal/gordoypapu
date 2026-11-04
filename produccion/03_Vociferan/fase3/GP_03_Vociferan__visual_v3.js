@@ -20,6 +20,10 @@
 //              formas de James, más gruesos)
 //              (v3.6: micMute apaga la vibración; byn = blanco y negro puro (N13);
 //              franja de las formas más angosta y marcada)
+// Actualizado: 04/11/2026 (v3.7: la escena se dibuja sola en o1 (C.bufferEscena) y los
+//              círculos + la fusión la leen de ahí: al cambiar de escena sólo se
+//              recompila la escena, el shader grande de los círculos queda armado.
+//              El golpe largo al cambiar se reemplaza por un telón corto (C.telon))
 // ============================================================
 //
 // Escenas (C.escena):
@@ -37,7 +41,9 @@
 // Los círculos son un campo que pasa por un umbral: bordes duros, y dos círculos
 // cercanos se funden como gotas. C.circulos (F6) es su tamaño en las escenas
 // nuevas: 0 = no se ven, 0.5 = normal, 1 = el doble. Los golpes van siempre encima.
-// Al cambiar de escena se dispara un golpe central que tapa el corte.
+// Al cambiar de escena un telón corto del color de la familia tapa el corte
+// (C.telon; 0 = sin telón). El golpe largo de antes queda en C.golpeAlCambiar.
+// Buffers: o1 = la escena sola · o2 = imagen final (antes del blanco y negro) · o0 = salida.
 //
 // Música → escenas (cada estado elige):
 //   C.cambio   voz que hace pasar a la forma siguiente: 'bombo' | 'caja' | 'melodia' | 'ninguna'
@@ -59,7 +65,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v3.6'
+  const VERSION = 'v3.7'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -120,6 +126,7 @@
     byn: false,
     umbralByn: 0.04,        // desde qué luz cuenta como blanco (más alto = sólo lo más claro)
     bufferFinal: 'o2',      // buffer libre donde se dibuja la imagen antes del blanco y negro
+    bufferEscena: 'o1',     // buffer donde se dibuja la escena sola (al cambiar, sólo se recompila esto)
     vozAtaque: 0.3, vozCaida: 0.05,
     calibrarSeg: 3, calibrarMargen: 1.3,
     tamano: 0.5,            // F1 · círculos y formas · 0 = nada · 0.5 = normal · 1 = enormes
@@ -138,7 +145,11 @@
     latido: 0.5,            // F5 · cuánto laten con el golpe
     circulos: 0.5,          // F6 · tamaño de los círculos del canal 1 en las escenas nuevas (0.5 = normal)
     quieto: false,          // N12 · congela las formas
-    golpeAlCambiar: true,   // golpe central al cambiar de escena (tapa el corte)
+    golpeAlCambiar: false,  // el golpe central largo de antes (~2 s) al cambiar de escena
+    // telón corto al cambiar de escena: entra, se cambia la escena tapada, sale
+    telon: true,            // false = cambio seco, sin telón
+    telonEntrada: 0.05,     // segundos en tapar
+    telonSalida: 0.15,      // segundos en destapar
     // fusión círculos + escena
     fusion: 'xor',          // 'xor' | 'union' | 'encima'
     suavidad: 0.004,        // borde del umbral (0.004 = duro · 0.05 = algo blando)
@@ -630,7 +641,7 @@
   }
 
   let salidaOut = null
-  let armada = null, armadaFusion = null
+  let armada = null, armadaFusion = null, armadaConBuffer = false
   let pendiente = null, tPendiente = 0
   // ---- familias de color ----
   // índice de familia = arranque (C.familia) + cambios de escena + zona de F8
@@ -711,22 +722,53 @@
     }
     return img
   }
-  const escena = () => ARMAR[C.escena]()
+  // ---- la escena sola, en su buffer (C.bufferEscena) ----
+  // Es un shader chico: al cambiar de escena se recompila sólo esto.
+  // En la escena 'circulos' el buffer queda negro (no recorta nada).
+  const bufEscena = () => {
+    const b = window[C.bufferEscena]
+    return (b && b !== salidaOut && b !== window[C.bufferFinal]) ? b : null
+  }
+  const armarEscena = () => {
+    const b = bufEscena()
+    if (b) (ARMAR[C.escena] ? ARMAR[C.escena]() : solid(0, 0, 0)).out(b)
+    armada = C.escena
+  }
+  // la escena tal como la leen los círculos: del buffer si hay, si no armada en línea
+  const escenaCruda = () => {
+    const b = bufEscena()
+    if (b) return src(b)
+    return ARMAR[C.escena] ? ARMAR[C.escena]() : solid(0, 0, 0)
+  }
+  // vibración, empuje de los círculos y deformación de la voz: se aplican al LEER
+  const escena = () => escenaCruda()
     .scrollX(() => J.x).scrollY(() => J.y)
     .scale(() => J.r)
     .modulate(empujeCirculos(), () => -C.desplazar)
     .modulate(temblor(), vozBorde)
     .thresh(0.5, () => C.suavidad)
 
-  const armar = () => {
+  // ---- telón corto al cambiar de escena ----
+  const T = { estado: 'nada', t0: -99, tSale: null, rgb: [0, 0, 0] }
+  const telon = () => {
+    if (T.estado === 'entra') return C.telonEntrada > 0 ? clamp01((t() - T.t0) / C.telonEntrada) : 1
+    if (T.estado === 'sale') {
+      if (T.tSale === null) return 1
+      return C.telonSalida > 0 ? 1 - clamp01((t() - T.tSale) / C.telonSalida) : 0
+    }
+    return 0
+  }
+
+  const armarPrincipal = () => {
     if (!salidaOut) return
     let img
-    const conEscena = !!ARMAR[C.escena]
+    const conBuffer = !!bufEscena()
+    const conEscena = conBuffer || !!ARMAR[C.escena]
     if (C.fusion === 'encima') {
       // como la v3.0
       if (conEscena) {
         const luz = () => C.luzFormas * J.l
-        img = ARMAR[C.escena]()
+        img = escenaCruda()
           .scrollX(() => J.x).scrollY(() => J.y)
           .scale(() => J.r)
           .color(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
@@ -751,6 +793,8 @@
         .mult(forma)
       img = golpes(img)
     }
+    // telón del cambio de escena (encima de todo, debajo del strobe)
+    img = img.blend(solid(() => T.rgb[0], () => T.rgb[1], () => T.rgb[2]), telon)
     // la imagen se dibuja en un buffer y se lee de ahí: el blanco y negro (N13)
     // es instantáneo y no obliga a recalcular la escena
     const fin = window[C.bufferFinal]
@@ -766,8 +810,20 @@
         .add(solid(() => C.flashColor[0], () => C.flashColor[1], () => C.flashColor[2]), flash)
         .out(salidaOut)
     }
-    armada = C.escena
     armadaFusion = C.fusion
+    armadaConBuffer = conBuffer
+  }
+  // todo: la escena en su buffer + la imagen principal
+  const armar = () => {
+    if (!salidaOut) return
+    armarEscena()
+    armarPrincipal()
+  }
+  // cambio de escena: si la escena tiene su buffer, se recompila sólo ella;
+  // si no (sin buffer libre), se rearma todo como antes
+  const cambiarEscena = () => {
+    if (bufEscena() && armadaConBuffer) armarEscena()
+    else armar()
   }
 
   V.salida = (out) => { salidaOut = out; armar() }
@@ -797,18 +853,35 @@
     for (let k = S.capas.length - 1; k >= 0; k--) {
       if ((t() - S.capas[k].t0) / d >= 1) { S.capas.splice(k, 1); S.fondoIris ^= 1 }
     }
-    // cambio de escena: primero nace un golpe central y, cuando ya tapa la
-    // pantalla, se re-arma la escena (así no se ve el salto de Hydra al recompilar)
+    // cambio de escena: primero se tapa (telón corto o el golpe largo de antes)
+    // y, ya tapado, se recompila la escena (así no se ve el salto de Hydra)
     if (C.escena !== armada && C.escena !== pendiente) {
-      if (armada !== null && C.golpeAlCambiar) {
-        pendiente = C.escena
-        tPendiente = t() + C.golpeDur * 0.7
+      if (armada !== null) {
         iPaleta++
-        V.notaOn(2999, 110, { tipo: 'golpe', hue: hueFormas() })
-        setTimeout(() => V.notaOff(2999), 150)
-      } else { if (armada !== null) iPaleta++; armar() }
+        if (C.golpeAlCambiar) {
+          pendiente = C.escena
+          tPendiente = t() + C.golpeDur * 0.7
+          V.notaOn(2999, 110, { tipo: 'golpe', hue: hueFormas() })
+          setTimeout(() => V.notaOff(2999), 150)
+        } else if (C.telon) {
+          pendiente = C.escena
+          tPendiente = t() + Math.max(0, C.telonEntrada)
+          T.rgb = colorFormas()
+          T.estado = 'entra'; T.t0 = t(); T.tSale = null
+        } else cambiarEscena()
+      } else armar()
     }
-    if (pendiente !== null && t() >= tPendiente) { pendiente = null; armar() }
+    if (pendiente !== null && t() >= tPendiente) {
+      pendiente = null
+      cambiarEscena()
+      if (T.estado === 'entra') { T.estado = 'sale'; T.tSale = null }
+      return   // la recompilación congela este cuadro: la salida del telón arranca en el próximo
+    }
+    // el telón empieza a salir en el primer cuadro después de recompilar
+    if (T.estado === 'sale') {
+      if (T.tSale === null) T.tSale = t()
+      else if (t() - T.tSale >= C.telonSalida) T.estado = 'nada'
+    }
     // cambiar C.fusion en vivo re-arma la imagen
     if (pendiente === null && armada !== null && C.fusion !== armadaFusion) armar()
   }
@@ -845,6 +918,7 @@
     }
     armada = null
     pendiente = null
+    T.estado = 'nada'
     return V
   }
 

@@ -14,6 +14,8 @@
 //              v3.5: degradado de una franja en círculos y formas; anillos sólo en
 //              las formas de James (los círculos vuelven a su hueco original))
 //              v3.6: vibración del mic muteada (micMute); N13 = blanco y negro puro
+//              v3.7 (04/11/2026): la escena va sola en o1 → al cambiar de escena sólo
+//              se recompila ella; telón corto (telon) en vez del golpe largo
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -117,7 +119,9 @@ V.init({
   quieto: false,                     // N12 · congela las formas
   byn: false,                        // N13 · blanco y negro puro, sin grises
   umbralByn: 0.04,                   // desde qué luz cuenta como blanco
-  golpeAlCambiar: true,              // un golpe central tapa cada cambio de escena
+  telon: true,                       // telón corto del color de la familia en cada cambio de escena (false = seco)
+  telonEntrada: 0.05, telonSalida: 0.15,   // segundos en tapar · en destapar
+  golpeAlCambiar: false,             // true = el golpe central largo de antes (~2 s) en vez del telón
   derivaLente: 0.015,
   formaGrilla: 'morfo',               // grilla de lente: 'morfo' (cuadrado → triángulo → círculo) | 'cuadrado' | 'circulo'
   velGrilla: 0.25, tamGrilla: 0.42,
