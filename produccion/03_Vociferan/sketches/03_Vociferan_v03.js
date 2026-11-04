@@ -17,6 +17,8 @@
 //              v3.7 (04/11/2026): la escena va sola en o1 → al cambiar de escena sólo
 //              se recompila ella; telón corto (telon) en vez del golpe largo
 //              v3.8: cambio seco por defecto (telon: false); sale de fase3/ a sketches/
+//              v3.9 (04/11/2026): bordes duros sin pixelar (bordePx, suavidadEscena);
+//              la franja no llega al negro (pisoFranja) y puede ir en escalones (pasosFranja)
 //              Base: v02 (escenas de James, 13 estados del análisis del audio).
 // ============================================================
 //
@@ -93,6 +95,8 @@ V.init({
   degradado: 0.6,                    // franja de degradado en los círculos, siempre (0 = color plano)
   degradadoFormas: 0.75,             // lo mismo en las formas de las escenas
   anchoFranja: 1.6,                  // franjas a lo ancho de la pantalla en las formas (más = más angosta)
+  pisoFranja: 0.25,                  // la franja nunca baja de esta luz (0 = llega al negro y parece borde blando)
+  pasosFranja: 0,                    // 0 = degradado continuo · 3 = franja en 3 escalones de color
   mostrarMic: true,
   tamano: 0.35,                      // F1 · círculos y formas (0.5 = normal)
   direccion: 0,                      // F2 · de dónde entran los círculos
@@ -102,7 +106,9 @@ V.init({
 
   // ---- fusión: cómo se juntan los círculos y las escenas ----
   fusion: 'xor',                     // 'xor' se recortan · 'union' se funden · 'encima' como la v02
-  suavidad: 0.004,                   // borde del umbral (0.004 = duro)
+  suavidad: 0.004,                   // borde del umbral en los modos 'encima' y 'union'
+  bordePx: 1,                        // borde de círculos y golpes en píxeles (0.5 = más seco · 3 = blando)
+  suavidadEscena: 0.3,               // borde de las formas (0.3 ≈ 1 píxel · 0.01 = serruchado)
   desplazar: 0.25,                   // cuánto empujan los círculos a la escena
   contorno: 1,                       // V1 · anillos en las formas de James: 0 = ninguno · 1 = algunos · 2 = muchos
   probAnillos: [0, 0.35, 0.7],       // qué parte de las formas nace como anillo
