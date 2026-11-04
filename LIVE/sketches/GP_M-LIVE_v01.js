@@ -6,6 +6,7 @@
 //      todo lo que la anterior dejó puesto (pantalla, update, MIDI, mic, videos).
 // Creado: 04/11/2026 (v01: primera versión, para el ensayo general — ver si
 //         las 5 canciones cargan bien desde acá y si al ir y volver se ven igual)
+//         04/11/2026: recargar pasa de Ctrl+Alt+R a Ctrl+Alt+9 (la R grababa a la vez con GP_tools)
 // ============================================================
 //
 // CÓMO SE USA
@@ -15,7 +16,8 @@
 //     Ctrl+Alt+1 … 5   ir a esa canción
 //     Ctrl+Alt+→ / ←   siguiente / anterior
 //     Ctrl+Alt+0       negro (limpia y no carga nada)
-//     Ctrl+Alt+R       recargar la canción actual
+//     Ctrl+Alt+9       recargar la canción actual (la R es del grabador de GP_tools)
+//   En Mac: Control + Option (no Cmd) + la misma tecla
 //
 //   Consola:
 //     GP.master.ir(3)          ir a la canción 3
@@ -208,17 +210,17 @@ await GP.midi.start()
     if (!(e.ctrlKey && e.altKey)) return
     let accion = null
     const d = /^(Digit|Numpad)(\d)$/.exec(e.code)
-    if (d) accion = () => M.ir(Number(d[2]))
+    if (d && d[2] === '9') accion = M.recargar
+    else if (d) accion = () => M.ir(Number(d[2]))
     else if (e.code === 'ArrowRight') accion = M.siguiente
     else if (e.code === 'ArrowLeft') accion = M.anterior
-    else if (e.code === 'KeyR') accion = M.recargar
     if (!accion) return
     e.preventDefault(); e.stopPropagation()
     accion()
   }
   window.addEventListener('keydown', window._gpMasterTeclas, true)
 
-  console.info(`[GP master] ${VERSION} listo · Ctrl+Alt+1..${CANCIONES.length} · Ctrl+Alt+→ ← · Ctrl+Alt+0 negro · GP.master.informe()`)
+  console.info(`[GP master] ${VERSION} listo · Ctrl+Alt+1..${CANCIONES.length} · Ctrl+Alt+→ ← · Ctrl+Alt+0 negro · Ctrl+Alt+9 recargar · GP.master.informe()`)
 })()
 
 // primera vez: arranca en la canción inicial · al reevaluar el master: se queda donde estaba

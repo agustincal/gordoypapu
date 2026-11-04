@@ -1,0 +1,28 @@
+02 · BUSCANDO PLACER                                Akai
+
+FADERS (botón arriba del fader = versión)
+  F1 jitter        temblor · rasgado · franjas
+  F2 pixelado      pixelado · bloques · poster
+  F3 marco         marco · marco + mosaico
+  F4 tinte         tríada · tono · canales
+  F5 mala señal    banda · vhs · rueda
+  F6 zoom          aparece con zoom · el marco se abre · tele
+  F7 imán          con la voz (0 = apagado)
+  F8 feedback      túnel · giro · sandin
+
+PADS
+  N11 barrido
+  N13 jitter y mala señal siguen el ritmo
+  N18 apagar el fondo     0 · suave · normal · extremo
+  N28 recuadros negros    0 · 15 · 30 · 50 %
+  SHIFT + N18 / N28 = posición anterior
+
+DISPARO (a mano = lo mismo que el canal)
+  fila 8 · bajo (ch 1)      recuadro
+  fila 7 · bombo (ch 10)    recuadro
+  fila 6 · teclado (ch 2)   eco invertido
+  fila 5 · ch 9             gira el color
+
+MUTES   82 bajo · 83 bombo · 84 teclado · 85 ch 9    (de base: 83 · 84 · 85 muteados)
+ESTADOS 87 / 88 anterior / siguiente
+OTROS   89 grabar · FMASTER fundido · SHIFT ocultar / manual

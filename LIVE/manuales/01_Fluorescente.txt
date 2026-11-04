@@ -1,0 +1,26 @@
+01 · FLUORESCENTE                                   Akai
+
+FADERS (botón arriba del fader = versión)
+  F1 pixelado      textura · todo · tiras        (al medio normal, abajo bloques, arriba fino)
+  F2 kaleid        textura · mandala · gira
+  F3 colorama      fijo · altura del bajo · viaja con el bajo
+  F4 deformación   ola · ondas · líquido
+  F5 flash caja    flash · strobo · a negro
+  F6 pulso bombo   agranda · strobo · achica
+  F7 avance        continuo · a saltos · empuje del bombo
+  F8 dirección     ida y vuelta · choque · vertical   (0 = quieto)
+
+PADS
+  N11 rotar 90°          N15 rotar la mitad derecha     N16 atrasar la mitad (200 ms)
+  N12 voz arpegio        N21 bandas que se desalinean   N26 atraso 500 ms
+  N13 voz bajo           N31 bandas que respiran        N36 atraso 1 s
+  N14 voz batería        (voz prendida = esa voz recibe notas)
+
+DISPARO (a mano = lo mismo que el canal)
+  fila 8 · arpegio (ch 1)   grave a la izquierda
+  fila 7 · batería (ch 10)  col 1-3 bombo · 4-6 caja · 7-8 hat
+  fila 6 · bajo (ch 9)
+
+MUTES   82 arpegio · 83 batería · 84 bajo     (mutear congela esa voz)
+ESTADOS 87 / 88 anterior / siguiente
+OTROS   89 grabar · FMASTER fundido · SHIFT ocultar / manual

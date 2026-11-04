@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-11-04 · GP_midi v1.13 · GP_tools v1.16 · GP_estados v1.5 (ver su manual)
+Actualizado: 2026-11-04 · GP_midi v1.15 · GP_tools v1.16 · GP_estados v1.5 (ver su manual)
 Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
@@ -41,7 +41,7 @@ await GP.midi.start()
 | Columna derecha 82–85 (86 sin uso) | 82 (fila 8) … 85 (fila 5) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
 | 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
 | 89 | | **grabador** (GP_tools): toque = grabar / detener+guardar | prendido = listo · parpadea = grabando · apagado = guardando |
-| 98 (Shift) | | **ocultar en 3 pasos**, tocando y soltando: 1º el código de Hydra · 2º también los controles (paneles, barras del mic, caja del último toque) · 3º vuelve todo. En cualquier canción y en el show, sin GP_tools. **Shift + pad de posiciones** = posición anterior (ahí no oculta) — **no tiene LED** | |
+| 98 (Shift) | | **4 pasos**, tocando y soltando: 1º sin el código de Hydra · 2º **+ el manual de la canción** en el centro · 3º todo oculto (manual, paneles, barras del mic, caja del último toque) · 4º vuelve todo. En cualquier canción y en el show, sin GP_tools. **Shift + pad de posiciones** = posición anterior (ahí no oculta) — **no tiene LED** | |
 | Faders | CC 48–55 | `F1`..`F8` (0..127) | — |
 | FMASTER | CC 56 | **fundido a negro** en todos los sketches (ver 3.1) | — |
 
@@ -237,12 +237,17 @@ GP.midi.alMensaje((nombre, data, info) => {
 
 Sketch sin GP_midi (sólo GP_tools): `GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })`.
 
-**Ocultar desde código:** `GP.midi.ocultarPaso()` = un toque de Shift · `GP.midi.ocultarTodo(true)` oculta todo · `(false)` muestra todo · `GP.midi.nivelOculto()` = 0 todo a la vista · 1 sin código · 2 nada.
+**Ocultar desde código:** `GP.midi.ocultarPaso()` = un toque de Shift · `GP.midi.ocultarTodo(true)` oculta todo · `(false)` muestra todo · `GP.midi.nivelOculto()` = 0 todo a la vista · 1 sin código · 2 manual · 3 nada · `GP.midi.verManual()` va directo al manual.
+
+### Manual de la canción (2º toque de Shift)
+
+Caja negra en el centro con los controles del Akai de la canción. El texto sale de **`LIVE/manuales/<canción>.txt`** (el mismo nombre que en `GP.tools.init` / `GP.estados.init`), desde GitHub: se edita con cualquier editor de texto y hay que hacer push. Se lee una vez por canción; si no entra en la pantalla, achica la letra.
+Un sketch puede poner el suyo: `GP.midi.manual('…')` (y `GP.midi.manual()` vuelve al del archivo).
 Las canciones ya no reciben el Shift (salvo con `GP.midi.shiftDirecto`): el ocultar lo hace siempre GP_midi.
 
 ### Lo último que tocaste (caja arriba a la derecha)
 
-Muestra las últimas 4 acciones, de cualquier consola, en palabras. Se apagan solas a los 7 segundos y se ocultan con el 2º paso del Shift. Queda debajo de la caja de estados de GP_tools.
+Muestra las últimas 4 acciones, de cualquier consola, en palabras. Se apagan solas a los 7 segundos y se ocultan con el 3º paso del Shift. Queda debajo de la caja de estados de GP_tools.
 
 ```
 Akai  F3 brillo → 99
@@ -282,7 +287,7 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 ## 9. Grabador y ensayo (GP_tools)
 
 - **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
-- **Ocultar:** **Shift (98)** del Akai, en 3 pasos (lo maneja GP_midi, ver sección 7): las cajas de GP_tools se ocultan en el 2º paso y vuelven en el 3º. **Ctrl+Shift+H** de Hydra también: las cajas se ocultan y vuelven junto con el código (antes Hydra se las llevaba y no volvían).
+- **Ocultar:** **Shift (98)** del Akai, en 4 pasos (lo maneja GP_midi, ver sección 7): las cajas de GP_tools se ocultan en el 3º paso y vuelven en el 4º. **Ctrl+Shift+H** de Hydra también: las cajas se ocultan y vuelven junto con el código (antes Hydra se las llevaba y no volvían).
 - Graba MIDI + audio + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.mp4`.
 - **Video en MP4** (H.264 en Chrome). Si el navegador no puede, sale `.webm` como antes. `GP.tools.init({ formatoVideo: 'webm' })` para forzar WebM.
 - **De dónde sale el audio** (el `_audio.webm` y el sonido del video), automático:

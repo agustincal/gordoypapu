@@ -1,0 +1,25 @@
+03 · VOCIFERAN                                      Akai
+
+FADERS
+  F1 tamaño        (botón arriba: anillos ninguno · algunos · muchos)
+  F2 dirección     F3 tiempo        F4 giro          F5 latido
+  F6 círculos en las escenas        F7 vibración del mic
+  F8 familia de color
+
+PADS
+  N11 strobe       N12 quieto (congela)       N13 blanco y negro
+
+DISPARO
+  fila 8 · melodía (ch 1)   círculo de esa altura
+  fila 7 · batería (ch 10)  col 1-4 bombo (flash) · 5-8 caja
+  fila 6 · a mano   col 1-3 entra por la izquierda rápido · medio · lento
+                    col 4 golpe central · col 5-7 por la derecha lento · medio · rápido
+                    col 8 se escapa al soltar
+  fila 5 · a mano   col 1-4 paleta naranja · celeste · rosa · azul
+                    col 5 vuelve a círculos · 6 / 7 escena anterior / siguiente
+                    col 8 forma siguiente
+
+MUTES   82 melodía · 83 batería
+ESTADOS 87 / 88 anterior / siguiente
+OTROS   88 también calibra el mic (3 s de silencio)
+        89 grabar · FMASTER fundido · SHIFT ocultar / manual

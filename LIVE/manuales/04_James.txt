@@ -1,0 +1,21 @@
+04 · JAMES                                          Akai
+
+FADERS (botón arriba del fader = versión)
+  F1 franjas       1 a 8 · parejas · desparejas · persiana
+  F2 estela        de borde duro a larga · degradado · eco · agujas
+  F3 duración      de negra a redonda · desplaza · ida y vuelta · cruzado
+  F4 8 bits        tamaño de píxel (abajo apagado) · tramado · damero · umbral
+
+PADS
+  N11 cada nota, su franja      N13 tótem
+  N12 partida (en pedazos)      N14 respira
+
+DISPARO (a mano = lo mismo que el canal)
+  fila 8 · bajo (ch 1)       abre puertas, se sostiene
+  fila 7 · batería (ch 10)   col 1-4 bombo · 5-8 caja
+  fila 6 · melodía (ch 2)
+  fila 5 · a mano   col 1 golpe · 2 una puerta · 3 los pedazos saltan · 4 strobo que invierte
+
+MUTES   82 bajo · 83 batería · 84 melodía
+ESTADOS 87 / 88 anterior / siguiente
+OTROS   89 grabar · FMASTER fundido · SHIFT ocultar / manual

@@ -5,7 +5,10 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-11-04 (v1.13: el Shift oculta en 3 pasos (código → controles → todo vuelve) · caja
+// Actualizado: 2026-11-04 (v1.15: Shift en 4 pasos — 1 código · 2 + manual de la canción en el centro ·
+//              3 todo oculto · 4 vuelve todo. Manual: LIVE/manuales/<canción>.txt (o GP.midi.manual('…')).
+//              Sobre la v1.13 (la v1.14 de otro hilo quedó descartada))
+//              2026-11-04 (v1.13: el Shift oculta en 3 pasos (código → controles → todo vuelve) · caja
 //              "lo último que tocaste" arriba a la derecha (Akai, SMC, JP) · GP.midi.anotar() para las canciones)
 //              2026-11-04 (v1.12: SMC ⏪ ⏩ = fundido (mantener) · perilla 8 = versión de F8 · perillas sin versiones =
 //              siguiente variante (64-71) · JP-Mini bank 3 PAD 13 = 86 · lo que las consolas no traducen ya no
@@ -51,8 +54,8 @@
 //   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
 //     apagado = versión 1 · prendido = versión 2 · parpadea = versión 3
 //   89 = grabador (GP_tools)
-//   98 (Shift, sin LED) = ocultar en 3 pasos: 1º el código · 2º también los controles
-//                         (paneles, barras del mic, caja del último toque) · 3º vuelve todo
+//   98 (Shift, sin LED) = 4 pasos: 1º sin el código · 2º + el manual de la canción en el centro ·
+//                         3º todo oculto (manual, paneles, barras del mic, último toque) · 4º vuelve todo
 //
 // Sin Akai: SMC-Mixer + JP-Mini (ver "Otras consolas" más abajo y el manual).
 // Lo que tocás en ellas entra como si fuera el Akai: las canciones no cambian.
@@ -62,7 +65,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.13'
+  const VERSION = 'v1.15'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -501,14 +504,16 @@
   // Ocultar en 3 pasos (Shift 98 · GP.midi.ocultarPaso / ocultarTodo)
   //   nivel 0 = todo a la vista
   //   nivel 1 = sin el código de Hydra (los controles siguen)
-  //   nivel 2 = sin código ni controles: paneles de GP_tools, barras del mic,
-  //             caja del último toque (todo lo anotado con GP.midi.alOcultar)
+  //   nivel 2 = como el 1, más el manual de la canción en el centro
+  //   nivel 3 = nada: ni código, ni manual, ni controles (paneles de GP_tools, barras del mic,
+  //             caja del último toque: todo lo anotado con GP.midi.alOcultar)
   // Lo maneja GP_midi en todas las canciones (anda con o sin GP_tools).
   // ============================================================
   const PARTES_EDITOR = '.CodeMirror, #editor-container, #toolbar, #menu, #info-container, #modal'
   // estado compartido (mismo código en GP_tools.js): sobrevive a reevaluar y al orden de carga
   const ocu = window._gpOcultar || (window._gpOcultar = { visible: true, bins: false, oyentes: {} })
-  if (ocu.nivel == null) ocu.nivel = ocu.visible ? 0 : 2
+  if (ocu.nivel == null) ocu.nivel = ocu.visible ? 0 : 3
+  const NIVELES = 4
   // barras del mic de Hydra (a.show / a.hide): al volver, sólo si estaban a la vista
   const ponerBins = (visible) => {
     try {
@@ -523,11 +528,12 @@
       try { ocu.oyentes[id](visible) } catch (err) { console.error(`[GP MIDI] ocultar · ${id}:`, err) }
     }
   }
-  const NIVEL_TXT = ['todo a la vista', 'código oculto', 'todo oculto']
+  const NIVEL_TXT = ['todo a la vista', 'código oculto', 'manual', 'todo oculto']
   const ponerNivel = (nivel) => {
-    ocu.nivel = ((nivel % 3) + 3) % 3
+    ocu.nivel = ((nivel % NIVELES) + NIVELES) % NIVELES
     const codigo = ocu.nivel === 0
-    const controles = ocu.nivel < 2
+    const controles = ocu.nivel < 3
+    mostrarManual(ocu.nivel === 2)
     ocu.visible = controles               // (GP_tools lo lee como "controles a la vista")
     document.querySelectorAll(PARTES_EDITOR).forEach(el => { el.style.visibility = codigo ? '' : 'hidden' })
     ponerBins(controles)
@@ -684,7 +690,7 @@
     const ahora = performance.now()
     ultimo.lineas = ultimo.lineas.filter(l => ahora - l.t < ULT.ms)
     const el = cajaUltimo()
-    const visible = ultimo.activo && ocu.nivel < 2 && ultimo.lineas.length > 0
+    const visible = ultimo.activo && ocu.nivel < 3 && ultimo.lineas.length > 0
     el.style.display = visible ? '' : 'none'
     if (!visible) return
     // debajo de la caja de estados de GP_tools (también arriba a la derecha), si está
@@ -720,6 +726,61 @@
     anotar(origen, 'grab', valorFinal(89) === 2 ? '● grabando' : '■ grabación detenida')
   }, 200)
   ocu.oyentes.ultimo = () => pintarUltimo()
+
+  // ============================================================
+  // Manual de la canción (2º paso del Shift): caja negra en el centro.
+  // Texto: LIVE/manuales/<canción>.txt en GitHub (se lee una vez por canción),
+  // o el que pase el sketch con GP.midi.manual('…').
+  // ============================================================
+  const manual = window._gpManual || (window._gpManual = { texto: null, cancion: null, propio: false, cargando: false })
+  const cancionActual = () => {
+    const t = GP.tools && GP.tools.config && GP.tools.config.cancion
+    if (t && t !== 'sin_nombre') return t
+    return (window._gpEstadosMem && window._gpEstadosMem.cancion) || null
+  }
+  const cajaManual = () => {
+    let el = document.getElementById('gpManual')
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'gpManual'
+      el.style.cssText = 'position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:2147483647; box-sizing:border-box; max-width:94vw; max-height:92vh; overflow:hidden; background:rgba(0,0,0,0.8); color:#eee; font:15px/1.45 monospace; padding:18px 26px; border-radius:6px; white-space:pre; pointer-events:none; display:none;'
+    }
+    if (!el.isConnected) document.documentElement.appendChild(el)
+    return el
+  }
+  const ajustarManual = (el) => {
+    // si no entra, achica la letra (hasta 10 px)
+    let px = 15
+    el.style.fontSize = px + 'px'
+    while (px > 10 && (el.scrollHeight > window.innerHeight * 0.92 || el.scrollWidth > window.innerWidth * 0.94)) {
+      px--; el.style.fontSize = px + 'px'
+    }
+  }
+  const cargarManual = async () => {
+    const cancion = cancionActual()
+    if (manual.propio || manual.cargando || (manual.texto && manual.cancion === cancion)) return
+    if (!cancion) { manual.texto = 'Manual: esta canción no tiene nombre (GP.tools.init / GP.estados.init).'; return }
+    manual.cargando = true
+    manual.cancion = cancion
+    try {
+      const url = `https://raw.githubusercontent.com/agustincal/gordoypapu/main/LIVE/manuales/${encodeURIComponent(cancion)}.txt?t=${Date.now()}`
+      const r = await fetch(url, { cache: 'no-store' })
+      manual.texto = r.ok ? (await r.text()).replace(/\r/g, '').replace(/\s+$/, '') : `Manual: no encontré LIVE/manuales/${cancion}.txt (${r.status})`
+    } catch (err) {
+      manual.texto = `Manual: no pude leer LIVE/manuales/${cancion}.txt (${err.message || err})`
+    }
+    manual.cargando = false
+    if (ocu.nivel === 2) mostrarManual(true)
+  }
+  function mostrarManual(visible) {
+    const el = cajaManual()
+    if (!visible) { el.style.display = 'none'; return }
+    if (!manual.propio && manual.cancion !== cancionActual()) manual.texto = null
+    el.textContent = manual.texto || 'cargando el manual…'
+    el.style.display = ''
+    ajustarManual(el)
+    if (!manual.texto) cargarManual()
+  }
 
   // ============================================================
   // Otras consolas: SMC-Mixer + JP-Mini → Akai
@@ -1106,10 +1167,18 @@
 
   // ocultar / mostrar todo (lo mismo que el Shift 98): código, barras del mic y paneles.
   //   GP.midi.ocultarTodo() alterna · (true) oculta · (false) muestra
-  M.ocultarTodo = (oculto = ocu.nivel !== 2) => { ponerNivel(oculto ? 2 : 0); return M }
+  M.ocultarTodo = (oculto = ocu.nivel !== 3) => { ponerNivel(oculto ? 3 : 0); return M }
   M.ocultarPaso = () => { ocultarPaso(); return M }           // lo mismo que tocar el Shift
-  M.oculto = () => ocu.nivel === 2
-  M.nivelOculto = () => ocu.nivel                              // 0 todo · 1 sin código · 2 nada
+  M.oculto = () => ocu.nivel === 3
+  M.nivelOculto = () => ocu.nivel                              // 0 todo · 1 sin código · 2 manual · 3 nada
+  // manual de la canción (2º paso del Shift). Sin texto = vuelve al de LIVE/manuales/<canción>.txt
+  M.manual = (texto) => {
+    if (texto) Object.assign(manual, { texto: String(texto), propio: true, cancion: cancionActual() })
+    else Object.assign(manual, { texto: null, propio: false, cancion: null })
+    if (ocu.nivel === 2) mostrarManual(true)
+    return M
+  }
+  M.verManual = () => { ponerNivel(2); return M }             // ir directo al manual
   // caja "lo último que tocaste": GP.midi.anotar('col 3 · color → canales') desde la canción.
   //   { reemplazar: true } pisa la línea genérica que GP_midi acaba de escribir para ese mismo toque.
   M.anotar = (texto, op = {}) => {
