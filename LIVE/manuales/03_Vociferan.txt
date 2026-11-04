@@ -1,10 +1,17 @@
 03 · VOCIFERAN                                      Akai
 
 FADERS
-  F1 tamaño        (botón arriba: anillos ninguno · algunos · muchos)
-  F2 dirección     F3 tiempo        F4 giro          F5 latido
-  F6 círculos en las escenas        F7 vibración del mic
-  F8 familia de color
+  F1 tamaño de las formas
+  F2 dirección: de dónde entran los círculos
+  F3 tiempo de las transiciones (0 = seco)
+  F4 giro          F5 latido
+  F6 tamaño de los círculos en las escenas (0 = no hay)
+  F7 vibración del mic (0 nada · medio normal · arriba mucho)
+  F8 familia de color por zonas:
+     naranja · celeste · rosa · azul · ámbar · cyan
+
+VERSIONES (sólo F1: botón arriba del fader)
+  V1 anillos       ninguno (apagado) · algunos (prendido) · muchos (parpadea)
 
 PADS
   N11 strobe       N12 quieto (congela)       N13 blanco y negro
@@ -16,7 +23,9 @@ DISPARO
                     col 4 golpe central · col 5-7 por la derecha lento · medio · rápido
                     col 8 se escapa al soltar
   fila 5 · a mano   col 1-4 paleta naranja · celeste · rosa · azul
-                    col 5 vuelve a círculos · 6 / 7 escena anterior / siguiente
+                    col 5 vuelve a círculos
+                    col 6 / 7 escena anterior / siguiente:
+                      círculos · morfo · iris · corte · anidado · lente
                     col 8 forma siguiente
 
 MUTES   82 melodía · 83 batería
