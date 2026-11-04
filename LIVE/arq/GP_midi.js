@@ -5,10 +5,7 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-11-04 (v1.14: arreglo del Shift — el temblor de los faders del Akai mientras apretás el Shift
-//              ya no cuenta como "Shift + fader": sólo cuenta si movés un fader de verdad (4 pasos o más) ·
-//              si el Shift no oculta, la consola dice por qué)
-//              2026-11-04 (v1.13: el Shift oculta en 3 pasos (código → controles → todo vuelve) · caja
+// Actualizado: 2026-11-04 (v1.13: el Shift oculta en 3 pasos (código → controles → todo vuelve) · caja
 //              "lo último que tocaste" arriba a la derecha (Akai, SMC, JP) · GP.midi.anotar() para las canciones)
 //              2026-11-04 (v1.12: SMC ⏪ ⏩ = fundido (mantener) · perilla 8 = versión de F8 · perillas sin versiones =
 //              siguiente variante (64-71) · JP-Mini bank 3 PAD 13 = 86 · lo que las consolas no traducen ya no
@@ -65,7 +62,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.14'
+  const VERSION = 'v1.13'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -281,8 +278,7 @@
     return Math.max(0, Math.min(modo - 1, x))
   }
   // Shift (98) apretado: Shift + pad de estados = anterior. El ocultar todo va al soltar el Shift.
-  const shift = { apretado: false, usado: false, porQue: '', faders: null, dato: null, nombre: null, timer: null }
-  const SHIFT_FADER_MIN = 4   // pasos que tiene que moverse un fader con el Shift apretado para contar como "Shift + fader"
+  const shift = { apretado: false, usado: false, dato: null, nombre: null, timer: null }
 
   const limpiarCapaBoton = () => {
     for (const k of Object.keys(capaBoton)) { delete capaBoton[k]; marcar(Number(k)) }
@@ -626,20 +622,13 @@
     if (esAkai && d1 === 98 && (esOn || esOff)) {
       if (cfg.shiftDirecto) entregar(nombre, data, { muteado: false })
       if (esOn) {
-        shift.apretado = true; shift.usado = false; shift.porQue = ''; shift.desde = performance.now()
-        shift.faders = { ...state.faderValues }   // foto de los faders: el temblor no cuenta
+        shift.apretado = true; shift.usado = false; shift.desde = performance.now()
         clearTimeout(shift.timer)
         shift.timer = setTimeout(soltarShift, 4000)   // por si el aviso de soltar no llega
       } else soltarShift()
       return
     }
-    if (esAkai && shift.apretado && !shift.usado) {
-      if (esOn) { shift.usado = true; shift.porQue = `nota ${d1}` }
-      else if (tipo === 0xb0 && d1 >= 48 && d1 <= 56) {
-        const antes = shift.faders ? shift.faders[d1] : state.faderValues[d1]
-        if (Math.abs(state.faderValues[d1] - antes) >= SHIFT_FADER_MIN) { shift.usado = true; shift.porQue = `fader ${CC_TO_FADER[d1]}` }
-      }
-    }
+    if (esAkai && shift.apretado && (esOn || tipo === 0xb0)) shift.usado = true
 
     entregar(nombre, data, { muteado })
   }
@@ -654,8 +643,8 @@
     clearTimeout(shift.timer)
     if (!shift.apretado) return
     shift.apretado = false
-    if (shift.usado) { console.info(`[GP MIDI] Shift usado con ${shift.porQue}: no oculta`); return }   // Shift + algo: no oculta
-    if (cfg.shiftDirecto && performance.now() - shift.desde > 400) { console.info('[GP MIDI] Shift largo en Perdido: no oculta (tocalo corto)'); return }
+    if (shift.usado) return                                                   // Shift + algo: no oculta
+    if (cfg.shiftDirecto && performance.now() - shift.desde > 400) return    // Perdido: sólo un toque corto
     ocultarPaso()
   }
 
