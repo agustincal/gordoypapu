@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-11-04 · GP_midi v1.13 · GP_tools v1.15 · GP_estados v1.5 (ver su manual)
+Actualizado: 2026-11-04 · GP_midi v1.13 · GP_tools v1.16 · GP_estados v1.5 (ver su manual)
 Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
@@ -297,6 +297,10 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
   - abajo, a lo ancho: **línea de tiempo** y, debajo, el **reproductor** y el **REC**;
   - abajo a la derecha quedan libres 100 × 80 px para las barras del mic de Hydra (`a.show()`).
 - **Reproductor:** `midi` / `audio` (verde = cargado, rojo = error) · ▶ / ⏸ (pausa) · ■ (todo al principio: canción y estados) · 🔁 (bucle) · reloj `1:23 / 3:40 · estado 5/13`. Limpia solos los duplicados de grabaciones viejas.
+- **Ensayos guardados (v1.16):** al abrir la canción se carga solo el **ensayo más nuevo** de `LIVE/ensayos/<canción>/` (desde GitHub: tiene que estar pusheado). **◀ ▶** del panel pasan de un ensayo a otro (carga MIDI + audio y deja todo en 0:00). Los botones `midi` / `audio` siguen sirviendo para cargar un archivo a mano.
+  - Nombres, como salen del grabador: `<canción>_ensayo_<fecha>_midi.json` + `<canción>_ensayo_<fecha>_audio.webm`. Después de un ensayo, copiá esos dos (el `_video.mp4` no) a la carpeta de la canción, sin cambiarles el nombre, y hacé push.
+  - **Versión 0:** `<canción>_ensayo_0_midi.json` (MIDI interpretado) + `<canción>_ensayo_0_audio.mp3` (la canción original). Va primera en la lista.
+  - Reevaluar el sketch no vuelve a cargar (no te pisa lo que estás probando). `GP.tools.ensayos.buscar(true)` relee la carpeta · `GP.tools.ensayos.ir(0)` va a la versión 0 · `GP.tools.config.ensayos.auto = false` antes de `init` = no cargar nada solo.
 - **Línea de tiempo:** una marca numerada por cada cambio de estado (canal 16) del `.json`. **Clic en la línea** = ir a ese momento (canción, MIDI y estado juntos); **clic cerca de una marca** = justo al comienzo de ese estado. ▶ desde el principio hace `GP.estados.reiniciar()` solo.
 - **🔁 Bucle:** repite la parte del estado en el que está la canción (de su cambio de estado al siguiente), sin pasar al próximo estado. Para diseñar un estado escuchándolo en loop; combinado con ⏸ de estados y ⧉ copiar. Clic en otra parte de la línea con el bucle prendido = el bucle pasa a ese estado.
 - Consola: `GP.tools.ensayo.irEstado(5)` · `.ir(83000)` (ms) · `.bucle()` · `.pausar()` · `.reproducir()` · `.pos` · `.marcas`.

@@ -8,7 +8,9 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-10-30 (v1.15: sugerencia de filas 5-8 (la 4 es de pads) · la SMC y la JP-Mini no cuentan como instrumentos)
+// Actualizado: 2026-11-04 (v1.16: ensayos automáticos — LIVE/ensayos/<canción>/ en GitHub: al abrir la canción
+//              carga el más nuevo; ◀ ▶ en el panel pasa de un ensayo a otro · versión 0 = MIDI interpretado + original)
+//              2026-10-30 (v1.15: sugerencia de filas 5-8 (la 4 es de pads) · la SMC y la JP-Mini no cuentan como instrumentos)
 //              2026-10-23 (v1.14: el Shift (98) pasa a GP_midi (anda sin GP_tools); las cajas se anotan para ocultarse con él)
 //              2026-10-23 (v1.13: Shift (98) oculta todo en cualquier canción · al volver a mostrar, las cajas no se desarman ·
 //              Ctrl+Shift+H de Hydra: las cajas se ocultan y vuelven junto con el código)
@@ -22,7 +24,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.15'
+  const VERSION = 'v1.16'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -53,12 +55,15 @@
       [/korg|padkontrol/i, /korg.*ensayo|padkontrol.*ensayo/i],
       [/apc|akai_?ensayo/i, /akai.*ensayo|apc.*ensayo/i],
     ],        // nota del Akai que hace grabar / detener+guardar (null = ninguno)
+    // ensayos guardados: LIVE/ensayos/<canción>/<canción>_ensayo_<fecha o 0>_midi.json + _audio.webm/.mp3
+    ensayos: { repo: 'agustincal/gordoypapu', rama: 'main', carpeta: 'LIVE/ensayos', auto: true },
   }
   T.config = cfg
   T.init = (opciones = {}) => {
     Object.assign(cfg, opciones)
     if (cfg.padGrabador != null) T.led.nota = cfg.padGrabador
     console.log(`GP.tools ${VERSION} · canción: ${cfg.cancion}`)
+    if (T.ensayos && cfg.ensayos && cfg.ensayos.auto) T.ensayos.buscar()   // carga el ensayo más nuevo (una vez por canción)
     return T
   }
 
@@ -679,6 +684,9 @@
     bottom: 8px; left: 8px; height: ${ALTO_FILA}px; display: flex; align-items: center; gap: 5px;
   `)
   ensayoEl.innerHTML = `
+    <button data-accion="ensayoAnt" style="${BTN}" title="ensayo anterior">◀&#xFE0E;</button>
+    <span data-ensayo style="white-space:nowrap; min-width:88px; text-align:center;" title="ensayos de LIVE/ensayos">sin ensayos</span>
+    <button data-accion="ensayoSig" style="${BTN}" title="ensayo siguiente">▶&#xFE0E;</button>
     <label data-carga="midi" style="${BTN}" title="cargar .json de MIDI">midi<input type="file" accept=".json" style="display:none"></label>
     <label data-carga="audio" style="${BTN}" title="cargar audio (.webm / .mp3 / .wav)">audio<input type="file" accept=".webm,audio/*,video/webm" style="display:none"></label>
     <button data-accion="play" style="${BTN}" title="reproducir / pausa">▶&#xFE0E;</button>
@@ -960,34 +968,53 @@
   }
 
   // ---- carga de archivos ----
+  const cargarMidiTexto = (texto, nombre) => {
+    try {
+      const crudo = JSON.parse(texto)
+      // las grabaciones viejas tienen mensajes duplicados (bug de reevaluar): se limpian
+      const vistos = new Set()
+      midiEnsayo = crudo.filter(([ms, n, b]) => {
+        const k = `${Math.round(ms * 10)}|${n}|${b.join(',')}`
+        if (vistos.has(k)) return false
+        vistos.add(k); return true
+      })
+      const quitados = crudo.length - midiEnsayo.length
+      if (quitados) console.info(`GP.tools: ${quitados} mensajes duplicados quitados de ${nombre}`)
+      detener(); bucle = null
+      prepararEnsayo()
+      marcar(botonMidi, 'ok', nombre)
+      setEnsayo('')
+      return true
+    } catch (err) {
+      midiEnsayo = null
+      prepararEnsayo()
+      marcar(botonMidi, 'error', nombre)
+      setEnsayo('json inválido')
+      return false
+    }
+  }
+  const cargarAudioURL = (url, nombre) => {
+    if (audioEl) audioEl.pause()
+    audioEl = new Audio(url)   // sin barra: lo maneja la línea de tiempo
+    try { enrutarEnsayo(audioEl) } catch (err) { console.warn('GP.tools: audio del ensayo sin AudioContext', err) }
+    audioEl.onloadedmetadata = () => prepararEnsayo()
+    audioEl.onerror = () => { audioEl = null; marcar(botonAudio, 'error', nombre) }
+    marcar(botonAudio, 'ok', nombre)
+  }
+  const sinAudio = () => {
+    if (audioEl) audioEl.pause()
+    audioEl = null
+    marcar(botonAudio, 'vacio', '')
+    botonAudio.title = 'cargar audio (.webm / .mp3 / .wav) · este ensayo no tiene audio'
+    prepararEnsayo()
+  }
+
   botonMidi.querySelector('input').addEventListener('change', (e) => {
     const file = e.target.files[0]
     e.target.value = ''   // permite volver a elegir el mismo archivo
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => {
-      try {
-        const crudo = JSON.parse(reader.result)
-        // las grabaciones viejas tienen mensajes duplicados (bug de reevaluar): se limpian
-        const vistos = new Set()
-        midiEnsayo = crudo.filter(([ms, n, b]) => {
-          const k = `${Math.round(ms * 10)}|${n}|${b.join(',')}`
-          if (vistos.has(k)) return false
-          vistos.add(k); return true
-        })
-        const quitados = crudo.length - midiEnsayo.length
-        if (quitados) console.info(`GP.tools: ${quitados} mensajes duplicados quitados de ${file.name}`)
-        detener(); bucle = null
-        prepararEnsayo()
-        marcar(botonMidi, 'ok', file.name)
-        setEnsayo('')
-      } catch (err) {
-        midiEnsayo = null
-        prepararEnsayo()
-        marcar(botonMidi, 'error', file.name)
-        setEnsayo('json inválido')
-      }
-    }
+    reader.onload = () => { cargarMidiTexto(reader.result, file.name); ensayos.manual() }
     reader.readAsText(file)
   })
 
@@ -995,13 +1022,100 @@
     const file = e.target.files[0]
     e.target.value = ''
     if (!file) return
-    if (audioEl) audioEl.pause()
-    audioEl = new Audio(URL.createObjectURL(file))   // sin barra: lo maneja la línea de tiempo
-    try { enrutarEnsayo(audioEl) } catch (err) { console.warn('GP.tools: audio del ensayo sin AudioContext', err) }
-    audioEl.onloadedmetadata = () => prepararEnsayo()
-    audioEl.onerror = () => { audioEl = null; marcar(botonAudio, 'error', file.name) }
-    marcar(botonAudio, 'ok', file.name)
+    cargarAudioURL(URL.createObjectURL(file), file.name)
+    ensayos.manual()
   })
+
+  // ---- ensayos guardados en GitHub: LIVE/ensayos/<canción>/ ----
+  // Nombres como salen del grabador: <canción>_ensayo_<fecha>_midi.json + _audio.webm
+  // <fecha> = 0 → versión 0 (MIDI interpretado + canción original). Se ordenan: 0 primero, después por fecha.
+  const ensayoTxt = ensayoEl.querySelector('[data-ensayo]')
+  const ensayos = {
+    lista: [], i: -1, cancion: null, buscando: false,
+    etiqueta(tag) {
+      if (tag === '0') return 'v0 interpretado'
+      const m = /^(\d{4})-(\d{2})-(\d{2})(?:_(\d{2})-(\d{2})(?:-\d{2})?)?(?:_(.+))?$/.exec(tag)
+      if (!m) return tag
+      return `${m[3]}/${m[2]}${m[4] ? ` ${m[4]}:${m[5]}` : ''}${m[6] ? ' ' + m[6] : ''}`
+    },
+    pintar() {
+      const n = this.lista.length
+      if (this.buscando) ensayoTxt.textContent = 'buscando…'
+      else if (!n) ensayoTxt.textContent = 'sin ensayos'
+      else if (this.i < 0) ensayoTxt.textContent = `a mano · ${n} guardados`
+      else ensayoTxt.textContent = `${this.i + 1}/${n} · ${this.etiqueta(this.lista[this.i].tag)}`
+      ensayoTxt.title = this.i >= 0 && this.lista[this.i] ? [this.lista[this.i].midi, this.lista[this.i].audio].filter(Boolean).join('\n') : 'ensayos de LIVE/ensayos'
+    },
+    url(nombre) {
+      const e = cfg.ensayos
+      return `https://raw.githubusercontent.com/${e.repo}/${e.rama}/${e.carpeta}/${encodeURIComponent(cfg.cancion)}/${encodeURIComponent(nombre)}?t=${Date.now()}`
+    },
+    async buscar(forzar = false) {
+      if (!forzar && this.cancion === cfg.cancion) return this.lista   // ya buscado: reevaluar no recarga
+      this.cancion = cfg.cancion
+      this.buscando = true; this.pintar()
+      const e = cfg.ensayos
+      try {
+        const r = await fetch(`https://api.github.com/repos/${e.repo}/contents/${e.carpeta}/${encodeURIComponent(cfg.cancion)}?ref=${e.rama}`, { cache: 'no-store' })
+        if (!r.ok) throw new Error(r.status === 404 ? 'no hay carpeta de ensayos' : `GitHub ${r.status}`)
+        const archivos = (await r.json()).filter(a => a.type === 'file').map(a => a.name)
+        const por = {}
+        const re = /^(.+?)_ensayo_(.+)_(midi\.json|audio\.(?:webm|mp3|wav|ogg|m4a))$/i
+        for (const nombre of archivos) {
+          const m = re.exec(nombre)
+          if (!m) continue
+          const tag = m[2]
+          por[tag] = por[tag] || { tag }
+          if (/^midi/i.test(m[3])) por[tag].midi = nombre
+          else por[tag].audio = nombre
+        }
+        this.lista = Object.values(por).filter(x => x.midi).sort((a, b) => a.tag === '0' ? -1 : b.tag === '0' ? 1 : a.tag.localeCompare(b.tag))
+        this.buscando = false
+        console.info(`GP.tools: ${this.lista.length} ensayos en ${e.carpeta}/${cfg.cancion}`)
+        if (this.lista.length) await this.ir(this.lista.length - 1)   // el más nuevo
+        else this.pintar()
+      } catch (err) {
+        this.buscando = false
+        this.lista = []
+        this.pintar()
+        ensayoTxt.textContent = 'sin ensayos'
+        ensayoTxt.title = String(err.message || err)
+        console.info(`GP.tools: ensayos de ${cfg.cancion}: ${err.message || err}`)
+      }
+      return this.lista
+    },
+    async ir(i) {
+      if (!this.lista.length) return
+      this.i = (i + this.lista.length) % this.lista.length
+      const ens = this.lista[this.i]
+      this.pintar()
+      ensayoTxt.textContent += ' · cargando'
+      try {
+        const rm = await fetch(this.url(ens.midi), { cache: 'no-store' })
+        if (!rm.ok) throw new Error(`midi ${rm.status}`)
+        cargarMidiTexto(await rm.text(), ens.midi)
+        if (ens.audio) {
+          const ra = await fetch(this.url(ens.audio), { cache: 'no-store' })
+          if (!ra.ok) throw new Error(`audio ${ra.status}`)
+          const tipo = /\.mp3$/i.test(ens.audio) ? 'audio/mpeg' : /\.wav$/i.test(ens.audio) ? 'audio/wav' : /\.ogg$/i.test(ens.audio) ? 'audio/ogg' : /\.m4a$/i.test(ens.audio) ? 'audio/mp4' : 'audio/webm'
+          const blob = new Blob([await ra.blob()], { type: tipo })
+          cargarAudioURL(URL.createObjectURL(blob), ens.audio)
+        } else sinAudio()
+        this.pintar()
+      } catch (err) {
+        this.pintar()
+        setEnsayo(`no pude cargar el ensayo (${err.message || err})`)
+      }
+    },
+    manual() { this.i = -1; this.pintar() },   // cargaste un archivo a mano
+  }
+  ensayoEl.querySelector('[data-accion="ensayoAnt"]').addEventListener('click', (e) => { ensayos.ir(ensayos.i < 0 ? ensayos.lista.length - 1 : ensayos.i - 1); e.currentTarget.blur() })
+  ensayoEl.querySelector('[data-accion="ensayoSig"]').addEventListener('click', (e) => { ensayos.ir(ensayos.i < 0 ? 0 : ensayos.i + 1); e.currentTarget.blur() })
+  T.ensayos = {
+    buscar: (forzar = false) => ensayos.buscar(forzar),   // GP.tools.ensayos.buscar(true) = volver a leer la carpeta
+    ir: (i) => ensayos.ir(i),                              // 0 = el primero (v0)
+    lista: () => ensayos.lista.map(x => x.tag),
+  }
 
   // ---- botones y línea ----
   botonPlay.addEventListener('click', () => { (reproduciendo ? pausar : reproducir)(); botonPlay.blur() })
