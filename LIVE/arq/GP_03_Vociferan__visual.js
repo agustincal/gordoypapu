@@ -1,6 +1,6 @@
 // ============================================================
 // GP_03_Vociferan__visual.js  ·  LIVE/arq/  (VERSIÓN VALIDADA — única en LIVE)
-// Copiado a LIVE el 04/11/2026 desde produccion/03_Vociferan/arquitectura/GP_03_Vociferan__visual_v3.js
+// Copiado a LIVE el 04/11/2026 desde produccion/03_Vociferan/arquitectura/GP_03_Vociferan__visual_v3.js (v3.9)
 // Canción: 03_Vociferan (Gordo y Papu) · Fase 3
 // Rol: motor visual — círculos de luz (la Vociferan de siempre) + escenas de
 //      formas que se transforman (morfo, iris, corte, anidado, lente), todo en
@@ -27,6 +27,10 @@
 //              El golpe largo al cambiar se reemplaza por un telón corto (C.telon))
 //              (v3.8: cambio seco por defecto (telon: false); motor y sketches pasan de
 //              fase3/ a arquitectura/ y sketches/)
+//              (v3.9: bordes duros sin pixelar — o1 se lee interpolando; los círculos
+//              cortan con un borde de 1 píxel calculado con su pendiente real (umbralAA);
+//              la escena y los golpes con borde de ~1 píxel; la franja no llega al negro
+//              (pisoFranja) y puede ir en escalones (pasosFranja))
 // ============================================================
 //
 // Escenas (C.escena):
@@ -68,7 +72,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'LIVE-v3.8'
+  const VERSION = 'LIVE-v3.9'
 
   if (GP.vociferan && GP.vociferan._version === VERSION) return
   GP.vociferan = { _version: VERSION }
@@ -125,6 +129,8 @@
     degradado: 0.6,         // franja de degradado siempre presente (0 = color plano · 1 = de luz a negro)
     degradadoFormas: 0.75,  // lo mismo en las formas de las escenas
     anchoFranja: 1.6,       // cuántas franjas entran a lo ancho de la pantalla en las formas (más = más angosta)
+    pisoFranja: 0.25,       // la franja nunca baja de esta luz (0 = llega al negro y se lee como borde blando)
+    pasosFranja: 0,         // 0 = degradado continuo · 3 = la franja en 3 escalones de color
     // blanco y negro puro: todo lo que tiene luz queda blanco, el resto negro (N13)
     byn: false,
     umbralByn: 0.04,        // desde qué luz cuenta como blanco (más alto = sólo lo más claro)
@@ -155,7 +161,10 @@
     telonSalida: 0.15,      // segundos en destapar
     // fusión círculos + escena
     fusion: 'xor',          // 'xor' | 'union' | 'encima'
-    suavidad: 0.004,        // borde del umbral (0.004 = duro · 0.05 = algo blando)
+    suavidad: 0.004,        // (modo 'encima' y unión) borde del umbral
+    // bordes: todo duro, con ~1 píxel de transición para que no pixele
+    bordePx: 1,             // ancho del borde de los círculos y golpes, en píxeles (0.5 = más seco · 3 = blando)
+    suavidadEscena: 0.3,    // borde de la escena al leerla de o1 (0.3 ≈ 1 píxel · 0.01 = serruchado)
     desplazar: 0.25,        // cuánto empujan los círculos a la escena (0 = nada)
     // anillos: algunas formas y algunos círculos nacen como anillo (no toda la imagen)
     contorno: 0,            // V1 · 0 = ningún anillo · 1 = algunos · 2 = muchos
@@ -529,6 +538,8 @@
       { type: 'float', name: 'barrido', default: 0.0 },
       { type: 'float', name: 'sombra', default: 0.0 },
       { type: 'float', name: 'multi', default: 0.0 },
+      { type: 'float', name: 'piso', default: 0.0 },
+      { type: 'float', name: 'pasos', default: 0.0 },
     ],
     glsl: `
       float asp = resolution.x / resolution.y;
@@ -547,6 +558,8 @@
         1.0 - sombra * abs(sin(u * 1.57 + barrido * 1.3 + 0.5)),
         1.0 - sombra * abs(sin(u * 2.0 + barrido * 1.7 + 1.0)));
       vec3 k = clamp(mix(vec3(una), tres, multi), 0.0, 1.0);
+      if (pasos > 0.5) k = floor(k * pasos + 0.5) / pasos;
+      k = piso + (1.0 - piso) * k;
       return vec4(v * k, 1.0);
     `
   })
@@ -570,9 +583,22 @@
       vec2 c = vec2((cx - 0.5) * asp + 0.5, cy);
       float d = distance(p, c);
       float r = max(radio, 0.0001);
-      float f = fuerza * (1.0 - smoothstep(0.0, 2.0 * r, d));
-      if (hueco > 0.001) f *= smoothstep(hueco * 0.8, hueco, d);
-      return vec4(vec3(f), 1.0);
+      // r = el campo · g, b = su pendiente (x, y) en unidades de alto de pantalla:
+      // al sumar los círculos se suman también las pendientes, y el umbral (umbralAA)
+      // sabe cuánto cambia el campo por píxel → borde de 1 píxel sin importar el tamaño
+      float x = clamp(d / (2.0 * r), 0.0, 1.0);
+      float f = fuerza * (1.0 - x * x * (3.0 - 2.0 * x));
+      float df = -fuerza * 6.0 * x * (1.0 - x) / (2.0 * r);
+      if (hueco > 0.001) {
+        float y = clamp((d - hueco * 0.8) / (hueco * 0.2), 0.0, 1.0);
+        float h = y * y * (3.0 - 2.0 * y);
+        float dh = 6.0 * y * (1.0 - y) / (hueco * 0.2);
+        df = df * h + f * dh;
+        f *= h;
+      }
+      vec2 dir = d > 0.00001 ? (p - c) / d : vec2(0.0);
+      vec2 g = df * dir;
+      return vec4(f, g.x, g.y, 1.0);
     `
   })
   // banda: la misma franja de degradado, de lado a lado de la pantalla (para las formas)
@@ -584,6 +610,8 @@
       { type: 'float', name: 'sombra', default: 0.6 },
       { type: 'float', name: 'multi', default: 0.0 },
       { type: 'float', name: 'ancho', default: 1.6 },
+      { type: 'float', name: 'piso', default: 0.0 },
+      { type: 'float', name: 'pasos', default: 0.0 },
     ],
     glsl: `
       float u = (_st.x - 0.5) * 2.0 * ancho;
@@ -592,7 +620,9 @@
         1.0 - sombra * abs(sin(u * 0.7 + fase)),
         1.0 - sombra * abs(sin(u * 0.9 + fase * 1.3 + 0.5)),
         1.0 - sombra * abs(sin(u * 1.15 + fase * 1.7 + 1.0)));
-      return vec4(clamp(mix(vec3(una), tres, multi), 0.0, 1.0), 1.0);
+      vec3 k = clamp(mix(vec3(una), tres, multi), 0.0, 1.0);
+      if (pasos > 0.5) k = floor(k * pasos + 0.5) / pasos;
+      return vec4(piso + (1.0 - piso) * k, 1.0);
     `
   })
   // empuje: vector que aleja del centro del círculo (para desplazar la escena)
@@ -613,6 +643,21 @@
       float r = max(radio, 0.0001);
       float w = fuerza * exp(-pow(length(dv) / (1.5 * r), 2.0));
       return vec4(dv.x / asp * w, dv.y * w, 0.0, 1.0);
+    `
+  })
+
+  // umbral con borde de N píxeles: usa la pendiente que trae el campo (g, b)
+  const definirUmbralAA = () => setFunction({
+    name: 'umbralAA',
+    type: 'color',
+    inputs: [
+      { type: 'float', name: 'umbral', default: 0.5 },
+      { type: 'float', name: 'px', default: 1.0 },
+    ],
+    glsl: `
+      float pend = max(length(_c0.gb) * px / resolution.y, 0.00001);
+      float a = clamp((_c0.r - umbral) / pend + 0.5, 0.0, 1.0);
+      return vec4(vec3(a), 1.0);
     `
   })
 
@@ -692,22 +737,29 @@
   const temblor = () => noise(() => C.micRuido, 0.8)
   const mascaraCirculos = () => campoCirculos()
     .modulate(temblor(), vozBorde)
-    .thresh(0.5, () => C.suavidad)
+    .umbralAA(0.5, () => Math.max(0.05, C.bordePx))
   // color de los círculos: cada uno en su tono (con el barrido de la voz), en un
   // disco del doble de su radio para que la deformación no salga de la pintura.
   // Donde se pisan se ve el de arriba (sin sumar luz: así no se va al amarillo
   // y queda dentro de la familia de color). La máscara recorta la forma.
+  // borde de ~1 píxel en unidades de alto de pantalla (para aro)
+  const bordeUV = () => Math.max(0.05, C.bordePx) / (typeof height !== 'undefined' && height ? height : 1080)
   const colorCirculos = () => {
     let img = solid(() => colorFormas()[0], () => colorFormas()[1], () => colorFormas()[2])
     for (let i = 0; i < N; i++) {
       const s = slots[i]
       const luz = () => esNormal(s) ? s.jl * fluct(s) : 0
-      const r2 = () => esNormal(s) ? radioFusion(s) * 2 : 0
-      const disco = aro(() => posX(s) + s.jx, () => posY(s) + s.jy, r2, () => radioFusion(s) * 0.15, 0)
+      // el disco de color mide lo mismo que el círculo (borde de 1 píxel): así, donde
+      // se pisan dos círculos, el cambio de color también es duro. Sólo con la
+      // vibración del mic prendida se agranda (hasta el doble) para que la
+      // deformación no salga de la pintura.
+      const r2 = () => esNormal(s) ? radioFusion(s) * (1 + Math.min(1, cuantoVibra())) : 0
+      const disco = aro(() => posX(s) + s.jx, () => posY(s) + s.jy, r2, bordeUV, 0)
       img = img.layer(aro(
           () => posX(s) + s.jx, () => posY(s) + s.jy,
-          r2, () => radioFusion(s) * 0.15, 0,
-          () => s.barrido, () => Math.min(1, C.degradado + C.barridoFuerza * vozEnv), () => C.multicolor)
+          r2, bordeUV, 0,
+          () => s.barrido, () => Math.min(1, C.degradado + C.barridoFuerza * vozEnv), () => C.multicolor,
+          () => C.pisoFranja, () => C.pasosFranja)
         .color(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz())
         .mask(disco))
     }
@@ -720,7 +772,7 @@
       const es = () => s.activo && s.tipo === 'golpe'
       const r = () => es() ? radioActual(s) : 0
       const luz = () => es() ? nivel(s) * s.luzMult : 0
-      const forma = () => aro(() => posX(s), () => posY(s), r, () => Math.max(0.002, C.suavidad), 0)
+      const forma = () => aro(() => posX(s), () => posY(s), r, bordeUV, 0)
       img = img.layer(solid(() => s.rgb[0] * luz(), () => s.rgb[1] * luz(), () => s.rgb[2] * luz()).mask(forma()))
     }
     return img
@@ -732,8 +784,20 @@
     const b = window[C.bufferEscena]
     return (b && b !== salidaOut && b !== window[C.bufferFinal]) ? b : null
   }
+  // o1 se lee interpolando: Hydra crea sus buffers con 'nearest' y, cuando el
+  // empuje estira la escena, cada píxel se veía como un bloque (escalones)
+  const interpolar = b => {
+    if (!b || !b.fbos) return
+    b.fbos.forEach(f => {
+      const tx = f.color && f.color[0]
+      if (!tx || tx._gpLineal) return
+      tx({ width: f.width, height: f.height, mag: 'linear', min: 'linear' })
+      tx._gpLineal = true
+    })
+  }
   const armarEscena = () => {
     const b = bufEscena()
+    interpolar(b)
     if (b) (ARMAR[C.escena] ? ARMAR[C.escena]() : solid(0, 0, 0)).out(b)
     armada = C.escena
   }
@@ -749,7 +813,7 @@
     .scale(() => J.r)
     .modulate(empujeCirculos(), () => -C.desplazar)
     .modulate(temblor(), vozBorde)
-    .thresh(0.5, () => C.suavidad)
+    .thresh(0.5, () => C.suavidadEscena)
 
   // ---- telón corto al cambiar de escena ----
   const T = { estado: 'nada', t0: -99, tSale: null, rgb: [0, 0, 0] }
@@ -782,7 +846,7 @@
       let forma = mascaraCirculos()
       if (conEscena) {
         forma = C.fusion === 'union'
-          ? forma.add(escena()).thresh(0.5, 0.001)
+          ? forma.add(escena()).thresh(0.5, 0.25)
           : forma.diff(escena())
       }
       // pintura: la escena en el color de la canción, los círculos en el suyo
@@ -790,7 +854,7 @@
       // (mezcla explícita base·(1−m) + círculos·m: sumar capas en Hydra también suma
       //  el alpha, y con .layer eso desborda el color)
       img = solid(() => colorFormas()[0] * luz(), () => colorFormas()[1] * luz(), () => colorFormas()[2] * luz())
-        .mult(banda(() => faseFormas, () => Math.min(1, C.degradadoFormas + C.barridoFuerza * vozEnv * 0.5), () => C.multicolor, () => C.anchoFranja))
+        .mult(banda(() => faseFormas, () => Math.min(1, C.degradadoFormas + C.barridoFuerza * vozEnv * 0.5), () => C.multicolor, () => C.anchoFranja, () => C.pisoFranja, () => C.pasosFranja))
         .mult(mascaraCirculos().invert())
         .add(colorCirculos().mult(mascaraCirculos()))
         .mult(forma)
@@ -911,6 +975,7 @@
     definirCampo()
     definirBanda()
     definirEmpuje()
+    definirUmbralAA()
     if (typeof a !== 'undefined' && a.setBins) {
       a.setBins(4)
       a.setSmooth(0.4)
