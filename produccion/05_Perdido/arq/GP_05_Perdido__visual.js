@@ -5,7 +5,9 @@
 //      modular (Sandin Image Processor / LZX): el video entra, pasa por 8 etapas
 //      en fila y sale. Cada etapa es una columna del Akai.
 // Depende de: GP_midi (LEDs y faders), GP_estados (opcional), GP_tools (opcional, panel)
-// Actualizado: 2026-10-22 (v1.2: el video se elige por nombre ('lluvia') o número; los estados usan el nombre
+// Actualizado: 2026-11-04 (v1.3: cuenta lo que hacés en la caja "lo último que tocaste" de GP_midi (variante, modo,
+//              entrada, video, asignación) · SHIFT solo = el ocultar en 3 pasos de GP_midi v1.13)
+//              2026-10-22 (v1.2: el video se elige por nombre ('lluvia') o número; los estados usan el nombre
 //              para que el fundido no pase por los videos del medio)
 //              2026-10-22 (v1.1: SHIFT + fader = contraste de la columna · los faders los maneja el motor, con toma suave)
 //              2026-10-22 (v1.0: primera versión)
@@ -54,7 +56,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.2'
+  const VERSION = 'v1.3'
 
   if (GP.perdido && GP.perdido._version === VERSION) return
 
@@ -582,17 +584,28 @@
   // ============================================================
   // Akai
   // ============================================================
+  // caja "lo último que tocaste" de GP_midi (v1.13 en adelante)
+  const anotar = (texto, reemplazar = false) => { const m = GP.midi; if (m && m.anotar) m.anotar(texto, { reemplazar }) }
+  const nombreCol = c => {
+    const col = cols[c]
+    if (col.fam < 0) return `col ${c + 1} · bypass`
+    const fam = FAMILIAS[col.fam]
+    return `col ${c + 1} · ${fam.id} → ${fam.variantes[col.var].id}${col.entrada ? ' @' + col.entrada : ''}`
+  }
+
   const tocarPad = (f, c) => {
     if (A.asignar) {
       A.armado = A.armado && A.armado.f === f && A.armado.c === c ? null : { f, c }
       pintarGrilla()
       pintarHud()
+      anotar(A.armado ? `asignar ${FAMILIAS[f].id} col ${c + 1}: tocá la entrada` : 'asignar: elegí un pad')
       return
     }
     const col = cols[c]
     if (col.fam === f) { col.fam = -1 }                                          // pad prendido → bypass
     else { col.fam = f; col.var = varIdx(f, pads[f][c].var); col.entrada = pads[f][c].entrada }
     cambio()
+    anotar(nombreCol(c))
   }
 
   const asignarArmado = (nombre) => {
@@ -602,6 +615,7 @@
     pad.entrada = pad.entrada === nombre ? null : nombre                          // misma entrada otra vez = sacarla
     if (cols[c].fam === f) cols[c].entrada = pad.entrada
     console.info(`[GP perdido] ${FAMILIAS[f].id} · columna ${c + 1} → ${pad.entrada || 'sin entrada'}`)
+    anotar(`${FAMILIAS[f].id} col ${c + 1} → ${pad.entrada || 'sin entrada'}`)
     A.armado = null
     guardarPads()
     escribirCadena()
@@ -618,6 +632,7 @@
     cambio()
     pintarColumna(c, true)
     console.info(`[GP perdido] columna ${c + 1}: ${FAMILIAS[col.fam].id} · ${FAMILIAS[col.fam].variantes[col.var].id}`)
+    anotar(nombreCol(c), true)
   }
 
   const alternarModo = (c, modo) => {
@@ -625,6 +640,7 @@
     col.modo = modo || (col.modo === 'M' ? 'T' : 'M')
     cambio()
     console.info(`[GP perdido] columna ${c + 1}: ${col.modo === 'M' ? 'mezcla' : 'transformación'}`)
+    anotar(`col ${c + 1} · ${col.modo === 'M' ? 'mezcla' : 'transformación'}`, true)
   }
 
   let diag = false
@@ -645,7 +661,8 @@
       if (on) { A.shift = true; A.shiftUsado = false; A.shiftT = performance.now() }
       else {
         A.shift = false
-        if (!A.shiftUsado && performance.now() - A.shiftT < 400) V.toggleCodigo()
+        // GP_midi v1.13+ oculta en 3 pasos por su cuenta; si no, lo hace el motor
+        if (!A.shiftUsado && performance.now() - A.shiftT < 400 && !(GP.midi && GP.midi.ocultarPaso)) V.toggleCodigo()
       }
       return
     }
@@ -653,16 +670,17 @@
     if (A.shift) A.shiftUsado = true
     if (d1 <= 63) { const pd = padDeNota(d1); if (pd) tocarPad(pd.f, pd.c); return }
     if (d1 >= 64 && d1 <= 71) { const c = d1 - 64; if (A.shift) alternarModo(c); else siguienteVariante(c); return }
-    if (d1 === 86) { A.asignar = !A.asignar; A.armado = null; pintarTodo(); console.info(`[GP perdido] modo asignación ${A.asignar ? 'PRENDIDO: elegí un pad y después la entrada' : 'apagado'}`); return }
+    if (d1 === 86) { A.asignar = !A.asignar; A.armado = null; pintarTodo(); console.info(`[GP perdido] modo asignación ${A.asignar ? 'PRENDIDO: elegí un pad y después la entrada' : 'apagado'}`); anotar(A.asignar ? 'asignación prendida: elegí un pad' : 'asignación apagada'); return }
     const ent = NOMBRES_ENTRADA().find(n => C.entradas[n].boton === d1)
     if (ent) {
-      if (A.shift) { V.video(NOMBRES_ENTRADA().indexOf(ent)); return }
+      if (A.shift) { const iv = NOMBRES_ENTRADA().indexOf(ent); V.video(iv); anotar(`video → ${nombreVideo(iv)}`); return }
       if (A.asignar && A.armado) { asignarArmado(ent); return }
       const e = inp(ent)
       e.on = !e.on
       if (!e.on) e.held.clear()
       pintarEntrada(ent)
       console.info(`[GP perdido] entrada ${ent} ${e.on ? 'prendida' : 'APAGADA'}`)
+      anotar(`entrada ${ent} → ${e.on ? 'prendida' : 'apagada'}`)
     }
   }
 
@@ -827,6 +845,8 @@
     if (GP.tools && GP.tools.paneles) GP.tools.paneles(codigoVisible)
     pintarHud()
   }
+  // con GP_midi v1.13+: el cuadro de la cadena se oculta en el 2º paso del Shift, junto con los paneles
+  if (GP.midi && GP.midi.alOcultar) GP.midi.alOcultar('perdido', (visible) => { codigoVisible = visible; pintarHud() })
 
   // ============================================================
   // API

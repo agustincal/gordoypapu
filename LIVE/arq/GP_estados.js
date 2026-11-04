@@ -7,7 +7,8 @@
 // Depende de: GP_midi (faders, toggles, versiones, mutes, LEDs).
 //             GP_tools es opcional: si está cargado (ensayo) muestra el
 //             estado arriba a la derecha. En el show no se ve.
-// Actualizado: 2026-10-25 (v1.4: pads con varios estados — N13: 0..3 · respeta el modo de cada pad de GP_midi)
+// Actualizado: 2026-11-04 (v1.5: GP.estados.nombres — nombre de cada control, para la caja de 'lo último que tocaste')
+//              2026-10-25 (v1.4: pads con varios estados — N13: 0..3 · respeta el modo de cada pad de GP_midi)
 //              2026-10-23 (v1.3: faders más directos — suavizado 0.1 → 0.04 s, mezclaToque 0.25 → 0.12 s)
 //              2026-10-21 (v1.2: guardar capturas pasa a Ctrl+Alt+D)
 //              2026-10-20 (v1.1: suspender, copiar estado, aviso de cambio, botones 87/88)
@@ -64,7 +65,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.4'
+  const VERSION = 'v1.5'
 
   if (GP.estados && GP.estados._version === VERSION) return
 
@@ -601,6 +602,16 @@
     nombre: { get: () => (objetivo && objetivo.nombre) || '' },
     suspendido: { get: () => mem.suspendido },
     cancionEn: { get: () => mem.sombra },                            // por dónde va la canción
+    // control físico → nombre en la canción: { F3: 'brillo', N11: 'strobe', V2: 'forma', M8: 'muteCanal1' }
+    nombres: { get: () => {
+      const m = {}
+      if (!can) return m
+      for (const [k, c] of Object.entries(can.controles)) {
+        const ref = c.tipo === 'version' ? 'V' + String(c.ref).slice(1) : c.tipo === 'mute' ? 'M' + c.fila : c.ref
+        if (ref && !m[ref]) m[ref] = k
+      }
+      return m
+    } },
   })
   E._tick = tick   // para pruebas
 

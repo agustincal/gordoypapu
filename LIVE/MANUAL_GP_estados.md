@@ -1,7 +1,7 @@
 # Manual · GP_estados (Fase 3 · LIVE)
 
 Estados genéricos para todas las canciones. Vive en `LIVE/arq/GP_estados.js`.
-Actualizado: 2026-10-25 · GP_estados v1.4 (pads con varios estados)
+Actualizado: 2026-11-04 · GP_estados v1.5 (`GP.estados.nombres`: el nombre de cada control, lo usa la caja "lo último que tocaste" de GP_midi)
 
 ---
 

@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-11-04 · GP_midi v1.12 · GP_tools v1.15 · GP_estados v1.4 (ver su manual)
+Actualizado: 2026-11-04 · GP_midi v1.13 · GP_tools v1.15 · GP_estados v1.5 (ver su manual)
 Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
@@ -41,7 +41,7 @@ await GP.midi.start()
 | Columna derecha 82–85 (86 sin uso) | 82 (fila 8) … 85 (fila 5) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
 | 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
 | 89 | | **grabador** (GP_tools): toque = grabar / detener+guardar | prendido = listo · parpadea = grabando · apagado = guardando |
-| 98 (Shift) | | **ocultar / mostrar todo** al **soltarlo** (código, barras del mic y paneles), en cualquier canción y también en el show, sin GP_tools. **Shift + pad de estados** = estado anterior (y ahí no oculta) — **no tiene LED** | |
+| 98 (Shift) | | **ocultar en 3 pasos**, tocando y soltando: 1º el código de Hydra · 2º también los controles (paneles, barras del mic, caja del último toque) · 3º vuelve todo. En cualquier canción y en el show, sin GP_tools. **Shift + pad de posiciones** = posición anterior (ahí no oculta) — **no tiene LED** | |
 | Faders | CC 48–55 | `F1`..`F8` (0..127) | — |
 | FMASTER | CC 56 | **fundido a negro** en todos los sketches (ver 3.1) | — |
 
@@ -155,7 +155,7 @@ GP.midi.setButton('N13', 2)            // fijar desde código (toggle: true / fa
 | piano | verde | rojo fijo mientras lo apretás |
 | estados | 0 = verde | 1 = verde parpadeo · 2 = amarillo parpadeo · 3 = rojo parpadeo |
 
-- **Shift + pad de estados** = vuelve al estado anterior. El Shift solo (sin tocar pads) oculta todo al soltarlo.
+- **Shift + pad de posiciones** = vuelve a la posición anterior. El Shift solo (sin tocar nada) da un paso de ocultar al soltarlo.
 - Al reevaluar, cada pad que sigue con el mismo modo conserva cómo lo dejaste. Si le cambiás el modo, arranca en 0.
 - En GP_estados un pad de estados se anota con su número (`brillo: 'N13'` → `brillo: 2`). Los piano no van en los estados.
 - La fila 4 es de pads desde la v1.11 (antes era de disparo): por ejemplo columnas 1–4 efectos (toggle / posiciones) y 5–8 golpes a mano (piano).
@@ -237,9 +237,27 @@ GP.midi.alMensaje((nombre, data, info) => {
 
 Sketch sin GP_midi (sólo GP_tools): `GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })`.
 
-**Ocultar todo desde código:** `GP.midi.ocultarTodo()` alterna (lo mismo que soltar el Shift 98) · `GP.midi.ocultarTodo(true)` oculta · `(false)` muestra · `GP.midi.oculto()` dice cómo está.
-Si el motor de la canción ya maneja el 98 (Vociferan, James: su `toggleCodigo`), GP_midi no lo repite: se pone al día y oculta lo que falte (barras del mic, paneles).
-Otro módulo con cosas en pantalla se anota con `GP.midi.alOcultar('id', visible => {...})` (así lo hace GP_tools con sus cajas).
+**Ocultar desde código:** `GP.midi.ocultarPaso()` = un toque de Shift · `GP.midi.ocultarTodo(true)` oculta todo · `(false)` muestra todo · `GP.midi.nivelOculto()` = 0 todo a la vista · 1 sin código · 2 nada.
+Las canciones ya no reciben el Shift (salvo con `GP.midi.shiftDirecto`): el ocultar lo hace siempre GP_midi.
+
+### Lo último que tocaste (caja arriba a la derecha)
+
+Muestra las últimas 4 acciones, de cualquier consola, en palabras. Se apagan solas a los 7 segundos y se ocultan con el 2º paso del Shift. Queda debajo de la caja de estados de GP_tools.
+
+```
+Akai  F3 brillo → 99
+SMC   N13 capas → posición 2
+SMC   V2 forma → versión 2 de 3
+JP    fila 6 · pad 1
+SMC   ⏭ estado 6 · sub
+```
+
+- El nombre (brillo, capas…) sale de los `controles` de GP_estados. Si un control no está ahí, se ve sólo `F3`.
+- Un fader que se mueve actualiza su línea, no suma una nueva.
+- Anota: faders y fundido, pads (toggle / piano / posiciones), versiones, disparos a mano, mutes, estados, pausa, grabador y el Shift.
+- `GP.midi.ultimoToque(false)` la apaga · `(true)` la vuelve a prender.
+- Una canción puede escribir lo suyo: `GP.midi.anotar('col 3 · color → canales')`. Con `{ reemplazar: true }` pisa la línea genérica de ese mismo toque (así lo hace Perdido con las variantes).
+Otro módulo con cosas en pantalla se anota con `GP.midi.alOcultar('id', visible => {...})`: `visible` = los controles a la vista (pasos 0 y 1). Así lo hacen GP_tools con sus cajas y Perdido con su cuadro de la cadena.
 
 ---
 
@@ -264,7 +282,7 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 ## 9. Grabador y ensayo (GP_tools)
 
 - **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
-- **Ocultar todo:** **Shift (98)** del Akai (lo maneja GP_midi, ver sección 7): las cajas de GP_tools se ocultan y vuelven con él. **Ctrl+Shift+H** de Hydra también: las cajas se ocultan y vuelven junto con el código (antes Hydra se las llevaba y no volvían).
+- **Ocultar:** **Shift (98)** del Akai, en 3 pasos (lo maneja GP_midi, ver sección 7): las cajas de GP_tools se ocultan en el 2º paso y vuelven en el 3º. **Ctrl+Shift+H** de Hydra también: las cajas se ocultan y vuelven junto con el código (antes Hydra se las llevaba y no volvían).
 - Graba MIDI + audio + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.mp4`.
 - **Video en MP4** (H.264 en Chrome). Si el navegador no puede, sale `.webm` como antes. `GP.tools.init({ formatoVideo: 'webm' })` para forzar WebM.
 - **De dónde sale el audio** (el `_audio.webm` y el sonido del video), automático:
@@ -331,7 +349,7 @@ Cuando no está el Akai, GP_midi traduce lo que se toca en la **M-VAVE SMC-Mixer
 | Fila 4 (abajo) | fila 1 |
 | ▶ play (94) | grabador (89) |
 | ⏸ pausa (93) | pausar / reanudar los estados |
-| ■ stop (95) | Shift (98): solo = ocultar todo al soltar · mantenido + pad de posiciones = posición anterior |
+| ■ stop (95) | Shift (98): solo = un paso de ocultar · mantenido + pad de posiciones = posición anterior |
 | ⏮ / ⏭ (91 / 92) | estado anterior / siguiente (87 / 88) |
 | ⏪ / ⏩ (46 / 47), mantenidos | FMASTER, fundido a negro: ⏪ hacia negro · ⏩ hacia la luz (de punta a punta en 2 s; al soltar queda donde está) |
 | ↑ ↓ ← → (96–99) | mute de las filas 8 · 7 · 6 · 5 |
@@ -354,7 +372,7 @@ Los pads van de izquierda a derecha y de abajo hacia arriba.
 
 ### Canciones que manejan el Shift (Perdido)
 
-`GP.midi.shiftDirecto(true)`, después de `GP.midi.alMensaje(...)`: la canción recibe el Shift (98) al apretar y al soltar, y GP_midi no oculta nada por su lado (lo hace la canción). `GP.midi.filas()` y `GP.midi.alMensaje()` lo vuelven a apagar, así no queda prendido al pasar a otra canción.
+`GP.midi.shiftDirecto(true)`, después de `GP.midi.alMensaje(...)`: la canción recibe el Shift (98) al apretar y al soltar. Un toque corto (menos de 0,4 s, sin usarlo con nada) sigue siendo un paso de ocultar de GP_midi. `GP.midi.filas()` y `GP.midi.alMensaje()` lo vuelven a apagar, así no queda prendido al pasar a otra canción.
 
 ### Ajustes
 

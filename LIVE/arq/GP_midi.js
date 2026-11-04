@@ -5,7 +5,9 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-11-04 (v1.12: SMC ⏪ ⏩ = fundido (mantener) · perilla 8 = versión de F8 · perillas sin versiones =
+// Actualizado: 2026-11-04 (v1.13: el Shift oculta en 3 pasos (código → controles → todo vuelve) · caja
+//              "lo último que tocaste" arriba a la derecha (Akai, SMC, JP) · GP.midi.anotar() para las canciones)
+//              2026-11-04 (v1.12: SMC ⏪ ⏩ = fundido (mantener) · perilla 8 = versión de F8 · perillas sin versiones =
 //              siguiente variante (64-71) · JP-Mini bank 3 PAD 13 = 86 · lo que las consolas no traducen ya no
 //              llega al sketch · GP.midi.shiftDirecto() para canciones que manejan el Shift (Perdido))
 //              2026-10-30 (v1.11: la fila 4 pasa a ser de pads (como la 1-3); disparo = filas 5-8 ·
@@ -49,7 +51,8 @@
 //   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
 //     apagado = versión 1 · prendido = versión 2 · parpadea = versión 3
 //   89 = grabador (GP_tools)
-//   98 (Shift, sin LED) = ocultar / mostrar todo: código, barras del mic y paneles
+//   98 (Shift, sin LED) = ocultar en 3 pasos: 1º el código · 2º también los controles
+//                         (paneles, barras del mic, caja del último toque) · 3º vuelve todo
 //
 // Sin Akai: SMC-Mixer + JP-Mini (ver "Otras consolas" más abajo y el manual).
 // Lo que tocás en ellas entra como si fuera el Akai: las canciones no cambian.
@@ -59,7 +62,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.12'
+  const VERSION = 'v1.13'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -451,6 +454,7 @@
     versiones.actual[f] = nueva
     guardarVersiones()
     pintarVersiones()
+    if (origen === 'akai') anotar(ultimo.desde || 'Akai', 'v' + f, `${nombreControl('V' + f.slice(1))} → versión ${nueva + 1} de ${n}`)
     if (alVersion) try { alVersion(f, nueva, origen) } catch (err) { console.error('[GP MIDI] alVersion:', err) }
   }
 
@@ -494,22 +498,17 @@
   }
 
   // ============================================================
-  // Ocultar / mostrar todo (Shift 98 del Akai · GP.midi.ocultarTodo)
-  // Oculta el código de Hydra, las barras del mic y lo que se anote con
-  // GP.midi.alOcultar (las cajas de GP_tools). Anda con o sin GP_tools.
-  // Si el motor de la canción ya maneja el 98 (su toggleCodigo), no lo
-  // repite: sólo se pone al día y completa lo que falte.
+  // Ocultar en 3 pasos (Shift 98 · GP.midi.ocultarPaso / ocultarTodo)
+  //   nivel 0 = todo a la vista
+  //   nivel 1 = sin el código de Hydra (los controles siguen)
+  //   nivel 2 = sin código ni controles: paneles de GP_tools, barras del mic,
+  //             caja del último toque (todo lo anotado con GP.midi.alOcultar)
+  // Lo maneja GP_midi en todas las canciones (anda con o sin GP_tools).
   // ============================================================
   const PARTES_EDITOR = '.CodeMirror, #editor-container, #toolbar, #menu, #info-container, #modal'
   // estado compartido (mismo código en GP_tools.js): sobrevive a reevaluar y al orden de carga
   const ocu = window._gpOcultar || (window._gpOcultar = { visible: true, bins: false, oyentes: {} })
-
-  const firmaEditor = () => [...document.querySelectorAll(PARTES_EDITOR)]
-    .map(el => `${el.style.visibility}/${el.style.display}`).join('|')
-  const editorVisible = () => {
-    const el = document.querySelector('.CodeMirror, #editor-container')
-    return !el || (el.style.visibility !== 'hidden' && el.style.display !== 'none')
-  }
+  if (ocu.nivel == null) ocu.nivel = ocu.visible ? 0 : 2
   // barras del mic de Hydra (a.show / a.hide): al volver, sólo si estaban a la vista
   const ponerBins = (visible) => {
     try {
@@ -524,12 +523,17 @@
       try { ocu.oyentes[id](visible) } catch (err) { console.error(`[GP MIDI] ocultar · ${id}:`, err) }
     }
   }
-  const ocultarTodo = (visible = !ocu.visible) => {
-    ocu.visible = !!visible
-    document.querySelectorAll(PARTES_EDITOR).forEach(el => { el.style.visibility = ocu.visible ? '' : 'hidden' })
-    ponerBins(ocu.visible)
-    avisarOcultar(ocu.visible)
+  const NIVEL_TXT = ['todo a la vista', 'código oculto', 'todo oculto']
+  const ponerNivel = (nivel) => {
+    ocu.nivel = ((nivel % 3) + 3) % 3
+    const codigo = ocu.nivel === 0
+    const controles = ocu.nivel < 2
+    ocu.visible = controles               // (GP_tools lo lee como "controles a la vista")
+    document.querySelectorAll(PARTES_EDITOR).forEach(el => { el.style.visibility = codigo ? '' : 'hidden' })
+    ponerBins(controles)
+    avisarOcultar(controles)
   }
+  const ocultarPaso = () => { ponerNivel(ocu.nivel + 1); anotar(ultimo.desde || '', 'shift', `Shift → ${NIVEL_TXT[ocu.nivel]}`) }
 
   let alMensaje = null
 
@@ -542,6 +546,7 @@
     let muteado = false
 
     if (st < 0xf0 && cfg.akai.test(nombre) && canal === cfg.canal) {
+      ultimo.desde = origenDe(nombre)   // de qué consola vino (para la caja del último toque)
       // fader
       if (tipo === 0xb0 && d1 >= 48 && d1 <= 56) {
         const limpio = esVirtual(nombre) ? d2 : limpiarFader(CC_TO_FADER[d1], d2)   // la zona muerta es del Akai
@@ -549,15 +554,34 @@
         saveFader(d1, limpio)
         if (d1 === FADER_CC.FMASTER) { fundido.movido = true; aplicarFundido() }
         for (const fn of state.faderHandlers[d1] || []) fn(limpio)
+        const fz = CC_TO_FADER[d1]
+        if (d1 === FADER_CC.FMASTER) anotar(origenDe(nombre), 'cc56', `fundido → ${Math.round(limpio / 1.27)}% de luz`)
+        else anotar(origenDe(nombre), 'cc' + d1, `${nombreControl(fz)} → ${limpio}`)
       }
       if (esOn || esOff) {
         const fila = Math.floor(d1 / 8) + 1
         // pad de una fila de disparo configurada
-        if (d1 <= 63 && filas[fila] && filas[fila].cfg) padDeMano(fila, d1 % 8, d2, esOn)
+        if (d1 <= 63 && filas[fila] && filas[fila].cfg) {
+          padDeMano(fila, d1 % 8, d2, esOn)
+          if (esOn) anotar(origenDe(nombre), 'pad' + d1, `fila ${fila} · pad ${d1 % 8 + 1}`)
+        }
         // botón de mute (82..85)
-        else if (esOn && d1 >= 82 && d1 <= 86) alternarMute(90 - d1)
+        else if (esOn && d1 >= 82 && d1 <= 86) {
+          const fm = 90 - d1
+          alternarMute(fm)
+          const f = filas[fm]
+          if (f && f.cfg && f.cfg.canal != null) anotar(origenDe(nombre), 'mute' + fm, `${nombreControl('M' + fm, `mute fila ${fm}`)} → ${f.mute ? 'muteada' : 'recibe'}`)
+        }
         // botón de versión arriba de cada fader (64..71)
-        else if (esOn && d1 >= 64 && d1 <= 71) { const f = `F${d1 - 63}`; ponerVersion(f, versionDe(f) + 1, 'akai') }
+        else if (esOn && d1 >= 64 && d1 <= 71) {
+          const f = `F${d1 - 63}`
+          ultimo.desde = origenDe(nombre)
+          if (versiones.cuantas[f]) ponerVersion(f, versionDe(f) + 1, 'akai')
+          else anotar(origenDe(nombre), 'b' + d1, `col ${d1 - 63} · siguiente variante`, { reemplazable: true })
+        }
+        // estados · grabador (los manejan GP_estados / GP_tools: acá sólo se anota)
+        else if (esOn && (d1 === 87 || d1 === 88)) anotarEstado(origenDe(nombre), d1 === 88 ? '⏭' : '⏮')
+        else if (esOn && d1 === 89) anotarGrabador(origenDe(nombre))
         // pad de las filas 1-3 (o donde el sketch los habilite): toggle · piano · estados
         else if (d1 <= 63 && state.activeButtons.includes(d1)) {
           const modo = modoDe(d1)
@@ -572,6 +596,10 @@
             pintarBoton(d1)
             const valor = valorBoton(d1)
             for (const fn of state.buttonHandlers[d1] || []) fn({ note: d1, active: !!valor, valor, modo, data })
+            const ref = nombreDeBoton(d1)
+            if (modo === 'piano') { if (esOn) anotar(origenDe(nombre), 'n' + d1, `${nombreControl(ref)} → apretado`) }
+            else if (typeof modo === 'number') anotar(origenDe(nombre), 'n' + d1, `${nombreControl(ref)} → posición ${valor}`)
+            else anotar(origenDe(nombre), 'n' + d1, `${nombreControl(ref)} → ${valor ? 'prendido' : 'apagado'}`)
           }
         }
       }
@@ -587,26 +615,20 @@
       if (fila) muteado = filas[fila].mute
     }
 
-    // Shift (98) del Akai: al apretarlo no pasa nada todavía (puede ser Shift + pad).
-    // Al soltarlo, si no lo usaste con ningún pad = ocultar / mostrar todo.
+    // Shift (98) del Akai: tocar y soltar sin usarlo con nada = un paso de ocultar.
+    // Shift + pad / fader / botón: no oculta. Las canciones normales no lo reciben;
+    // con GP.midi.shiftDirecto() (Perdido) lo reciben al apretar y al soltar.
     const esAkai = st < 0xf0 && canal === cfg.canal && cfg.akai.test(nombre)
     if (esAkai && d1 === 98 && (esOn || esOff)) {
-      if (cfg.shiftDirecto) {
-        // la canción maneja el Shift (Perdido): lo recibe al apretar y al soltar
-        shift.apretado = esOn
-        const antes = esOff ? firmaEditor() : null
-        entregar(nombre, data, { muteado: false })
-        if (esOff && firmaEditor() !== antes) { ocu.visible = editorVisible(); ponerBins(ocu.visible); avisarOcultar(ocu.visible) }
-        return
-      }
+      if (cfg.shiftDirecto) entregar(nombre, data, { muteado: false })
       if (esOn) {
-        shift.apretado = true; shift.usado = false; shift.dato = data; shift.nombre = nombre
+        shift.apretado = true; shift.usado = false; shift.desde = performance.now()
         clearTimeout(shift.timer)
         shift.timer = setTimeout(soltarShift, 4000)   // por si el aviso de soltar no llega
       } else soltarShift()
       return
     }
-    if (esAkai && esOn && shift.apretado) shift.usado = true
+    if (esAkai && shift.apretado && (esOn || tipo === 0xb0)) shift.usado = true
 
     entregar(nombre, data, { muteado })
   }
@@ -621,19 +643,83 @@
     clearTimeout(shift.timer)
     if (!shift.apretado) return
     shift.apretado = false
-    if (shift.usado) return   // Shift + pad: el sketch no se entera del Shift
-    // el sketch recibe el Shift recién ahora (los motores de Vociferan / James ocultan con él)
-    const firmaAntes = firmaEditor()
-    entregar(shift.nombre, shift.dato, { muteado: false })
-    entregar(shift.nombre, new Uint8Array([0x80 | cfg.canal, 98, 0]), { muteado: false })
-    if (firmaEditor() === firmaAntes) ocultarTodo()
-    else {
-      // lo hizo el motor de la canción: nos ponemos al día y completamos (barras del mic, paneles)
-      ocu.visible = editorVisible()
-      ponerBins(ocu.visible)
-      avisarOcultar(ocu.visible)
-    }
+    if (shift.usado) return                                                   // Shift + algo: no oculta
+    if (cfg.shiftDirecto && performance.now() - shift.desde > 400) return    // Perdido: sólo un toque corto
+    ocultarPaso()
   }
+
+  // ============================================================
+  // Lo último que tocaste (arriba a la derecha) · GP.midi.anotar()
+  // Las últimas acciones de las consolas (Akai, SMC, JP), en palabras.
+  // Se apagan solas; se ocultan con el 2º paso del Shift.
+  // ============================================================
+  const ultimo = window._gpUltimo || (window._gpUltimo = { lineas: [], activo: true })
+  ultimo.desde = ''
+  const ULT = { max: 4, ms: 7000 }
+  const origenDe = (nombre) => {
+    if (!nombre) return ultimo.desde || ''
+    if (/virtual \(SMC/i.test(nombre)) return 'SMC'
+    if (/virtual \(JP/i.test(nombre)) return 'JP'
+    if (cfg.ensayo.test(nombre)) return 'ensayo'
+    return 'Akai'
+  }
+  const nombreControl = (ref, alt) => {
+    let k = null
+    try { const m = GP.estados && GP.estados.nombres; k = m && m[ref] } catch (_) {}
+    return k ? `${ref} ${k}` : (alt || ref)
+  }
+  const cajaUltimo = () => {
+    let el = document.getElementById('gpUltimo')
+    if (!el) {
+      el = document.createElement('div')
+      el.id = 'gpUltimo'
+      el.style.cssText = 'position:fixed; top:8px; right:8px; z-index:2147483646; box-sizing:border-box; background:rgba(0,0,0,0.65); color:#ddd; font:11px/1.5 monospace; padding:4px 8px; border-radius:3px; white-space:pre; pointer-events:none; text-align:left;'
+    }
+    // fuera del <body>: el editor de Hydra re-dibuja el body y se lo llevaría
+    if (!el.isConnected) document.documentElement.appendChild(el)
+    return el
+  }
+  const pintarUltimo = () => {
+    clearTimeout(ultimo.timer)
+    const ahora = performance.now()
+    ultimo.lineas = ultimo.lineas.filter(l => ahora - l.t < ULT.ms)
+    const el = cajaUltimo()
+    const visible = ultimo.activo && ocu.nivel < 2 && ultimo.lineas.length > 0
+    el.style.display = visible ? '' : 'none'
+    if (!visible) return
+    // debajo de la caja de estados de GP_tools (también arriba a la derecha), si está
+    const ov = document.getElementById('gpOverlayEstado')
+    const r = ov && ov.isConnected && getComputedStyle(ov).display !== 'none' ? ov.getBoundingClientRect() : null
+    el.style.top = `${r && r.height ? Math.round(r.bottom + 6) : 8}px`
+    el.innerHTML = ''
+    for (const l of ultimo.lineas) {
+      const fila = document.createElement('div')
+      const edad = (ahora - l.t) / ULT.ms
+      fila.style.opacity = String(Math.max(0.25, 1 - edad * 0.8))
+      fila.textContent = `${(l.origen || '').padEnd(6)}${l.texto}`
+      el.appendChild(fila)
+    }
+    ultimo.timer = setTimeout(pintarUltimo, 500)
+  }
+  // clave: si la última línea es del mismo control (un fader que se mueve), se actualiza en vez de sumar otra
+  function anotar(origen, clave, texto, op = {}) {
+    if (!texto) return
+    const ahora = performance.now()
+    const l0 = ultimo.lineas[0]
+    if (l0 && clave && l0.clave === clave && ahora - l0.t < 2500) Object.assign(l0, { t: ahora, origen, texto, reemplazable: !!op.reemplazable })
+    else ultimo.lineas.unshift({ t: ahora, origen, clave, texto, reemplazable: !!op.reemplazable })
+    ultimo.lineas.length = Math.min(ultimo.lineas.length, ULT.max)
+    pintarUltimo()
+  }
+  const anotarEstado = (origen, flecha) => setTimeout(() => {
+    const E = GP.estados
+    if (!E) return
+    anotar(origen, 'estado', `${flecha} estado ${E.numero}${E.nombre ? ' · ' + E.nombre : ''}${E.suspendido ? ' (en pausa)' : ''}`)
+  }, 80)
+  const anotarGrabador = (origen) => setTimeout(() => {
+    anotar(origen, 'grab', valorFinal(89) === 2 ? '● grabando' : '■ grabación detenida')
+  }, 200)
+  ocu.oyentes.ultimo = () => pintarUltimo()
 
   // ============================================================
   // Otras consolas: SMC-Mixer + JP-Mini → Akai
@@ -719,6 +805,7 @@
       const paso = Math.sign(consolas.perillas[i])
       consolas.perillas[i] = 0
       const v = Math.max(0, Math.min(n - 1, versionDe(f) + paso))   // sin dar la vuelta
+      ultimo.desde = 'SMC'
       ponerVersion(f, v, 'akai')
       return
     }
@@ -744,10 +831,15 @@
     }
     if (esNota) {
       if (!esOn) return
-      if (d1 === 94) { if (GP.tools && GP.tools.grabadorCiclo) GP.tools.grabadorCiclo(); return }
-      if (d1 === 93) { if (GP.estados && GP.estados.suspender) GP.estados.suspender(); marcar(87); return }
-      if (d1 === 91) { if (GP.estados && GP.estados.anterior) GP.estados.anterior('SMC ⏮'); return }
-      if (d1 === 92) { if (GP.estados && GP.estados.siguiente) GP.estados.siguiente('SMC ⏭'); return }
+      if (d1 === 94) { if (GP.tools && GP.tools.grabadorCiclo) GP.tools.grabadorCiclo(); anotarGrabador('SMC'); return }
+      if (d1 === 93) {
+        if (GP.estados && GP.estados.suspender) GP.estados.suspender()
+        marcar(87)
+        anotar('SMC', 'pausa', GP.estados && GP.estados.suspendido ? '⏸ estados en pausa' : '▶ estados andando')
+        return
+      }
+      if (d1 === 91) { if (GP.estados && GP.estados.anterior) GP.estados.anterior('SMC ⏮'); anotarEstado('SMC', '⏮'); return }
+      if (d1 === 92) { if (GP.estados && GP.estados.siguiente) GP.estados.siguiente('SMC ⏭'); anotarEstado('SMC', '⏭'); return }
     }
     // lo demás no llega al sketch: son notas en canal 1, se confundirían con el bajo / la melodía
   }
@@ -1014,8 +1106,19 @@
 
   // ocultar / mostrar todo (lo mismo que el Shift 98): código, barras del mic y paneles.
   //   GP.midi.ocultarTodo() alterna · (true) oculta · (false) muestra
-  M.ocultarTodo = (oculto = ocu.visible) => { ocultarTodo(!oculto); return M }
-  M.oculto = () => !ocu.visible
+  M.ocultarTodo = (oculto = ocu.nivel !== 2) => { ponerNivel(oculto ? 2 : 0); return M }
+  M.ocultarPaso = () => { ocultarPaso(); return M }           // lo mismo que tocar el Shift
+  M.oculto = () => ocu.nivel === 2
+  M.nivelOculto = () => ocu.nivel                              // 0 todo · 1 sin código · 2 nada
+  // caja "lo último que tocaste": GP.midi.anotar('col 3 · color → canales') desde la canción.
+  //   { reemplazar: true } pisa la línea genérica que GP_midi acaba de escribir para ese mismo toque.
+  M.anotar = (texto, op = {}) => {
+    const l0 = ultimo.lineas[0]
+    if (op.reemplazar && l0 && l0.reemplazable && performance.now() - l0.t < 500) { l0.texto = texto; l0.reemplazable = false; pintarUltimo(); return M }
+    anotar(op.origen || ultimo.desde || '', op.clave || null, texto)
+    return M
+  }
+  M.ultimoToque = (on = !ultimo.activo) => { ultimo.activo = !!on; pintarUltimo(); return M }
   // otro módulo que tenga cosas en pantalla: GP.midi.alOcultar('id', visible => {...}). Mismo id = reemplaza.
   M.alOcultar = (id, fn) => { if (fn) ocu.oyentes[id] = fn; else delete ocu.oyentes[id]; return M }
 
