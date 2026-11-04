@@ -5,7 +5,10 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-10-30 (v1.11: la fila 4 pasa a ser de pads (como la 1-3); disparo = filas 5-8 ·
+// Actualizado: 2026-11-04 (v1.12: SMC ⏪ ⏩ = fundido (mantener) · perilla 8 = versión de F8 · perillas sin versiones =
+//              siguiente variante (64-71) · JP-Mini bank 3 PAD 13 = 86 · lo que las consolas no traducen ya no
+//              llega al sketch · GP.midi.shiftDirecto() para canciones que manejan el Shift (Perdido))
+//              2026-10-30 (v1.11: la fila 4 pasa a ser de pads (como la 1-3); disparo = filas 5-8 ·
 //              SMC-Mixer + JP-Mini se traducen al Akai (sin Akai las canciones andan igual))
 //              2026-10-25 (v1.10: pads de las filas 1-3 con modo — toggle · piano · 2 a 4 estados (Shift + pad = atrás) ·
 //              toggle prendido = verde parpadeo · el Shift oculta al SOLTARLO, y no oculta si lo usaste con un pad)
@@ -56,7 +59,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.11'
+  const VERSION = 'v1.12'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -118,12 +121,12 @@
       jp: /jp-?mini/i,                               // JAMJUM JP-Mini, preset 1 (USB o el puerto jpmini)
       ignorar: /midiin2|luces/i,                     // la SMC por USB llega dos veces · puertos de luces
       smcLuces: /^smc-mixer$|^midiout2 \(smc-mixer\)$|smc.*luces/i,   // a dónde van las luces de la SMC
-      pasosVersion: 3,                               // clicks de perilla para pasar de versión
-      pasoFundido: 4,                                // cuánto mueve cada click de la perilla 8 (de 127)
+      pasosVersion: 3,                               // clicks de perilla para pasar de versión / variante
+      msFundido: 2000,                               // ⏪ ⏩ mantenidos: ms de pleno a negro
     },
   }
   // estado de las otras consolas (se llena al conectar)
-  const consolas = { smcLuces: [], smcEnviado: {}, perillas: {}, vistas: new Set() }
+  const consolas = { smcLuces: [], smcEnviado: {}, perillas: {}, vistas: new Set(), fundidoTimer: null }
 
   // Valores de color del APC mini (mk1) para la grilla 8x8:
   const COLOR = {
@@ -588,6 +591,14 @@
     // Al soltarlo, si no lo usaste con ningún pad = ocultar / mostrar todo.
     const esAkai = st < 0xf0 && canal === cfg.canal && cfg.akai.test(nombre)
     if (esAkai && d1 === 98 && (esOn || esOff)) {
+      if (cfg.shiftDirecto) {
+        // la canción maneja el Shift (Perdido): lo recibe al apretar y al soltar
+        shift.apretado = esOn
+        const antes = esOff ? firmaEditor() : null
+        entregar(nombre, data, { muteado: false })
+        if (esOff && firmaEditor() !== antes) { ocu.visible = editorVisible(); ponerBins(ocu.visible); avisarOcultar(ocu.visible) }
+        return
+      }
       if (esOn) {
         shift.apretado = true; shift.usado = false; shift.dato = data; shift.nombre = nombre
         clearTimeout(shift.timer)
@@ -632,8 +643,8 @@
   //
   //   SMC-Mixer                         Akai
   //   faders 1-8 (pitch bend)        →  F1-F8
-  //   perillas 1-7                   →  versión de F1-F7 (girar = anterior / siguiente)
-  //   perilla 8                      →  FMASTER (fundido a negro)
+  //   perillas 1-8                   →  versión de F1-F8 (girar = anterior / siguiente)
+  //                                     sin versiones en ese fader → botón 64-71 (Perdido: siguiente variante)
   //   botones fila 1 (24-31, arriba) →  fila 4 (24-31)
   //   botones fila 2 (0-7)           →  fila 3 (16-23)
   //   botones fila 3 (8-15)          →  fila 2 (8-15)
@@ -641,12 +652,13 @@
   //   ▶ 94 → grabador (89) · ⏸ 93 → pausar estados · ■ 95 → Shift (98)
   //   ⏮ 91 / ⏭ 92 → estado anterior / siguiente (87 / 88)
   //   ↑ 96 · ↓ 97 · ← 98 · → 99     →  mute filas 8 · 7 · 6 · 5 (82-85)
-  //   ⏪ 46 / ⏩ 47                    →  libres (llegan al sketch tal cual)
+  //   ⏪ 46 / ⏩ 47 (mantener)          →  FMASTER: ⏪ hacia negro · ⏩ hacia la luz
   //
   //   JP-Mini (preset 1, 4x4, pads de abajo a arriba)
   //   bank 1 (36-51): pads 1-8 → fila 5 · pads 9-16 → fila 6
   //   bank 2 (52-67): pads 1-8 → fila 7 · pads 9-16 → fila 8
-  //   bank 3 (68-83) y ▶ ■ ● (CC 22-24) → libres (llegan al sketch tal cual)
+  //   bank 3 (68-83): PAD 13 → 86 (asignación en Perdido) · el resto y ▶ ■ ● (CC 22-24) libres
+  //   Lo que no se traduce NO llega al sketch (no se confunde con un instrumento).
   // ============================================================
   const VIRTUAL = 'APC virtual'
   const esVirtual = nombre => typeof nombre === 'string' && nombre.startsWith(VIRTUAL)
@@ -690,16 +702,17 @@
       const i = d1 - 16
       const dir = d2 > 0 && d2 < 64 ? d2 : d2 > 64 ? -(d2 - 64) : 0
       if (!dir) return
-      if (i === 7) {   // perilla 8 = FMASTER
-        const cc = FADER_CC.FMASTER
-        const desde = fundido.movido ? state.faderValues[cc] : 127   // sin tocar, arranca a pleno
-        const v = Math.max(0, Math.min(127, Math.round(desde + dir * cfg.consolas.pasoFundido)))
-        akaiVirtual('SMC', [0xb0 | cfg.canal, cc, v])
-        return
-      }
       const f = `F${i + 1}`
       const n = versiones.cuantas[f]
-      if (!n) return
+      if (!n) {
+        // sin versiones (ej. Perdido): cada 3 clicks, para cualquier lado = botón 64-71 del Akai
+        consolas.perillas[i] = (consolas.perillas[i] || 0) + Math.abs(dir)
+        if (consolas.perillas[i] < cfg.consolas.pasosVersion) return
+        consolas.perillas[i] = 0
+        notaAkai('SMC', 64 + i, 127, true)
+        notaAkai('SMC', 64 + i, 0, false)
+        return
+      }
       consolas.perillas[i] = (consolas.perillas[i] || 0) + dir
       const pasos = cfg.consolas.pasosVersion
       if (Math.abs(consolas.perillas[i]) < pasos) return
@@ -710,6 +723,25 @@
       return
     }
     if (esNota && SMC_A_AKAI[d1] != null) { notaAkai('SMC', SMC_A_AKAI[d1], d2, esOn); return }
+    // ⏪ 46 / ⏩ 47 mantenidos = FMASTER (fundido a negro)
+    if (esNota && (d1 === 46 || d1 === 47)) {
+      clearInterval(consolas.fundidoTimer)
+      consolas.fundidoTimer = null
+      if (!esOn) return
+      const cc = FADER_CC.FMASTER
+      const dirF = d1 === 46 ? -1 : 1
+      const cada = 30
+      const paso = 127 * cada / cfg.consolas.msFundido
+      let v = fundido.movido ? state.faderValues[cc] : 127   // sin tocar, arranca a pleno
+      const mover = () => {
+        v = Math.max(0, Math.min(127, v + dirF * paso))
+        akaiVirtual('SMC', [0xb0 | cfg.canal, cc, Math.round(v)])
+        if (v <= 0 || v >= 127) { clearInterval(consolas.fundidoTimer); consolas.fundidoTimer = null }
+      }
+      mover()
+      consolas.fundidoTimer = setInterval(mover, cada)
+      return
+    }
     if (esNota) {
       if (!esOn) return
       if (d1 === 94) { if (GP.tools && GP.tools.grabadorCiclo) GP.tools.grabadorCiclo(); return }
@@ -717,7 +749,7 @@
       if (d1 === 91) { if (GP.estados && GP.estados.anterior) GP.estados.anterior('SMC ⏮'); return }
       if (d1 === 92) { if (GP.estados && GP.estados.siguiente) GP.estados.siguiente('SMC ⏭'); return }
     }
-    entregar(nombre, data, { muteado: false })   // ⏪ ⏩ y lo demás: al sketch tal cual
+    // lo demás no llega al sketch: son notas en canal 1, se confundirían con el bajo / la melodía
   }
 
   const traducirJP = (nombre, data) => {
@@ -731,7 +763,9 @@
       notaAkai('JP-Mini', (fila - 1) * 8 + (pad % 8), d2, tipo === 0x90 && d2 > 0)
       return
     }
-    entregar(nombre, data, { muteado: false })   // bank 3 y ▶ ■ ●: al sketch tal cual
+    // bank 3, PAD 13 = 86 (asignación en Perdido)
+    if ((tipo === 0x90 || tipo === 0x80) && d1 === 80) { notaAkai('JP-Mini', 86, d2, tipo === 0x90 && d2 > 0); return }
+    // lo demás no llega al sketch: son notas en canal 10, se confundirían con la batería
   }
 
   // todo lo que entra por el bus pasa por acá
@@ -757,7 +791,7 @@
       nota = 93
       on = !!(GP.estados && GP.estados.suspendido)
     } else if (nota == null) return 0
-    else if (n <= 31) on = v >= 2                 // pads: verde fijo = reposo → apagado
+    else if (n <= 31) on = state.activeButtons.includes(n) ? v >= 2 : v > 0   // pads: verde fijo = reposo · luces libres (Perdido): prendido = hay algo
     else if (n >= 82 && n <= 85) on = v === 1     // mute: prendido = recibiendo
     else if (n === 89) on = v === 2               // grabador: prendido mientras graba
     else on = !!v
@@ -836,13 +870,19 @@
 
   // función propia del sketch para TODO lo que entra (korg, akai, ensayo).
   // Llamala en cada evaluación: reemplaza a la anterior, no se acumula.
-  M.alMensaje = (fn) => { alMensaje = fn; return M }
+  M.alMensaje = (fn) => { alMensaje = fn; cfg.shiftDirecto = false; return M }
+  // la canción maneja el Shift (98) por su cuenta (Perdido: Shift + fader, Shift + botones):
+  //   lo recibe en el momento, al apretar y al soltar, y GP_midi no oculta nada por su lado.
+  //   Llamarlo DESPUÉS de GP.midi.alMensaje / GP.midi.filas (esos lo vuelven a apagar, así no queda
+  //   prendido al pasar a otra canción).
+  M.shiftDirecto = (on = true) => { cfg.shiftDirecto = !!on; return M }
 
   // filas de disparo 5-8. Cada fila: { puerto, canal (1-16), notas | rango | pulso }
   //   puerto: regex del aparato (ej /korg/i, /keystep/i). Sin puerto = cualquier aparato menos el Akai.
   //   null = fila apagada · {} sin canal = sólo disparo a mano
   // El mute y el "ya llegó" se conservan al reevaluar.
   M.filas = function (config = {}) {
+    cfg.shiftDirecto = false
     for (const k of Object.keys(config)) {
       if (!FILAS_DISPARO.includes(Number(k)) && config[k]) console.warn(`[GP MIDI] fila ${k}: las filas de disparo son de la 5 a la 8 (la 1-4 son de pads: GP.midi.buttons)`)
     }

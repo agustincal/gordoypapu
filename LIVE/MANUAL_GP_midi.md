@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-10-30 · GP_midi v1.11 · GP_tools v1.15 · GP_estados v1.4 (ver su manual)
+Actualizado: 2026-11-04 · GP_midi v1.12 · GP_tools v1.15 · GP_estados v1.4 (ver su manual)
 Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
@@ -324,8 +324,7 @@ Cuando no está el Akai, GP_midi traduce lo que se toca en la **M-VAVE SMC-Mixer
 | Control | Equivale en el Akai |
 |---|---|
 | Faders 1–8 | F1–F8 (sin la zona muerta del F7 del Akai) |
-| Perillas 1–7 (girar) | versión de F1–F7: derecha = siguiente · izquierda = anterior (3 clicks por paso, no da la vuelta) |
-| Perilla 8 | FMASTER, fundido a negro (izquierda = más negro) |
+| Perillas 1–8 (girar) | versión de F1–F8: derecha = siguiente · izquierda = anterior (3 clicks por paso, no da la vuelta). Si ese fader no tiene versiones (Perdido): botón 64–71 del Akai, para cualquier lado |
 | Botones, fila 1 (arriba) | fila 4 |
 | Fila 2 | fila 3 |
 | Fila 3 | fila 2 |
@@ -334,7 +333,7 @@ Cuando no está el Akai, GP_midi traduce lo que se toca en la **M-VAVE SMC-Mixer
 | ⏸ pausa (93) | pausar / reanudar los estados |
 | ■ stop (95) | Shift (98): solo = ocultar todo al soltar · mantenido + pad de posiciones = posición anterior |
 | ⏮ / ⏭ (91 / 92) | estado anterior / siguiente (87 / 88) |
-| ⏪ / ⏩ (46 / 47) | libres (llegan al sketch con `GP.midi.alMensaje`) |
+| ⏪ / ⏩ (46 / 47), mantenidos | FMASTER, fundido a negro: ⏪ hacia negro · ⏩ hacia la luz (de punta a punta en 2 s; al soltar queda donde está) |
 | ↑ ↓ ← → (96–99) | mute de las filas 8 · 7 · 6 · 5 |
 
 Luces (un solo color, prender / apagar): pads activos (toggle prendido, posición 1–3, piano apretado) · mute prendido = recibiendo · ▶ prendido mientras graba · ⏸ prendido con los estados en pausa.
@@ -347,11 +346,18 @@ Los pads van de izquierda a derecha y de abajo hacia arriba.
 |---|---|---|
 | 1 · naranja (notas 36–51) | fila 5 | fila 6 |
 | 2 · verde (52–67) | fila 7 | fila 8 |
-| 3 · celeste (68–83) | libre | libre |
+| 3 · celeste (68–83) | libre | PAD 13 = 86 (asignación en Perdido) · 14–16 libres |
 
 - Sus luces no se pueden manejar desde Hydra: lo que suena y los mutes no se ven en la JP-Mini. Con KuSuite se pueden pintar los pads con colores fijos (por ejemplo un color por fila).
-- ▶ ■ ● de la JP-Mini (CC 22–24) y el bank 3: libres, llegan al sketch con `GP.midi.alMensaje`.
+- ▶ ■ ● de la JP-Mini (CC 22–24) y el resto del bank 3: libres.
+- **Lo que las consolas no traducen no llega al sketch**: la SMC manda notas en canal 1 y la JP-Mini en canal 10, y se confundirían con el bajo o la batería.
+
+### Canciones que manejan el Shift (Perdido)
+
+`GP.midi.shiftDirecto(true)`, después de `GP.midi.alMensaje(...)`: la canción recibe el Shift (98) al apretar y al soltar, y GP_midi no oculta nada por su lado (lo hace la canción). `GP.midi.filas()` y `GP.midi.alMensaje()` lo vuelven a apagar, así no queda prendido al pasar a otra canción.
 
 ### Ajustes
 
-`GP.midi.config.consolas`: nombres de los puertos (`smc`, `jp`, `smcLuces`), `pasosVersion` (clicks por versión, 3) y `pasoFundido` (cuánto mueve cada click de la perilla 8, 4 de 127).
+`GP.midi.config.consolas`: nombres de los puertos (`smc`, `jp`, `smcLuces`), `pasosVersion` (clicks por versión o variante, 3) y `msFundido` (⏪ ⏩: de pleno a negro, 2000 ms).
+
+Respaldo: la v1.11 (antes de estos cambios, la última probada) está en el historial de git, commit del 30/10.
