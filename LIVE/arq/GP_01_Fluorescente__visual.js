@@ -1,12 +1,14 @@
 // ============================================================
-// GP_01_Fluorescente__visual.js  ·  LIVE/arq/
-// Pasado a LIVE el 21/10/2026 desde produccion/01_Fluorescente/arq (v2.16, que queda ahí como respaldo).
-// La versión anterior de LIVE (v2.0) quedó como LIVE/arq/GP_01_Fluorescente__visual_v01.js
+// GP_01_Fluorescente__visual.js  ·  LIVE/arq/  (VERSIÓN VALIDADA — única en LIVE)
+// Copiado a LIVE el 04/11/2026 desde produccion/01_Fluorescente/arq/GP_01_Fluorescente__visual.js
 // Canción: 01_Fluorescente (Gordo y Papu) · Fase 3
 // Rol: motor visual — arpegio, bajo y batería por canal, duración por nota,
 //      pantalla partida en dos mitades (la derecha puede rotar y/o atrasarse)
 // Lo carga el sketch (LIVE/sketches/01_Fluorescente_vXX.js); el sketch llama GP.fluorescente.*
-// Actualizado: 21/10/2026 (v2.16: arreglo: al salir del choque la mitad derecha quedaba corrida para siempre
+// Actualizado: 22/10/2026 (v2.17: opciones para el comportamiento de la v03 de producción:
+//              ritmoPorDuracion (false = velocidad pareja) y frenoSilencio (false = no frena).
+//              Por defecto quedan en true: lo que ya usaba este motor no cambia)
+//              21/10/2026 (v2.16: arreglo: al salir del choque la mitad derecha quedaba corrida para siempre
 //              (pantalla partida). Ahora vuelve a alinearse con la izquierda en ~0.3 s)
 //              21/10/2026 (v2.15: movimiento menos suavizado y ajustable: reaccionRitmo 0.33→0.1 s ·
 //              pasoSalto ~0.08 s · empuje del bombo con caída propia 0.15 s · cambio de sentido instantáneo)
@@ -71,7 +73,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v2.16'
+  const VERSION = 'LIVE-v2.17'
 
   if (GP.fluorescente && GP.fluorescente._version === VERSION) return
   GP.fluorescente = { _version: VERSION }
@@ -90,6 +92,8 @@
     bateria: { bombo: [35, 36], caja: [38, 40], hat: [42, 44, 46] },
     // decaimientos (segundos)
     caidaEnergia: 0.35, caidaBombo: 0.25, caidaCaja: 0.2, caidaHat: 0.1,
+    ritmoPorDuracion: true,   // false = velocidad pareja (como la v03): no acelera con notas cortas ni frena con sostenidas
+    frenoSilencio: true,      // false = no frena en silencio (como la v03)
     silencio: 0.6,            // segundos sin notas (ni sostenidas ni ataques) para frenar el movimiento
     caidaRitmo: 1.5,          // segundos que tarda en frenar hasta quedar quieto
     reaccionRitmo: 0.1,       // s: qué tan rápido la velocidad sigue al ritmo de las notas (antes 0.33)
@@ -237,9 +241,9 @@
       if (ahora - t0 > C.maxSostenida * 1000) { v.lastDur = ahora - t0; v.H.delete(n); continue }
       if (t0 > tNueva) tNueva = t0
     }
-    const ms = tNueva >= 0 ? ahora - tNueva : v.lastDur
+    const ms = C.ritmoPorDuracion ? (tNueva >= 0 ? ahora - tNueva : v.lastDur) : 250   // 250 ms → velocidad 1, pareja
     // silencio: nada sostenido y hace rato que no hay ataques → la velocidad cae a 0
-    const enSilencio = tNueva < 0 && ahora - v.tAtaque > C.silencio * 1000
+    const enSilencio = C.frenoSilencio && tNueva < 0 && ahora - v.tAtaque > C.silencio * 1000
     if (enSilencio) v.rate += (0 - v.rate) * clamp(k * 3 / Math.max(0.01, C.caidaRitmo))   // ~95% frenado en caidaRitmo s
     else v.rate += (msToRate(ms) - v.rate) * clamp(k / Math.max(0.01, C.reaccionRitmo))  // suaviza el ritmo
     v.phase += k * v.rate                                  // fase acumulada: sin saltos
@@ -556,5 +560,5 @@
     return V
   }
 
-  console.log('[GP] visual Fluorescente ' + VERSION + ' (LIVE) cargado')
+  console.log('[GP] visual Fluorescente ' + VERSION + ' (LIVE/arq) cargado')
 })()
