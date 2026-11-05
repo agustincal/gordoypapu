@@ -5,7 +5,9 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-11-04 (v1.15: Shift en 4 pasos — 1 código · 2 + manual de la canción en el centro ·
+// Actualizado: 2026-11-05 (v1.16: el grabador sale de las consolas (REC va en pantalla, GP_tools v1.17):
+//              el 89 del Akai y el ▶ 94 de la SMC quedan libres)
+//              2026-11-04 (v1.15: Shift en 4 pasos — 1 código · 2 + manual de la canción en el centro ·
 //              3 todo oculto · 4 vuelve todo. Manual: LIVE/manuales/<canción>.txt (o GP.midi.manual('…')).
 //              Sobre la v1.13 (la v1.14 de otro hilo quedó descartada))
 //              2026-11-04 (v1.13: el Shift oculta en 3 pasos (código → controles → todo vuelve) · caja
@@ -53,7 +55,7 @@
 //   87 / 88 = estado anterior / siguiente (GP_estados)
 //   botones 64-71 (arriba de cada fader F1..F8) = VERSIÓN del efecto de ese fader
 //     apagado = versión 1 · prendido = versión 2 · parpadea = versión 3
-//   89 = grabador (GP_tools)
+//   89 = libre (el grabador es un botón en pantalla de GP_tools)
 //   98 (Shift, sin LED) = 4 pasos: 1º sin el código · 2º + el manual de la canción en el centro ·
 //                         3º todo oculto (manual, paneles, barras del mic, último toque) · 4º vuelve todo
 //
@@ -65,7 +67,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.15'
+  const VERSION = 'v1.16'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -585,9 +587,8 @@
           if (versiones.cuantas[f]) ponerVersion(f, versionDe(f) + 1, 'akai')
           else anotar(origenDe(nombre), 'b' + d1, `col ${d1 - 63} · siguiente variante`, { reemplazable: true })
         }
-        // estados · grabador (los manejan GP_estados / GP_tools: acá sólo se anota)
+        // estados (los maneja GP_estados: acá sólo se anota)
         else if (esOn && (d1 === 87 || d1 === 88)) anotarEstado(origenDe(nombre), d1 === 88 ? '⏭' : '⏮')
-        else if (esOn && d1 === 89) anotarGrabador(origenDe(nombre))
         // pad de las filas 1-3 (o donde el sketch los habilite): toggle · piano · estados
         else if (d1 <= 63 && state.activeButtons.includes(d1)) {
           const modo = modoDe(d1)
@@ -722,9 +723,6 @@
     if (!E) return
     anotar(origen, 'estado', `${flecha} estado ${E.numero}${E.nombre ? ' · ' + E.nombre : ''}${E.suspendido ? ' (en pausa)' : ''}`)
   }, 80)
-  const anotarGrabador = (origen) => setTimeout(() => {
-    anotar(origen, 'grab', valorFinal(89) === 2 ? '● grabando' : '■ grabación detenida')
-  }, 200)
   ocu.oyentes.ultimo = () => pintarUltimo()
 
   // ============================================================
@@ -796,7 +794,7 @@
   //   botones fila 2 (0-7)           →  fila 3 (16-23)
   //   botones fila 3 (8-15)          →  fila 2 (8-15)
   //   botones fila 4 (16-23, abajo)  →  fila 1 (0-7)
-  //   ▶ 94 → grabador (89) · ⏸ 93 → pausar estados · ■ 95 → Shift (98)
+  //   ⏸ 93 → pausar estados · ■ 95 → Shift (98) · ▶ 94 libre (el grabador va en pantalla)
   //   ⏮ 91 / ⏭ 92 → estado anterior / siguiente (87 / 88)
   //   ↑ 96 · ↓ 97 · ← 98 · → 99     →  mute filas 8 · 7 · 6 · 5 (82-85)
   //   ⏪ 46 / ⏩ 47 (mantener)          →  FMASTER: ⏪ hacia negro · ⏩ hacia la luz
@@ -830,7 +828,6 @@
   Object.assign(SMC_A_AKAI, { 95: 98, 96: 82, 97: 83, 98: 84, 99: 85 })
   const AKAI_A_SMC = {}
   for (const [smc, akai] of Object.entries(SMC_A_AKAI)) if (akai !== 98) AKAI_A_SMC[akai] = Number(smc)
-  AKAI_A_SMC[89] = 94   // grabador → ▶
 
   const traducirSMC = (nombre, data) => {
     const [st, d1, d2] = data
@@ -892,7 +889,6 @@
     }
     if (esNota) {
       if (!esOn) return
-      if (d1 === 94) { if (GP.tools && GP.tools.grabadorCiclo) GP.tools.grabadorCiclo(); anotarGrabador('SMC'); return }
       if (d1 === 93) {
         if (GP.estados && GP.estados.suspender) GP.estados.suspender()
         marcar(87)
@@ -946,7 +942,6 @@
     } else if (nota == null) return 0
     else if (n <= 31) on = state.activeButtons.includes(n) ? v >= 2 : v > 0   // pads: verde fijo = reposo · luces libres (Perdido): prendido = hay algo
     else if (n >= 82 && n <= 85) on = v === 1     // mute: prendido = recibiendo
-    else if (n === 89) on = v === 2               // grabador: prendido mientras graba
     else on = !!v
     const val = on ? 127 : 0
     if (consolas.smcEnviado[nota] === val) return 0

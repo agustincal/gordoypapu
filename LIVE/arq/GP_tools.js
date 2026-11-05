@@ -4,11 +4,15 @@
 // Rol: panel MIDI + grabador (MIDI + mic + video de Hydra) + reproductor de ensayo
 // Reemplaza a __tools.js + __ensayo.js · Sólo para ensayo: no se carga en el show
 // Uso:  GP.tools.init({ cancion: '03_Vociferan' })
-//       Graba, muestra y maneja el pad 89 solo, apenas se carga.
+//       Graba (botón REC en pantalla o Ctrl+Alt+R), muestra el panel y el reproductor.
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-11-04 (v1.16: ensayos automáticos — LIVE/ensayos/<canción>/ en GitHub: al abrir la canción
+// Actualizado: 2026-11-05 (v1.18: el panel de entradas MIDI ya no muestra las consolas (Akai, SMC, JP-Mini):
+//              lo que tocás ahí lo cuenta la caja "lo último que tocaste". Sólo instrumentos, clock y estados)
+//              2026-11-05 (v1.17: el grabador sale de las consolas — REC es un botón en pantalla (clic = grabar /
+//              detener y guardar). El pad 89 del Akai y el ▶ de la SMC quedan libres. Ctrl+Alt+R sigue)
+//              2026-11-04 (v1.16: ensayos automáticos — LIVE/ensayos/<canción>/ en GitHub: al abrir la canción
 //              carga el más nuevo; ◀ ▶ en el panel pasa de un ensayo a otro · versión 0 = MIDI interpretado + original)
 //              2026-10-30 (v1.15: sugerencia de filas 5-8 (la 4 es de pads) · la SMC y la JP-Mini no cuentan como instrumentos)
 //              2026-10-23 (v1.14: el Shift (98) pasa a GP_midi (anda sin GP_tools); las cajas se anotan para ocultarse con él)
@@ -24,7 +28,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.16'
+  const VERSION = 'v1.18'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -46,7 +50,7 @@
     audio: 'auto',
     fps: 30,                // cuadros por segundo del video
     videoBitrate: 6e6,      // 6 Mbps · subilo si se ve pixelado, bajalo si pesa mucho
-    padGrabador: 89,
+    padGrabador: null,   // REC va en pantalla (clic). Un número = además ese pad del Akai graba (ej. 89)
     // reproductor de ensayo: a qué puerto loopMIDI va cada aparato grabado.
     // [aparato grabado, puerto de ensayo]. Además, automático: un puerto llamado
     // "<palabra>_Ensayo" recibe lo del aparato cuyo nombre contiene esa palabra
@@ -166,17 +170,25 @@
     : tipo === 0xb0 ? `cc  ${String(d1).padStart(3)} =${String(d2).padStart(3)}`
     : `0x${tipo.toString(16)} ${d1} ${d2}`
 
+  // las consolas (Akai, SMC, JP-Mini) no van en el panel: las muestra la caja "lo último que tocaste" de GP_midi
+  const esConsolaPanel = (ap) => {
+    if (/apc|akai_?ensayo/i.test(ap)) return true
+    const cons = GP.midi && GP.midi.config && GP.midi.config.consolas
+    return !!(cons && (cons.smc.test(ap) || cons.jp.test(ap)))
+  }
   const render = () => {
     renderPendiente = false
     const panel = T.panel()
     const ahora = performance.now()
     const filas = []
     for (const [ap, c] of clocks) {
+      if (esConsolaPanel(ap)) continue
       const vivo = ahora - c.t < 1000
       filas.push(`<span style="color:${vivo ? '#0f0' : '#555'}">${vivo ? '♩' : '·'}</span> ${corto(ap)} clock  ${vivo && c.bpm ? c.bpm.toFixed(1) + ' BPM' : 'detenido'}`)
     }
     const orden = [...canales.values()].sort((a, b) => a.aparato.localeCompare(b.aparato) || a.ch - b.ch)
     for (const c of orden) {
+      if (esConsolaPanel(c.aparato)) continue
       const activo = ahora - c.t < ACTIVO_MS
       let extra = ''
       if (GP.estados && GP.estados.esCanalEstados && GP.estados.esCanalEstados(c.aparato, c.ch)) {
@@ -405,12 +417,15 @@
 
   const indicador = crearCaja('gpRecIndicador', `
     bottom: 8px; right: ${MARGEN_DER}px; height: ${ALTO_FILA}px; display: flex; align-items: center;
-    font: bold 11px/1 monospace; pointer-events: none;
+    font: bold 11px/1 monospace; pointer-events: auto; cursor: pointer; user-select: none;
   `)
+  // REC en pantalla: clic = grabar / detener y guardar (ya no está en las consolas)
+  indicador.title = 'clic: grabar / detener y guardar (Ctrl+Alt+R)'
+  indicador.addEventListener('click', (e) => { e.preventDefault(); T.grabadorCiclo() })
 
   const ESTILOS = {
-    listo:     { fondo: 'rgba(0,0,0,0.65)', texto: '○ REC listo' },
-    grabando:  { fondo: 'rgba(200,0,0,0.85)', texto: '● GRABANDO' },
+    listo:     { fondo: 'rgba(0,0,0,0.65)', texto: '○ REC · clic para grabar' },
+    grabando:  { fondo: 'rgba(200,0,0,0.85)', texto: '■ GRABANDO' },
     iniciando: { fondo: 'rgba(200,0,0,0.5)', texto: '● iniciando…' },
     guardando: { fondo: 'rgba(170,150,0,0.85)', texto: '… GUARDANDO' },
     guardado:  { fondo: 'rgba(0,140,0,0.85)', texto: '✓ GUARDADO' },
@@ -426,7 +441,7 @@
     const e = ESTILOS[estado]
     indicador.style.background = e.fondo
     let texto = e.texto
-    if (estado === 'grabando') texto += ` ${reloj()} · ${partes.join('+')}`
+    if (estado === 'grabando') texto += ` ${reloj()} · ${partes.join('+')} · clic para guardar`
     indicador.textContent = texto
   }
 
@@ -435,13 +450,14 @@
   // el parpadeo lo hace el script (no depende del modo blink del Akai)
   T.led = {
     salida: null,      // MIDIOutput del Akai — lo asigna el sketch
-    nota: 89,          // último botón redondo de la columna derecha (el Shift 98 no tiene LED)
+    nota: null,        // sin pad: REC va en pantalla. Con cfg.padGrabador, el LED de ese pad
     on: 1,             // botones redondos: 1 = prendido
     off: 0,            //                   0 = apagado
     parpadeoMs: 400,
   }
   let ledPrendido = null
   const mandarLed = (prender) => {
+    if (T.led.nota == null) return
     if ((!T.led.salida && !(GP.midi && GP.midi.ledSistema)) || ledPrendido === prender) return
     ledPrendido = prender
     const valor = prender ? T.led.on : T.led.off
@@ -467,7 +483,8 @@
     estado = nuevo
     pintarIndicador()
     pintarLed()
-    if (typeof T.grabador.alCambiar === 'function') T.grabador.alCambiar(estado)  // ej: prender el LED del pad
+    if (typeof T.grabador.alCambiar === 'function') T.grabador.alCambiar(estado)
+    if (GP.midi && GP.midi.anotar && (nuevo === 'grabando' || nuevo === 'guardado')) GP.midi.anotar(nuevo === 'grabando' ? '● grabando' : '✓ grabación guardada', { origen: 'REC' })  // ej: prender el LED del pad
   }
 
   if (window._gpRecReloj) clearInterval(window._gpRecReloj)

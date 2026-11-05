@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-11-04 · GP_midi v1.15 · GP_tools v1.16 · GP_estados v1.5 (ver su manual)
+Actualizado: 2026-11-04 · GP_midi v1.16 · GP_tools v1.18 · GP_estados v1.5 (ver su manual)
 Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
@@ -40,7 +40,7 @@ await GP.midi.start()
 | Botones redondos de abajo (arriba de cada fader) | 64–71 | **versión** del efecto de F1..F8 (`GP.midi.versiones`) | apagado = v1 · prendido = v2 · parpadea = v3 |
 | Columna derecha 82–85 (86 sin uso) | 82 (fila 8) … 85 (fila 5) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
 | 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
-| 89 | | **grabador** (GP_tools): toque = grabar / detener+guardar | prendido = listo · parpadea = grabando · apagado = guardando |
+| 89 | | **libre** (desde GP_tools v1.17 el grabador es el botón **REC en pantalla**) | — |
 | 98 (Shift) | | **4 pasos**, tocando y soltando: 1º sin el código de Hydra · 2º **+ el manual de la canción** en el centro · 3º todo oculto (manual, paneles, barras del mic, caja del último toque) · 4º vuelve todo. En cualquier canción y en el show, sin GP_tools. **Shift + pad de posiciones** = posición anterior (ahí no oculta) — **no tiene LED** | |
 | Faders | CC 48–55 | `F1`..`F8` (0..127) | — |
 | FMASTER | CC 56 | **fundido a negro** en todos los sketches (ver 3.1) | — |
@@ -286,7 +286,7 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 
 ## 9. Grabador y ensayo (GP_tools)
 
-- **Pad 89** o **Ctrl+Alt+R**: grabar / detener+guardar. Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
+- **Botón REC en pantalla** (abajo a la derecha, clic) o **Ctrl+Alt+R**: grabar / detener+guardar. Ya no está en las consolas, para no tocarlo sin querer (si una canción lo quiere en un pad: `GP.tools.init({ padGrabador: 89 })`). Ctrl+Alt+S: detener+guardar. Ctrl+Alt+P: ocultar/mostrar paneles. Ctrl+Alt+N: lista de notas en el panel.
 - **Ocultar:** **Shift (98)** del Akai, en 4 pasos (lo maneja GP_midi, ver sección 7): las cajas de GP_tools se ocultan en el 3º paso y vuelven en el 4º. **Ctrl+Shift+H** de Hydra también: las cajas se ocultan y vuelven junto con el código (antes Hydra se las llevaba y no volvían).
 - Graba MIDI + audio + video de Hydra. Archivos: `<cancion>_ensayo_<fecha>_midi.json / _audio.webm / _video.mp4`.
 - **Video en MP4** (H.264 en Chrome). Si el navegador no puede, sale `.webm` como antes. `GP.tools.init({ formatoVideo: 'webm' })` para forzar WebM.
@@ -316,6 +316,7 @@ Prioridad: sistema (grabador) > botones / filas / versiones / mute > luces.
 ### Panel MIDI (arriba a la izquierda)
 
 - Una línea por aparato + canal: punto amarillo = actividad, último mensaje, cantidad de notas, fila asignada y `MUTE`. El clock va aparte con su BPM.
+- Sólo los instrumentos (y el canal de estados): las consolas (Akai, SMC, JP-Mini) no aparecen; lo que tocás en ellas lo muestra la caja "lo último que tocaste". El informe (Ctrl+Alt+I) las sigue contando.
 - **Ctrl+Alt+N** (o `GP.tools.notas()`): muestra debajo de cada canal la lista de notas que fueron entrando, ordenadas, con el `rango` sugerido. La última nota tocada se marca en amarillo.
 - `GP.tools.listaNotas()` en consola: imprime `notas: [...]` y `rango: [...]` de cada canal listos para copiar a `GP.midi.filas`.
 - `GP.tools.limpiarPanel()` vacía todo (ej: antes de empezar una canción, para juntar sólo sus notas).
@@ -356,14 +357,14 @@ Cuando no está el Akai, GP_midi traduce lo que se toca en la **M-VAVE SMC-Mixer
 | Fila 2 | fila 3 |
 | Fila 3 | fila 2 |
 | Fila 4 (abajo) | fila 1 |
-| ▶ play (94) | grabador (89) |
+| ▶ play (94) | libre (el grabador va en pantalla) |
 | ⏸ pausa (93) | pausar / reanudar los estados |
 | ■ stop (95) | Shift (98): solo = un paso de ocultar · mantenido + pad de posiciones = posición anterior |
 | ⏮ / ⏭ (91 / 92) | estado anterior / siguiente (87 / 88) |
 | ⏪ / ⏩ (46 / 47), mantenidos | FMASTER, fundido a negro: ⏪ hacia negro · ⏩ hacia la luz (de punta a punta en 2 s; al soltar queda donde está) |
 | ↑ ↓ ← → (96–99) | mute de las filas 8 · 7 · 6 · 5 |
 
-Luces (un solo color, prender / apagar): pads activos (toggle prendido, posición 1–3, piano apretado) · mute prendido = recibiendo · ▶ prendido mientras graba · ⏸ prendido con los estados en pausa.
+Luces (un solo color, prender / apagar): pads activos (toggle prendido, posición 1–3, piano apretado) · mute prendido = recibiendo · ⏸ prendido con los estados en pausa.
 
 ### JP-Mini (preset 1)
 

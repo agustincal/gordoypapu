@@ -31,4 +31,4 @@ DISPARO
 MUTES   82 melodía · 83 batería
 ESTADOS 87 / 88 anterior / siguiente
 OTROS   88 también calibra el mic (3 s de silencio)
-        89 grabar · FMASTER fundido · SHIFT ocultar / manual
+        FMASTER fundido · SHIFT ocultar / manual · REC en pantalla (clic)

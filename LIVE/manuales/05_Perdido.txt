@@ -16,4 +16,4 @@ SHIFT + 82–85   video bolsa · ropa · lluvia · globitos
 86              asignar: 86 → pad → entrada (82–85) → 86
 
 ESTADOS 87 / 88 anterior / siguiente
-OTROS   89 grabar · FMASTER fundido · SHIFT corto ocultar / manual
+OTROS   FMASTER fundido · SHIFT corto ocultar / manual · REC en pantalla (clic)

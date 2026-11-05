@@ -18,4 +18,4 @@ DISPARO (a mano = lo mismo que el canal)
 
 MUTES   82 bajo · 83 batería · 84 melodía
 ESTADOS 87 / 88 anterior / siguiente
-OTROS   89 grabar · FMASTER fundido · SHIFT ocultar / manual
+OTROS   FMASTER fundido · SHIFT ocultar / manual · REC en pantalla (clic)
