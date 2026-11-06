@@ -3,8 +3,17 @@
 // Canción: 04_James (Gordo y Papu) · Fase 3
 // Rol: motor visual — puertas de luz tocadas por la música. Rectángulos, blanco puro,
 //      pantalla completa. Variantes: partida, tótem, respira y strobo que invierte.
-// Lo carga el sketch (LIVE/sketches/04_James_vXX.js); el sketch llama GP.james.*
-// Actualizado: 20/10/2026 (LIVE v04_1-d: pasa a fase 3 la versión de desarrollo
+// Lo carga el sketch (LIVE/sketches/04_James.js); el sketch llama GP.james.*
+// Actualizado: 05/11/2026 (LIVE v04_1-e:
+//              · VOLVER ATRÁS: el tiempo del motor (en negras) ya no vuelve para atrás. Antes, al
+//                volver al principio con el reproductor (que manda otra vez el Start del clock) o al
+//                pausar y seguir, las negras volvían a 0: las puertas que ya estaban quedaban "en el
+//                futuro", las notas nuevas no abrían nada y el strobo del pico quedaba prendido hasta
+//                volver a llegar a ese punto. Ahora, si el tiempo vuelve atrás, se corre hacia adelante
+//                en negras enteras (el pulso sigue en su lugar). Con el clock pausado, sigue al mismo tempo.
+//              · PAPELES con varias voces: 'bombo+caja', 'melodia+bombo'… (con + entre voces)
+//              La versión anterior quedó en LIVE/sketches/trash/GP_04_James__visual_v02.js)
+//              20/10/2026 (LIVE v04_1-d: pasa a fase 3 la versión de desarrollo
 //              produccion/04_James/arq/GP_04_James__visual_v04_1.js (v04_1-d), sin cambios.
 //              Reemplaza a la v2.0 (formas morfo/iris/corte), que se fue a Vociferan;
 //              esa versión sigue en produccion/04_James/arq/GP_04_James__visual.js)
@@ -22,7 +31,8 @@
 //   pronunciado (curva). El borde que se mueve deja una estela adentro de su recuadro (F2).
 //   F3 da la duración del gesto (de una negra a una redonda) sin cambiar su forma.
 //
-// QUÉ HACE LA MÚSICA (cada estado elige)
+// QUÉ HACE LA MÚSICA (la base del sketch los fija; un estado los puede cambiar)
+//   Cada papel lleva una voz, o varias con + ('bombo+caja'), o 'ninguna'.
 //   C.disparo   la voz que abre las puertas: 'bajo' | 'melodia' | 'bombo' | 'caja' | 'reloj' | 'ninguna'
 //                 bajo y melodía: la puerta queda abierta mientras suena la nota (tecla de piano);
 //                                 si la nota dura más que sostieneMax, la puerta late con el pulso (repite)
@@ -61,7 +71,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'LIVE-v04_1-d'
+  const VERSION = 'LIVE-v04_1-e'
 
   if (GP.james && GP.james._version === VERSION) return
   GP.james = { _version: VERSION }
@@ -165,6 +175,7 @@
   // Pulso: clock MIDI (o reloj propio)
   // ============================================================
   const R = window._jamesReloj || (window._jamesReloj = { ticks: 0, tUltimo: -1e9, periodo: 1000 / (136 / 60 * 24) })
+  if (R.desfase == null) { R.desfase = 0; R.previo = null }
   V.midi = (nombre, data) => {
     const st = data[0]
     if (st === 0xfa) { R.ticks = 0; R.tUltimo = performance.now(); return }        // Start
@@ -176,12 +187,27 @@
     R.ticks++
   }
   const hayClock = () => performance.now() - R.tUltimo < 1000
-  const nb = () => {
+  // negras según la fuente: el clock, o (si se cortó) el mismo tempo desde donde quedó, o el reloj de Hydra
+  const negrasCrudas = () => {
+    const ahora = performance.now()
     if (hayClock()) {
-      const entre = Math.min(1, (performance.now() - R.tUltimo) / R.periodo)
+      const entre = Math.min(1, (ahora - R.tUltimo) / R.periodo)
       return (R.ticks + entre) / 24
     }
+    if (R.tUltimo > 0) return (R.ticks + 1) / 24 + Math.max(0, ahora - R.tUltimo - 1000) / (R.periodo * 24)
     return time * C.bpm / 60
+  }
+  // el tiempo del motor nunca vuelve atrás: si la fuente vuelve (Start del clock al volver al principio,
+  // el clock que vuelve después de una pausa, cambio de fuente), se corre hacia adelante en negras
+  // enteras. Así las puertas que estaban siguen su camino, las notas nuevas abren, y el pulso no se corre.
+  const nb = () => {
+    let n = negrasCrudas() + R.desfase
+    if (R.previo !== null && n < R.previo) {
+      if (R.previo - n > 0.01) { R.desfase += Math.ceil(R.previo - n); n = negrasCrudas() + R.desfase }
+      else n = R.previo                                  // ruido mínimo: queda donde estaba
+    }
+    R.previo = n
+    return n
   }
   V.negras = nb
 
@@ -344,17 +370,21 @@
     return v
   }
 
+  // ¿la voz cumple este papel? el papel puede nombrar una voz o varias con + ('bombo+caja')
+  const juega = (papel, voz) => typeof papel === 'string' && papel.split('+').some(p => p.trim() === voz)
+  V.juega = juega
+
   // ---- lo que entra ----
   V.nota = (voz, nota, vel, on) => {
     const clave = voz + ':' + nota
     if (!on) { soltarClave(clave); soltarClave(clave + ':x'); soltarClave(clave + ':c'); return }
-    if (C.disparo === voz) {
+    if (juega(C.disparo, voz)) {
       disparar(0, voz, nota, clave)
       if ((C.verGesto | 0) === 2) disparar(1, voz, nota, clave + ':x', true)   // cruzado: cruza también
     }
-    if (C.cruce === voz) disparar(1, voz, nota, clave + ':c')
-    if (C.golpe === voz) V.golpe()
-    if (C.stroboVoz === voz) V.strobo(C.stroboDur)
+    if (juega(C.cruce, voz)) disparar(1, voz, nota, clave + ':c')
+    if (juega(C.golpe, voz)) V.golpe()
+    if (juega(C.stroboVoz, voz)) V.strobo(C.stroboDur)
   }
   V.soltarVoz = voz => {
     S.g.forEach(capa => capa.forEach((g, j) => {
@@ -596,7 +626,7 @@
                   prev: { inicio: g.inicio, atraso: at, suelta: cierre, notas: new Set(), prev: null, xc: g.xc, sem: g.sem } }
     }))
     // reloj: una puerta cada tanto, sin música
-    if (C.disparo === 'reloj') {
+    if (juega(C.disparo, 'reloj')) {
       const ciclo = C.ciclo > 0 ? C.ciclo
         : Math.max(1, Math.ceil(T('abre') + T('sostiene') + T('cierra') + T('demora') + 0.25))
       const k = Math.floor(n / ciclo)
