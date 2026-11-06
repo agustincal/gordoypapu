@@ -4,13 +4,7 @@
 // Canción: 04_James (Gordo y Papu) · Fase 3
 // Rol: sketch de la canción — sólo configuración, estados y ruteo.
 //      El motor vive en LIVE/arq/GP_04_James__visual.js · efecto 8 bits en LIVE/arq/GP_8bits.js
-// Actualizado: 05/11/2026 (PAPELES FIJOS POR FILA en la base, para todos los estados — un estado los
-//              puede cambiar si los declara; por ahora ninguno los declara:
-//                fila 8 bajo = abre las puertas · fila 7 batería (bombo y caja) = cruza ·
-//                fila 6 melodía = golpe · además el bombo hace golpe y la caja hace strobo.
-//              Motor LIVE-v04_1-e: volver atrás con el reproductor ya no lo descontrola.
-//              La versión anterior quedó en LIVE/sketches/trash/04_James_v02.js)
-//              20/10/2026 (v01: primera versión LIVE — copia de produccion/04_James/sketches/04_James_v04_1.js:
+// Actualizado: 20/10/2026 (v01: primera versión LIVE — copia de produccion/04_James/sketches/04_James_v04_1.js:
 //              puertas tocadas por la música + partida (N12), tótem (N13), respira (N14),
 //              strobo que invierte (al entrar al pico y pad fila 5 col 4) y 8 bits (F4).
 //              ⚠ Strobo: parpadeo rápido de pantalla entera, avisar al público (fotosensibilidad))
@@ -51,18 +45,18 @@ const V = GP.james
 
 // ============================================================
 // BASE — cómo se ve la canción cuando ningún estado dice otra cosa.
-// Es también el "inicio" (antes de la primera nota del canal 16).
+// Es también el "inicio" (antes de la primera nota del canal 16): nada dispara, pantalla negra.
 // Se puede cambiar en vivo: V.C.curva = 8 + Ctrl+Enter
 // ============================================================
 V.init({
   bpm: 136,                     // reloj propio, sólo si no llega clock MIDI
 
-  // ---- quién hace qué: el papel de cada fila (vale en todos los estados, salvo que un estado lo declare) ----
-  // Cada papel lleva una voz o varias con +: 'bajo' · 'melodia' · 'bombo' · 'caja' · 'bombo+caja' · 'ninguna'
-  disparo: 'bajo',              // fila 8 · abre las puertas (bajo y melodía: abierta mientras suena la nota;
-                                //   bombo y caja: se abre, se sostiene un instante y se va)
-  cruce: 'bombo+caja',          // fila 7 · segunda capa desde el otro lado (donde se pisan, se invierte)
-  golpe: 'melodia+bombo',       // fila 6 (y el bombo) · prende la pantalla entera y la cierra en barrido
+  // ---- quién hace qué (cada estado lo cambia) ----
+  disparo: 'ninguna',           // voz que abre las puertas: 'bajo' | 'melodia' | 'bombo' | 'caja' | 'reloj' | 'ninguna'
+                                //   bajo y melodía: la puerta queda abierta mientras suena la nota
+                                //   bombo y caja: se abre, se sostiene un instante y se va
+  cruce: 'ninguna',             // voz que dispara una segunda capa en sentido contrario (donde se pisan, se invierte)
+  golpe: 'ninguna',             // voz que prende la pantalla entera y la cierra en barrido
   porAltura: false,             // N11 · cada nota prende sólo su franja (grave abajo); la batería, una al azar
   golpeAlCambiar: true,         // cada cambio de estado se marca con un golpe de pantalla entera
   rangos: { bajo: [31, 38], melodia: [64, 88] },   // del análisis del audio
@@ -117,7 +111,7 @@ V.init({
   // ---- variante 4: STROBO QUE INVIERTE — no pinta blanco: da vuelta la pantalla entera ----
   // ⚠ parpadeo rápido de pantalla entera: avisar al público (fotosensibilidad)
   stroboAlEntrar: 0,            // negras de ráfaga al entrar al estado (0 = no)
-  stroboVoz: 'caja',            // la caja: cada golpe es una ráfaga que invierte (⚠ fotosensibilidad)
+  stroboVoz: 'ninguna',         // voz que dispara una ráfaga con cada nota
   stroboDur: 1,                 // negras que dura cada ráfaga de stroboVoz
   stroboPaso: 0.125,            // negras entre inversiones: 0.125 = fusa · 0.25 = semicorchea · 0.5 = corchea
 
@@ -154,55 +148,53 @@ const CONTROLES = {
 // ESTADOS — cada nota del canal 16 pasa al siguiente.
 // Los 13 cortes del análisis del audio (136 BPM). Cada estado anota sólo lo que cambia
 // respecto de la BASE. Cada cambio se marca con un golpe (golpeAlCambiar).
-// Los papeles de las filas (disparo, cruce, golpe, stroboVoz) vienen de la BASE: para cambiarlos en
-// un estado, se declaran en su línea (ej: disparo: 'melodia').
 //   fundido → segundos que tarda en llegar (los números se funden; textos y versiones cambian al instante)
 // Franjas: 0 = 1 · 1/7 = 2 · 3/7 = 4 · 5/7 = 6 · 6/7 = 7 · 1 = 8
 // ============================================================
 const ESTADOS = [
-  /*  1 · 0:03 */ { nombre: 'arranca',        franjas: 0, estela: 0.4 },
-                  //   una sola puerta, la pantalla entera
-  /*  2 · 0:10 */ { nombre: 'entra todo',     franjas: 3 / 7, partida: true },
-                  //   4 franjas escalonadas, en pedazos
-  /*  3 · 0:33 */ { nombre: 'desparejas',     franjas: 5 / 7, verFranjas: 1, verEstela: 1 },
-  /*  4 · 0:47 */ { nombre: 'teclado',        porAltura: true, franjas: 1, verFranjas: 2 },
-                  //   cada nota prende su franja (bajo: 31 abajo … 38 arriba)
-  /*  5 · 1:02 */ { nombre: 'bombo',          duracion: 0.2, franjas: 6 / 7, verGesto: 1 },
-                  //   puertas cortas (ida y vuelta)
-  /*  6 · 1:23 */ { nombre: 'cruzado',        verGesto: 2, franjas: 3 / 7, estela: 0.6,
+  /*  1 · 0:03 */ { nombre: 'arranca',        disparo: 'bajo', franjas: 0, estela: 0.4 },
+                  //   una sola puerta, la pantalla entera: abre con cada nota del bajo y queda abierta mientras suena
+  /*  2 · 0:10 */ { nombre: 'arranca',        disparo: 'bajo', franjas: 0, estela: 0.4 },
+                  //   4 franjas escalonadas; la caja cruza en sentido contrario
+  /*  3 · 0:33 */ { nombre: 'teclado',        disparo: 'bajo', porAltura: true, franjas: 1, verFranjas: 2, cruce: 'bombo' },
+  /*  4 · 0:47 */ { nombre: 'desparejas',     disparo: 'bajo', franjas: 4, verFranjas: 1, verEstela: 1, cruce: 'caja' },
+                  //   cada nota del bajo prende su franja (31 abajo … 38 arriba); el bombo cruza
+  /*  5 · 1:02 */ { nombre: 'bombo',          disparo: 'bombo', duracion: 0.2, franjas: 6 / 7, verGesto: 1, cruce: 'bajo' },
+                  //   el bombo toca puertas cortas (ida y vuelta); el bajo cruza largo
+  /*  6 · 1:23 */ { nombre: 'cruzado',        disparo: 'bajo', verGesto: 2, franjas: 3 / 7, estela: 0.6,
                     partida: true, celdas: 6, huecos: 0.3, escalon: 0 },
                   //   las dos capas en pedazos que se corren en sentidos contrarios
-  /*  7 · 1:37 */ { nombre: 'caja agujas',    duracion: 0.15, franjas: 1, verFranjas: 1, verEstela: 2 },
-  /*  8 · 1:59 */ { nombre: 'respira',        franjas: 2 / 7, duracion: 1, estela: 0.8, respira: true },
-                  //   tres líneas a todo el ancho que se llenan y vuelven a ser línea
-  /*  9 · 2:18 */ { nombre: 'pico',           duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, repite: 0.5,
+  /*  7 · 1:37 */ { nombre: 'caja agujas',    disparo: 'caja', duracion: 0.15, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'bajo' },
+  /*  8 · 1:59 */ { nombre: 'respira',        disparo: 'bajo', franjas: 2 / 7, duracion: 1, estela: 0.8, respira: true },
+                  //   sin bombo: tres líneas a todo el ancho que se llenan con el bajo y vuelven a ser línea
+  /*  9 · 2:18 */ { nombre: 'pico',           disparo: 'bajo', duracion: 0.25, franjas: 1, verFranjas: 2, verGesto: 2, repite: 0.5,
                     stroboAlEntrar: 2, golpeAlCambiar: false },
-                  //   persiana cruzada que late en corcheas.
+                  //   el bajo suena casi todo el tiempo: persiana cruzada que late en corcheas.
                   //   La entrada se marca con 2 negras de strobo que invierte (en vez del golpe)
-  /* 10 · 2:52 */ { nombre: 'quiebre',        franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5, totem: true },
-                  //   tótem: cada nota levanta una pila de 8 barras en su lugar (grave a la izquierda)
-  /* 11 · 3:10 */ { nombre: 'quiebre 2',      franjas: 5 / 7, verEstela: 1, totem: true, dentado: 0.8, duracion: 0.7 },
-                  //   tótems más dentados; donde se pisan, se invierten
-  /* 12 · 3:24 */ { nombre: 'caja',           duracion: 0.1, franjas: 1, verFranjas: 1, verEstela: 2,
+  /* 10 · 2:52 */ { nombre: 'quiebre',        disparo: 'melodia', franjas: 1, verFranjas: 2, duracion: 0.6, estela: 0.5, totem: true },
+                  //   tótem: cada nota de la melodía levanta una pila de 8 barras en su lugar (grave a la izquierda)
+  /* 11 · 3:10 */ { nombre: 'quiebre 2',      disparo: 'melodia', franjas: 5 / 7, verEstela: 1, cruce: 'bajo',
+                    totem: true, dentado: 0.8, duracion: 0.7 },
+                  //   tótems de la melodía y del bajo; donde se pisan, se invierten
+  /* 12 · 3:24 */ { nombre: 'caja',           disparo: 'caja', duracion: 0.1, franjas: 1, verFranjas: 1, verEstela: 2, cruce: 'melodia',
                     partida: true, celdas: 14, huecos: 0.55, escalon: 0.4 },
-                  //   pedazos chicos que saltan con cada disparo
-  /* 13 · 3:38 */ { nombre: 'final',          franjas: 0, duracion: 1, estela: 1, fundido: 4, respira: true },
-                  //   una sola línea en el medio de la pantalla que respira
+                  //   la caja abre pedazos chicos que saltan con cada golpe
+  /* 13 · 3:38 */ { nombre: 'final',          disparo: 'bajo', franjas: 0, duracion: 1, estela: 1, fundido: 4, respira: true },
+                  //   una sola línea en el medio de la pantalla que respira con el bajo
 ]
 
 
 // ============================================================
 // AKAI — mapa LIVE (una fila por canal)
-//   fila 8 → canal 1, bajo (31–38): ABRE LAS PUERTAS. Tocás un pad = una nota de bajo (se sostiene mientras apretás). Mute: 82
-//   fila 7 → canal 10, batería (38 o 40 caja · el resto bombo): CRUZA. El bombo además hace golpe,
-//            la caja además hace strobo. A mano: col 1-4 bombo · col 5-8 caja. Mute: 83
-//   fila 6 → canal 2, melodía (64–88): GOLPE. Tocás un pad = una nota de melodía. Mute: 84
+//   fila 8 → canal 1, bajo (31–38). Tocás un pad = una nota de bajo (se sostiene mientras apretás). Mute: 82
+//   fila 7 → canal 10, batería (36 bombo · 38 caja). A mano: col 1-4 bombo · col 5-8 caja. Mute: 83
+//   fila 6 → canal 2, melodía (64–88). Tocás un pad = una nota de melodía. Mute: 84
 //   fila 5 → a mano: col 1 = golpe (pantalla entera) · col 2 = una puerta (sin nota)
 //            col 3 = los pedazos saltan (partida) · col 4 = strobo que invierte (mientras apretás)
 //            col 5-8 libres
 //   F1 franjas · F2 estela · F3 duración · F4 píxeles (8 bits) · botones arriba de F1–F4 = versiones
 //   N11 = cada nota, su franja · N12 = partida (la puerta en pedazos) · N13 = tótem · N14 = respira
-//   87 / 88 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
+//   86 / 87 = estado anterior / siguiente · 98 (Shift) = ocultar código y paneles
 //   89 = grabador (GP_tools) · FMASTER = fundido a negro
 // ============================================================
 GP.midi.buttons(['N11', 'N12', 'N13', 'N14'])
