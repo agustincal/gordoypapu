@@ -29,6 +29,6 @@ DISPARO
                     col 8 forma siguiente
 
 MUTES   82 melodía · 83 batería
-ESTADOS 87 / 88 anterior / siguiente
-OTROS   88 también calibra el mic (3 s de silencio)
+ESTADOS 87 siguiente (arriba) · 88 anterior (abajo)
+OTROS   88 también calibra el mic (3 s de silencio) · ojo: 88 = estado anterior
         FMASTER fundido · SHIFT ocultar / manual · REC en pantalla (clic)

@@ -17,5 +17,5 @@ DISPARO (a mano = lo mismo que el canal) · el papel vale en todos los estados
   fila 5 · a mano   col 1 golpe · 2 una puerta · 3 los pedazos saltan · 4 strobo que invierte
 
 MUTES   82 bajo · 83 batería · 84 melodía
-ESTADOS 87 / 88 anterior / siguiente
+ESTADOS 87 siguiente (arriba) · 88 anterior (abajo)
 OTROS   FMASTER fundido · SHIFT ocultar / manual · REC en pantalla (clic)

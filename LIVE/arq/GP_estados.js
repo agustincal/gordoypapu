@@ -7,7 +7,8 @@
 // Depende de: GP_midi (faders, toggles, versiones, mutes, LEDs).
 //             GP_tools es opcional: si está cargado (ensayo) muestra el
 //             estado arriba a la derecha. En el show no se ve.
-// Actualizado: 2026-11-04 (v1.5: GP.estados.nombres — nombre de cada control, para la caja de 'lo último que tocaste')
+// Actualizado: 2026-11-06 (v1.6: botones al derecho — 87 (arriba) = siguiente · 88 (abajo) = anterior)
+//              2026-11-04 (v1.5: GP.estados.nombres — nombre de cada control, para la caja de 'lo último que tocaste')
 //              2026-10-25 (v1.4: pads con varios estados — N13: 0..3 · respeta el modo de cada pad de GP_midi)
 //              2026-10-23 (v1.3: faders más directos — suavizado 0.1 → 0.04 s, mezclaToque 0.25 → 0.12 s)
 //              2026-10-21 (v1.2: guardar capturas pasa a Ctrl+Alt+D)
@@ -50,7 +51,7 @@
 //     actual con los números nuevos (para curar sin perder el lugar).
 //     GP.estados.reiniciar() vuelve al inicio (ej: antes de dar ▶ a un ensayo).
 //
-// Ensayo / emergencia: botón redondo 87 = anterior · 88 = siguiente
+// Ensayo / emergencia: botón redondo 87 (arriba) = siguiente · 88 (abajo) = anterior
 // (LED prendido = hay a dónde ir · parpadean medio segundo en cada cambio ·
 //  parpadean siempre = estados suspendidos).
 // Consola: GP.estados.siguiente() · .anterior() · .ir(5) · .reiniciar() · .tabla()
@@ -65,7 +66,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.5'
+  const VERSION = 'v1.6'
 
   if (GP.estados && GP.estados._version === VERSION) return
 
@@ -75,8 +76,8 @@
     canal: 16,                   // canal de estados, 1..16 como lo muestra el panel
     antirrebote: 150,            // ms: dos notas más juntas que esto cuentan como una sola
     akai: /apc|akai_?ensayo/i,   // el APC mini (no /akai/ a secas: un teclado Akai no es la consola)
-    botonAnterior: 87,           // botones redondos de la columna derecha (null = sin botón)
-    botonSiguiente: 88,
+    botonSiguiente: 87,          // botones redondos de la columna derecha: el de arriba avanza
+    botonAnterior: 88,           //   el de abajo retrocede (null = sin botón)
     avisoMs: 500,                // parpadeo de 87/88 al cambiar de estado (0 = sin aviso)
     fundido: 0.3,                // segundos entre estados, si el estado no dice otra cosa
     umbralToque: 3,              // cuánto hay que mover un fader (de 0 a 127) para tomar el control
@@ -294,7 +295,7 @@
   }
 
   // ============================================================
-  // Mensajes MIDI: canal de estados + botones 86/87 del Akai
+  // Mensajes MIDI: canal de estados + botones 87 (siguiente) / 88 (anterior) del Akai
   // ============================================================
   const procesar = (nombre, data) => {
     if (!can) return

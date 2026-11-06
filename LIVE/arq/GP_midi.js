@@ -5,7 +5,8 @@
 //      ÚNICO dueño de los LEDs del Akai
 // Reemplaza a GP_xx__midibase.js (v0.9). Misma API + LEDs centralizados.
 // No usa hydra-midi.
-// Actualizado: 2026-11-05 (v1.16: el grabador sale de las consolas (REC va en pantalla, GP_tools v1.17):
+// Actualizado: 2026-11-06 (v1.17: la caja del último toque sigue el orden nuevo de estados: 87 ⏭ siguiente · 88 ⏮ anterior)
+//              2026-11-05 (v1.16: el grabador sale de las consolas (REC va en pantalla, GP_tools v1.17):
 //              el 89 del Akai y el ▶ 94 de la SMC quedan libres)
 //              2026-11-04 (v1.15: Shift en 4 pasos — 1 código · 2 + manual de la canción en el centro ·
 //              3 todo oculto · 4 vuelve todo. Manual: LIVE/manuales/<canción>.txt (o GP.midi.manual('…')).
@@ -67,7 +68,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'v1.16'
+  const VERSION = 'v1.17'
 
   if (GP.midi && GP.midi._version === VERSION) return
 
@@ -588,7 +589,7 @@
           else anotar(origenDe(nombre), 'b' + d1, `col ${d1 - 63} · siguiente variante`, { reemplazable: true })
         }
         // estados (los maneja GP_estados: acá sólo se anota)
-        else if (esOn && (d1 === 87 || d1 === 88)) anotarEstado(origenDe(nombre), d1 === 88 ? '⏭' : '⏮')
+        else if (esOn && (d1 === 87 || d1 === 88)) anotarEstado(origenDe(nombre), d1 === 87 ? '⏭' : '⏮')   // 87 arriba = siguiente · 88 abajo = anterior
         // pad de las filas 1-3 (o donde el sketch los habilite): toggle · piano · estados
         else if (d1 <= 63 && state.activeButtons.includes(d1)) {
           const modo = modoDe(d1)

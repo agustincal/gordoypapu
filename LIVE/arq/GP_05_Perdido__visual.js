@@ -6,7 +6,9 @@
 //      modular (Sandin Image Processor / LZX): el video entra, pasa por 8 etapas
 //      en fila y sale. Cada etapa es una columna del Akai.
 // Depende de: GP_midi (LEDs y faders), GP_estados (opcional), GP_tools (opcional, panel)
-// Actualizado: 2026-11-04 (v1.3: cuenta lo que hacés en la caja "lo último que tocaste" de GP_midi (variante, modo,
+// Actualizado: 2026-11-06 (v1.4: el cuadro de la cadena se va al pasar a otra canción (V.apagar) y queda más
+//              arriba, sobre el reproductor de ensayo)
+//              2026-11-04 (v1.3: cuenta lo que hacés en la caja "lo último que tocaste" de GP_midi (variante, modo,
 //              entrada, video, asignación) · SHIFT solo = el ocultar en 3 pasos de GP_midi v1.13)
 //              2026-10-22 (v1.2: el video se elige por nombre ('lluvia') o número; los estados usan el nombre
 //              para que el fundido no pase por los videos del medio)
@@ -57,7 +59,7 @@
 ;(function () {
   window.GP = window.GP || {}
   const GP = window.GP
-  const VERSION = 'LIVE-v1.3'
+  const VERSION = 'LIVE-v1.4'
 
   if (GP.perdido && GP.perdido._version === VERSION) return
 
@@ -812,12 +814,12 @@
   const pintarHud = () => {
     hudT = performance.now()
     if (typeof document === 'undefined') return
-    const visible = C.hud && GP.tools && codigoVisible
+    const visible = C.hud && GP.tools && codigoVisible && !apagado
     if (!visible) { if (hud) hud.style.display = 'none'; return }
     if (!hud || !document.body.contains(hud)) {
       hud = document.getElementById('gpPerdidoHud') || document.createElement('div')
       hud.id = 'gpPerdidoHud'
-      hud.style.cssText = 'position:fixed; left:8px; bottom:8px; z-index:2147483646; background:rgba(0,0,0,0.72); color:#ddd; font:11px/1.45 monospace; padding:6px 9px; border-radius:4px; white-space:pre; pointer-events:none;'
+      hud.style.cssText = 'position:fixed; left:8px; bottom:76px; z-index:2147483646; background:rgba(0,0,0,0.72); color:#ddd; font:11px/1.45 monospace; padding:6px 9px; border-radius:4px; white-space:pre; pointer-events:none;'
       document.body.appendChild(hud)
     }
     hud.style.display = ''
@@ -839,6 +841,7 @@
 
   // ---- ocultar código y paneles para el show (SHIFT solo) ----
   let codigoVisible = true
+  let apagado = false   // V.apagar (al pasar a otra canción): el cuadro no vuelve hasta el próximo V.init
   V.toggleCodigo = () => {
     codigoVisible = !codigoVisible
     const partes = ['.CodeMirror', '#editor-container', '#toolbar', '#menu', '#info-container', '#modal']
@@ -846,13 +849,18 @@
     if (GP.tools && GP.tools.paneles) GP.tools.paneles(codigoVisible)
     pintarHud()
   }
-  // con GP_midi v1.13+: el cuadro de la cadena se oculta en el 2º paso del Shift, junto con los paneles
-  if (GP.midi && GP.midi.alOcultar) GP.midi.alOcultar('perdido', (visible) => { codigoVisible = visible; pintarHud() })
+  // con GP_midi v1.13+: el cuadro de la cadena se oculta con los paneles (se anota en V.init, se borra en V.apagar)
+  const anotarOcultar = (on) => {
+    if (!(GP.midi && GP.midi.alOcultar)) return
+    GP.midi.alOcultar('perdido', on ? (visible) => { codigoVisible = visible; pintarHud() } : null)
+  }
 
   // ============================================================
   // API
   // ============================================================
   V.init = (config = {}) => {
+    apagado = false
+    anotarOcultar(true)
     const limpio = copiaDefaults()
     for (const k of Object.keys(C)) if (!(k in limpio)) delete C[k]
     Object.assign(C, limpio, config)
@@ -903,10 +911,12 @@
   V.entrada = (nombre, on) => { const e = inp(nombre); e.on = on == null ? !e.on : !!on; if (!e.on) e.held.clear(); pintarEntrada(nombre); return V }
   // al pasar a otra canción: apaga las luces que prendió Perdido (grilla, 64-71, 82-86)
   V.apagar = () => {
+    apagado = true
+    anotarOcultar(false)
+    if (hud) hud.style.display = 'none'
     const m = M(); if (!m || !m.luz) return V
     for (let n = 0; n <= 71; n++) m.luz(n, null)
     for (let n = 82; n <= 86; n++) m.luz(n, null)
-    if (hud) hud.style.display = 'none'
     return V
   }
   V.limpiarPads = () => { pads.forEach(f => f.forEach(pd => { pd.var = 0; pd.entrada = null })); guardarPads(); pintarTodo(); return V }

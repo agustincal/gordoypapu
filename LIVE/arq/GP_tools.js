@@ -8,7 +8,9 @@
 //       Sketch sin GP_midi: GP.tools.conectarMidi({ alMensaje: (nombre, data) => {...} })
 //       Sketch con GP_midi: GP.midi.alMensaje((nombre, data) => {...})
 //       y en el handler MIDI del sketch:  GP.tools.midi(entrada.name, msg.data)
-// Actualizado: 2026-11-05 (v1.18: el panel de entradas MIDI ya no muestra las consolas (Akai, SMC, JP-Mini):
+// Actualizado: 2026-11-06 (v1.20: caja de estados más abajo (no pisa los botones de Hydra) y nombre del estado más grande)
+//              2026-11-06 (v1.19: botonera de estados al derecho — ⏮ anterior a la izquierda · ⏭ siguiente a la derecha)
+//              2026-11-05 (v1.18: el panel de entradas MIDI ya no muestra las consolas (Akai, SMC, JP-Mini):
 //              lo que tocás ahí lo cuenta la caja "lo último que tocaste". Sólo instrumentos, clock y estados)
 //              2026-11-05 (v1.17: el grabador sale de las consolas — REC es un botón en pantalla (clic = grabar /
 //              detener y guardar). El pad 89 del Akai y el ▶ de la SMC quedan libres. Ctrl+Alt+R sigue)
@@ -28,7 +30,7 @@
 ;(function () {
   if (!window.GP) window.GP = {}
   const GP = window.GP
-  const VERSION = 'v1.18'
+  const VERSION = 'v1.20'
 
   // ya cargado: sólo volvemos a poner los paneles en pantalla
   if (GP.tools && GP.tools._version === VERSION) {
@@ -1164,17 +1166,17 @@
   // 4. Estados (arriba a la derecha): cartel + botonera en una sola caja
   // ============================================================
   //   3/13 · estribillo
-  //   ⏭ ⏮ ⏸ ⟲  ·  ⧉ ⤓ ✕
+  //   ⏮ ⏭ ⏸ ⟲  ·  ⧉ ⤓ ✕
   // ⏸ / ⧉ / ⤓ = Ctrl+Alt+E / C / D. Sólo en ensayo: vive en GP_tools, que en el show no se carga.
   { const viejo = document.getElementById('gpBotonesEstados'); if (viejo) viejo.remove() }   // de la v1.10
   const estadosEl = crearCaja('gpOverlayEstado', `
-    top: 8px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;
+    top: 48px; right: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 4px;   /* debajo de los botones de Hydra */
   `)
   estadosEl.innerHTML = `
-    <div data-texto style="font: bold 13px/1.3 monospace; color:#fff; white-space:nowrap; display:none;"></div>
+    <div data-texto style="font: bold 16px/1.3 monospace; color:#fff; white-space:nowrap; display:none;"></div>
     <div style="display:flex; gap:4px; align-items:center;">
-      <button data-est="siguiente" style="${BTN}" title="próximo estado (botón 88)">⏭&#xFE0E;</button>
-      <button data-est="anterior" style="${BTN}" title="estado anterior (botón 87)">⏮&#xFE0E;</button>
+      <button data-est="anterior" style="${BTN}" title="estado anterior (botón 88, abajo)">⏮&#xFE0E;</button>
+      <button data-est="siguiente" style="${BTN}" title="próximo estado (botón 87, arriba)">⏭&#xFE0E;</button>
       <button data-est="suspender" style="${BTN}" title="pausar / reanudar los estados (Ctrl+Alt+E)">⏸&#xFE0E;</button>
       <button data-est="reiniciar" style="${BTN}" title="volver al inicio">⟲</button>
       <span style="width:6px;"></span>

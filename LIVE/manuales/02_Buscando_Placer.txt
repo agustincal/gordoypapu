@@ -24,5 +24,5 @@ DISPARO (a mano = lo mismo que el canal)
   fila 5 · ch 9             gira el color
 
 MUTES   82 bajo · 83 bombo · 84 teclado · 85 ch 9    (de base: 83 · 84 · 85 muteados)
-ESTADOS 87 / 88 anterior / siguiente
+ESTADOS 87 siguiente (arriba) · 88 anterior (abajo)
 OTROS   FMASTER fundido · SHIFT ocultar / manual · REC en pantalla (clic)

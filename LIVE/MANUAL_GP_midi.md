@@ -1,7 +1,7 @@
 # Manual · GP_midi + GP_tools (Fase 3 · LIVE)
 
 Base MIDI genérica para todas las canciones de Fase 3. Vive en `LIVE/arq/`.
-Actualizado: 2026-11-04 · GP_midi v1.16 · GP_tools v1.18 · GP_estados v1.5 (ver su manual)
+Actualizado: 2026-11-04 · GP_midi v1.17 · GP_tools v1.18 · GP_estados v1.6 (ver su manual)
 Sin Akai: SMC-Mixer + JP-Mini, ver la sección 10.
 
 ---
@@ -39,7 +39,7 @@ await GP.midi.start()
 | Filas 5–8 de la grilla | 32–63 | **disparo**: sólo muestran lo que entra, una fila por canal (`GP.midi.filas`) | **activa** = verde, y la nota que suena se apaga · **muteada** = apagada, y la nota que suena se prende en verde (ves que hay notas, pero no dispara) · **rojo** = lo tocás vos |
 | Botones redondos de abajo (arriba de cada fader) | 64–71 | **versión** del efecto de F1..F8 (`GP.midi.versiones`) | apagado = v1 · prendido = v2 · parpadea = v3 |
 | Columna derecha 82–85 (86 sin uso) | 82 (fila 8) … 85 (fila 5) | **mute** del canal de esa fila | prendido = recibiendo · parpadea = muteado · apagado = no llegó nada, o **la fila no tiene canal** (ahí no mutea) |
-| 87 / 88 | | **estado anterior / siguiente** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
+| 87 / 88 | | **87 (arriba) = estado siguiente · 88 (abajo) = anterior** (GP_estados) | prendido = hay a dónde ir · medio segundo de parpadeo = cambió el estado · parpadeo continuo = estados suspendidos |
 | 89 | | **libre** (desde GP_tools v1.17 el grabador es el botón **REC en pantalla**) | — |
 | 98 (Shift) | | **4 pasos**, tocando y soltando: 1º sin el código de Hydra · 2º **+ el manual de la canción** en el centro · 3º todo oculto (manual, paneles, barras del mic, caja del último toque) · 4º vuelve todo. En cualquier canción y en el show, sin GP_tools. **Shift + pad de posiciones** = posición anterior (ahí no oculta) — **no tiene LED** | |
 | Faders | CC 48–55 | `F1`..`F8` (0..127) | — |
@@ -360,7 +360,7 @@ Cuando no está el Akai, GP_midi traduce lo que se toca en la **M-VAVE SMC-Mixer
 | ▶ play (94) | libre (el grabador va en pantalla) |
 | ⏸ pausa (93) | pausar / reanudar los estados |
 | ■ stop (95) | Shift (98): solo = un paso de ocultar · mantenido + pad de posiciones = posición anterior |
-| ⏮ / ⏭ (91 / 92) | estado anterior / siguiente (87 / 88) |
+| ⏮ / ⏭ (91 / 92) | estado anterior / siguiente (88 / 87) |
 | ⏪ / ⏩ (46 / 47), mantenidos | FMASTER, fundido a negro: ⏪ hacia negro · ⏩ hacia la luz (de punta a punta en 2 s; al soltar queda donde está) |
 | ↑ ↓ ← → (96–99) | mute de las filas 8 · 7 · 6 · 5 |
 

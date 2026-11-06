@@ -22,5 +22,5 @@ DISPARO (a mano = lo mismo que el canal)
   fila 6 · bajo (ch 9)
 
 MUTES   82 arpegio · 83 batería · 84 bajo     (mutear congela esa voz)
-ESTADOS 87 / 88 anterior / siguiente
+ESTADOS 87 siguiente (arriba) · 88 anterior (abajo)
 OTROS   FMASTER fundido · SHIFT ocultar / manual · REC en pantalla (clic)

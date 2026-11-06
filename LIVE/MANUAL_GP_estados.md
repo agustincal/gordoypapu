@@ -1,7 +1,7 @@
 # Manual · GP_estados (Fase 3 · LIVE)
 
 Estados genéricos para todas las canciones. Vive en `LIVE/arq/GP_estados.js`.
-Actualizado: 2026-11-04 · GP_estados v1.5 (`GP.estados.nombres`: el nombre de cada control, lo usa la caja "lo último que tocaste" de GP_midi)
+Actualizado: 2026-11-06 · GP_estados v1.6 (87 arriba = siguiente · 88 abajo = anterior) (`GP.estados.nombres`: el nombre de cada control, lo usa la caja "lo último que tocaste" de GP_midi)
 
 ---
 
@@ -99,7 +99,7 @@ const ESTADOS = [
 
 ## 6. Ensayo
 
-- **Botones redondos 87 / 88** = estado anterior / siguiente. LED prendido = hay a dónde ir. Sirven también de emergencia en el show.
+- **Botones redondos 87 (arriba) = estado siguiente · 88 (abajo) = anterior.** LED prendido = hay a dónde ir. Sirven también de emergencia en el show.
 - **Aviso de cambio:** cada vez que entra un estado, 87 y 88 parpadean medio segundo (`config.avisoMs`, 0 = sin aviso).
 - **Cartel arriba a la derecha** (`3/5 · estribillo`), sólo si está cargado GP_tools. En el show no aparece.
 - **Botones chicos debajo del cartel**, en dos renglones: **⏭ próximo · ⏮ anterior · ⏸ pausa · ⟲ reiniciar** (con símbolos) y **⧉ copiar · ⤓ guardar · ✕ borrar**. Pausa / copiar / guardar hacen lo mismo que Ctrl+Alt+E / C / D (los atajos siguen); reiniciar = `GP.estados.reiniciar()` (vuelve al inicio); borrar = `GP.estados.borrarCapturas()` (vacía la lista de capturas de la canción). La pausa se pinta amarilla mientras está activa. Son de GP_tools: sólo en ensayo, la tecla P los oculta con los demás paneles.
@@ -163,7 +163,7 @@ En `GP.estados.config` (igual para todas las canciones; se cambia en `GP_estados
 | `fuente` | `null` | aparato que manda los cambios (regex). `null` = cualquiera menos el Akai (incluye `korg_Ensayo`) |
 | `canal` | 16 | canal de estados |
 | `antirrebote` | 150 ms | dos notas más juntas cuentan como una |
-| `botonAnterior` / `botonSiguiente` | 87 / 88 | `null` = sin botón |
+| `botonSiguiente` / `botonAnterior` | 87 / 88 | `null` = sin botón |
 | `avisoMs` | 500 | parpadeo de 87/88 al cambiar de estado |
 | `fundido` | 0.3 s | fundido por defecto |
 | `umbralToque` | 3 | cuánto hay que mover un fader (0..127) para tomar el control |
